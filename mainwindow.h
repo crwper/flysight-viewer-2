@@ -24,6 +24,8 @@ public:
 private slots:
     void on_actionImport_triggered();
 
+    void on_actionDelete_triggered();
+
 private:
     Ui::MainWindow *ui;
 

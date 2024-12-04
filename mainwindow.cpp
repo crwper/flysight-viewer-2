@@ -64,6 +64,81 @@ void MainWindow::on_actionImport_triggered()
     populateLogbookTreeWidget();
 }
 
+void MainWindow::on_actionDelete_triggered()
+{
+    // Get the selected items
+    QList<QTreeWidgetItem*> selectedItems = ui->logbookTreeWidget->selectedItems();
+
+    if (selectedItems.isEmpty()) {
+        QMessageBox::information(this, tr("No Selection"), tr("Please select at least one session to delete."));
+        return;
+    }
+
+    // To store unique SESSION_IDs to delete
+    QSet<QString> sessionIDsToDelete;
+
+    // Iterate through selected items and collect SESSION_IDs
+    for (QTreeWidgetItem* item : selectedItems) {
+        // Check if the item is a top-level session item
+        if (item->parent() == nullptr) {
+            // Retrieve SESSION_ID from item data
+            QVariant data = item->data(0, Qt::UserRole);
+            if (data.isValid()) {
+                QString sessionID = data.toString();
+                sessionIDsToDelete.insert(sessionID);
+            }
+        }
+    }
+
+    if (sessionIDsToDelete.isEmpty()) {
+        QMessageBox::warning(this, tr("Invalid Selection"), tr("Please select top-level session items to delete."));
+        return;
+    }
+
+    // Confirm deletion
+    QString message;
+    if (sessionIDsToDelete.size() == 1) {
+        message = tr("Are you sure you want to delete the selected session?");
+    } else {
+        message = tr("Are you sure you want to delete the selected %1 sessions?").arg(sessionIDsToDelete.size());
+    }
+
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this,
+        tr("Confirm Deletion"),
+        message,
+        QMessageBox::Yes | QMessageBox::No
+        );
+
+    if (reply != QMessageBox::Yes) {
+        return; // User canceled deletion
+    }
+
+    // Delete sessions from m_sessionDataMap
+    for (const QString &sessionID : sessionIDsToDelete) {
+        if (m_sessionDataMap.contains(sessionID)) {
+            m_sessionDataMap.remove(sessionID);
+            qDebug() << "Deleted session with SESSION_ID:" << sessionID;
+        }
+    }
+
+    // Remove the corresponding items from the tree widget
+    // It's safer to iterate in reverse order to avoid indexing issues
+    QList<QTreeWidgetItem*> itemsToRemove;
+    for (QTreeWidgetItem* item : selectedItems) {
+        if (item->parent() == nullptr) {
+            itemsToRemove.append(item);
+        }
+    }
+
+    for (QTreeWidgetItem* item : itemsToRemove) {
+        delete item; // This removes the item from the tree
+    }
+
+    QMessageBox::information(this, tr("Deletion Successful"),
+                             tr("Selected session(s) have been deleted."));
+}
+
 void MainWindow::mergeSessionData(const SessionData& newSession)
 {
     // Ensure SESSION_ID exists
@@ -185,7 +260,7 @@ void MainWindow::populateLogbookTreeWidget()
     // Clear existing items
     ui->logbookTreeWidget->clear();
 
-    // Iterate through each session in the map
+    // Use a const_iterator to iterate without detaching
     QMap<QString, SessionData>::const_iterator it;
     for (it = m_sessionDataMap.constBegin(); it != m_sessionDataMap.constEnd(); ++it) {
         const SessionData &session = it.value();
@@ -199,6 +274,9 @@ void MainWindow::populateLogbookTreeWidget()
         sessionItem->setText(0, QString("Session ID: %1").arg(sessionID));
         sessionItem->setExpanded(true); // Expand by default
 
+        // Store SESSION_ID as data for easy access during deletion
+        sessionItem->setData(0, Qt::UserRole, sessionID);
+
         // Add DEVICE_ID as a child
         QTreeWidgetItem *deviceItem = new QTreeWidgetItem(sessionItem);
         deviceItem->setText(0, QString("Device ID: %1").arg(deviceID));
@@ -209,12 +287,12 @@ void MainWindow::populateLogbookTreeWidget()
         varsItem->setExpanded(false); // Collapse by default
 
         // Iterate through variables
-        for (auto it = session.getVars().constBegin(); it != session.getVars().constEnd(); ++it) {
-            if (it.key() == "SESSION_ID" || it.key() == "DEVICE_ID") {
+        for (auto varIt = session.getVars().constBegin(); varIt != session.getVars().constEnd(); ++varIt) {
+            if (varIt.key() == "SESSION_ID" || varIt.key() == "DEVICE_ID") {
                 continue; // Already displayed
             }
             QTreeWidgetItem *varItem = new QTreeWidgetItem(varsItem);
-            varItem->setText(0, QString("%1: %2").arg(it.key(), it.value()));
+            varItem->setText(0, QString("%1: %2").arg(varIt.key(), varIt.value()));
         }
 
         // Add Sensors as a child
