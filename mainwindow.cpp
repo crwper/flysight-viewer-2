@@ -17,6 +17,13 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Connect the search box to the filter function
     connect(ui->logbookSearchEdit, &QLineEdit::textChanged, this, &MainWindow::filterLogbookTree);
+
+    // Connect selection changes to a slot
+    connect(ui->logbookTreeWidget->selectionModel(), &QItemSelectionModel::selectionChanged,
+            this, &MainWindow::updateDeleteActionState);
+
+    // Initialize the Delete action as disabled
+    ui->actionDelete->setEnabled(false);
 }
 
 MainWindow::~MainWindow()
@@ -137,6 +144,26 @@ void MainWindow::on_actionDelete_triggered()
 
     QMessageBox::information(this, tr("Deletion Successful"),
                              tr("Selected session(s) have been deleted."));
+}
+
+void MainWindow::updateDeleteActionState(const QItemSelection &selected, const QItemSelection &deselected)
+{
+    Q_UNUSED(deselected); // Unused parameter
+
+    // Retrieve all selected top-level items
+    QList<QTreeWidgetItem*> selectedItems = ui->logbookTreeWidget->selectedItems();
+
+    bool hasValidSelection = false;
+
+    for (QTreeWidgetItem* item : selectedItems) {
+        if (item->parent() == nullptr) { // Top-level item
+            hasValidSelection = true;
+            break; // At least one valid selection found
+        }
+    }
+
+    // Enable Delete action if there is at least one top-level item selected
+    ui->actionDelete->setEnabled(hasValidSelection);
 }
 
 void MainWindow::mergeSessionData(const SessionData& newSession)
@@ -277,14 +304,23 @@ void MainWindow::populateLogbookTreeWidget()
         // Store SESSION_ID as data for easy access during deletion
         sessionItem->setData(0, Qt::UserRole, sessionID);
 
+        // Make the sessionItem selectable
+        sessionItem->setFlags(sessionItem->flags() | Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+
         // Add DEVICE_ID as a child
         QTreeWidgetItem *deviceItem = new QTreeWidgetItem(sessionItem);
         deviceItem->setText(0, QString("Device ID: %1").arg(deviceID));
+
+        // Make the deviceItem non-selectable
+        deviceItem->setFlags(deviceItem->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
 
         // Add Variables as a child
         QTreeWidgetItem *varsItem = new QTreeWidgetItem(sessionItem);
         varsItem->setText(0, "Variables");
         varsItem->setExpanded(false); // Collapse by default
+
+        // Make the varsItem non-selectable
+        varsItem->setFlags(varsItem->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
 
         // Iterate through variables
         for (auto varIt = session.getVars().constBegin(); varIt != session.getVars().constEnd(); ++varIt) {
@@ -293,6 +329,9 @@ void MainWindow::populateLogbookTreeWidget()
             }
             QTreeWidgetItem *varItem = new QTreeWidgetItem(varsItem);
             varItem->setText(0, QString("%1: %2").arg(varIt.key(), varIt.value()));
+
+            // Make the varItem non-selectable
+            varItem->setFlags(varItem->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
         }
 
         // Add Sensors as a child
@@ -300,12 +339,18 @@ void MainWindow::populateLogbookTreeWidget()
         sensorsItem->setText(0, "Sensors");
         sensorsItem->setExpanded(false); // Collapse by default
 
+        // Make the sensorsItem non-selectable
+        sensorsItem->setFlags(sensorsItem->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
+
         // Iterate through sensors
         for (auto sensorIt = session.getSensors().constBegin(); sensorIt != session.getSensors().constEnd(); ++sensorIt) {
             QString sensorName = sensorIt.key();
             QTreeWidgetItem *sensorItem = new QTreeWidgetItem(sensorsItem);
             sensorItem->setText(0, sensorName);
             sensorItem->setExpanded(false); // Collapse by default
+
+            // Make the sensorItem non-selectable
+            sensorItem->setFlags(sensorItem->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
 
             // Iterate through measurements
             for (auto measureIt = sensorIt.value().constBegin(); measureIt != sensorIt.value().constEnd(); ++measureIt) {
