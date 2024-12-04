@@ -44,7 +44,7 @@ void MainWindow::on_actionImport_triggered()
         SessionData tempSessionData;
 
         if (importer.importFile(fileName, tempSessionData)) {
-            // Merge tempSessionData into m_sessionDataList
+            // Merge tempSessionData into m_sessionDataMap
             mergeSessionData(tempSessionData);
         } else {
             // Handle import failure (e.g., show a message to the user)
@@ -60,99 +60,116 @@ void MainWindow::on_actionImport_triggered()
 
 void MainWindow::mergeSessionData(const SessionData& newSession)
 {
-    // Ensure SESSION_ID exists in newSession
+    // Ensure SESSION_ID exists
     if (!newSession.getVars().contains("SESSION_ID")) {
-        qWarning() << "New SessionData does not contain SESSION_ID. Skipping merge.";
+        QMessageBox::critical(this, tr("Import failed"), tr("No session ID found"));
         return;
     }
 
     QString newSessionID = newSession.getVars().value("SESSION_ID");
 
-    // Iterate through existing SessionData to find a match
-    for (int i = 0; i < m_sessionDataList.size(); ++i) {
-        SessionData &existingSession = m_sessionDataList[i];
+    // Check if SESSION_ID exists in the map
+    if (m_sessionDataMap.contains(newSessionID)) {
+        SessionData &existingSession = m_sessionDataMap[newSessionID];
 
-        // Check if SESSION_ID matches
-        if (existingSession.getVars().value("SESSION_ID") == newSessionID) {
-            // Check that other variable values are the same
-            QMap<QString, QString> existingVars = existingSession.getVars();
-            QMap<QString, QString> newVars = newSession.getVars();
+        // Retrieve variables from both sessions
+        QMap<QString, QString> existingVars = existingSession.getVars();
+        QMap<QString, QString> newVars = newSession.getVars();
 
-            bool varsMatch = true;
+        // Check for exact match of variable sets
+        bool varsMatch = false;
+        if (existingVars.size() == newVars.size()) {
+            varsMatch = true; // Assume match until proven otherwise
             for (auto it = newVars.constBegin(); it != newVars.constEnd(); ++it) {
                 if (!existingVars.contains(it.key()) || existingVars.value(it.key()) != it.value()) {
                     varsMatch = false;
                     break;
                 }
             }
+        }
 
-            if (!varsMatch) {
-                qWarning() << "Variable values do not match for SESSION_ID:" << newSessionID;
-                // Optionally, handle this case (e.g., treat as separate SessionData)
-                continue;
+        if (!varsMatch) {
+            qWarning() << "Variable sets do not match for SESSION_ID:" << newSessionID;
+            // Assign a unique SESSION_ID by appending a suffix
+            int suffix = 1;
+            QString uniqueSessionID = newSessionID;
+            while (m_sessionDataMap.contains(uniqueSessionID)) {
+                uniqueSessionID = QString("%1_%2").arg(newSessionID).arg(suffix++);
             }
-
-            // Check for overlapping sensor/measurement key pairs
-            const QMap<QString, QMap<QString, QVector<double>>> &existingSensors = existingSession.getSensors();
-            const QMap<QString, QMap<QString, QVector<double>>> &newSensors = newSession.getSensors();
-
-            bool noOverlap = true;
-            for (auto sensorIt = newSensors.constBegin(); sensorIt != newSensors.constEnd(); ++sensorIt) {
-                QString sensorName = sensorIt.key();
-                if (existingSensors.contains(sensorName)) {
-                    const QMap<QString, QVector<double>> &existingMeasurements = existingSensors.value(sensorName);
-                    const QMap<QString, QVector<double>> &newMeasurements = sensorIt.value();
-
-                    for (auto measureIt = newMeasurements.constBegin(); measureIt != newMeasurements.constEnd(); ++measureIt) {
-                        QString measurementKey = measureIt.key();
-                        if (existingMeasurements.contains(measurementKey)) {
-                            // Overlapping sensor/measurement key found
-                            noOverlap = false;
-                            qWarning() << "Overlapping sensor/measurement key:" << sensorName << "/" << measurementKey
-                                       << "for SESSION_ID:" << newSessionID;
-                            break;
-                        }
-                    }
-                }
-
-                if (!noOverlap) break;
-            }
-
-            if (!noOverlap) {
-                // Cannot merge due to overlapping keys
-                continue;
-            }
-
-            // Merge variables (excluding SESSION_ID)
-            for (auto it = newVars.constBegin(); it != newVars.constEnd(); ++it) {
-                if (it.key() == "SESSION_ID") continue; // Skip SESSION_ID
-                existingSession.getVars().insert(it.key(), it.value());
-            }
-
-            // Merge sensors and measurements
-            for (auto sensorIt = newSensors.constBegin(); sensorIt != newSensors.constEnd(); ++sensorIt) {
-                QString sensorName = sensorIt.key();
-                const QMap<QString, QVector<double>> &newMeasurements = sensorIt.value();
-
-                if (!existingSession.getSensors().contains(sensorName)) {
-                    // If the sensor doesn't exist, add it entirely
-                    existingSession.getSensors().insert(sensorName, newMeasurements);
-                } else {
-                    // Sensor exists, add new measurements
-                    QMap<QString, QVector<double>> &existingMeasurements = existingSession.getSensors()[sensorName];
-                    for (auto measureIt = newMeasurements.constBegin(); measureIt != newMeasurements.constEnd(); ++measureIt) {
-                        existingMeasurements.insert(measureIt.key(), measureIt.value());
-                    }
-                }
-            }
-
-            // Merge successful
-            qDebug() << "Merged SessionData with SESSION_ID:" << newSessionID;
+            SessionData uniqueSession = newSession;
+            uniqueSession.setVar("SESSION_ID", uniqueSessionID);
+            m_sessionDataMap.insert(uniqueSessionID, uniqueSession);
+            qDebug() << "Added new SessionData with unique SESSION_ID:" << uniqueSessionID;
             return;
         }
-    }
 
-    // If no matching SESSION_ID found, add as a new SessionData
-    m_sessionDataList.append(newSession);
-    qDebug() << "Added new SessionData with SESSION_ID:" << newSession.getVars().value("SESSION_ID");
+        // Retrieve sensors from both sessions
+        const QMap<QString, QMap<QString, QVector<double>>> &existingSensors = existingSession.getSensors();
+        const QMap<QString, QMap<QString, QVector<double>>> &newSensors = newSession.getSensors();
+
+        // Check for overlapping sensors
+        bool noOverlap = true;
+        for (auto sensorIt = newSensors.constBegin(); sensorIt != newSensors.constEnd(); ++sensorIt) {
+            QString sensorName = sensorIt.key();
+            const QMap<QString, QVector<double>> &newMeasurements = sensorIt.value();
+
+            if (existingSensors.contains(sensorName)) {
+                const QMap<QString, QVector<double>> &existingMeasurements = existingSensors.value(sensorName);
+
+                for (auto measureIt = newMeasurements.constBegin(); measureIt != newMeasurements.constEnd(); ++measureIt) {
+                    QString measurementKey = measureIt.key();
+                    if (existingMeasurements.contains(measurementKey)) {
+                        // Overlapping sensor/measurement key found
+                        noOverlap = false;
+                        qWarning() << "Overlapping sensor/measurement key:" << sensorName << "/" << measurementKey
+                                   << "for SESSION_ID:" << newSessionID;
+                        break;
+                    }
+                }
+            }
+
+            if (!noOverlap) break;
+        }
+
+        if (!noOverlap) {
+            qWarning() << "Cannot merge SessionData due to overlapping sensor/measurement keys for SESSION_ID:" << newSessionID;
+            // Assign a unique SESSION_ID by appending a suffix
+            int suffix = 1;
+            QString uniqueSessionID = newSessionID;
+            while (m_sessionDataMap.contains(uniqueSessionID)) {
+                uniqueSessionID = QString("%1_%2").arg(newSessionID).arg(suffix++);
+            }
+            SessionData uniqueSession = newSession;
+            uniqueSession.setVar("SESSION_ID", uniqueSessionID);
+            m_sessionDataMap.insert(uniqueSessionID, uniqueSession);
+            qDebug() << "Added new SessionData with unique SESSION_ID:" << uniqueSessionID;
+            return;
+        }
+
+        // Merge sensors and measurements
+        for (auto sensorIt = newSensors.constBegin(); sensorIt != newSensors.constEnd(); ++sensorIt) {
+            QString sensorName = sensorIt.key();
+            const QMap<QString, QVector<double>> &newMeasurements = sensorIt.value();
+
+            if (!existingSession.getSensors().contains(sensorName)) {
+                // Add the entire sensor if it doesn't exist
+                existingSession.getSensors().insert(sensorName, newMeasurements);
+            } else {
+                // Merge new measurements into existing sensor
+                QMap<QString, QVector<double>> &existingMeasurements = existingSession.getSensors()[sensorName];
+                for (auto measureIt = newMeasurements.constBegin(); measureIt != newMeasurements.constEnd(); ++measureIt) {
+                    QString measurementKey = measureIt.key();
+                    const QVector<double> &data = measureIt.value();
+                    existingMeasurements.insert(measurementKey, data);
+                }
+            }
+        }
+
+        // Log successful merge
+        qDebug() << "Merged SessionData with SESSION_ID:" << newSessionID;
+    } else {
+        // SESSION_ID does not exist, add as new SessionData
+        m_sessionDataMap.insert(newSessionID, newSession);
+        qDebug() << "Added new SessionData with SESSION_ID:" << newSessionID;
+    }
 }

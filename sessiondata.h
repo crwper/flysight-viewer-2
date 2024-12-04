@@ -28,6 +28,10 @@ public:
     QMap<QString, QVector<double>>& operator[](const QString& sensorName);
     QMap<QString, QVector<double>> operator[](const QString& sensorName) const;
 
+    // Setter methods for encapsulation
+    void setVar(const QString& key, const QString& value);
+    void setSensorMeasurement(const QString& sensorName, const QString& measurementKey, const QVector<double>& data);
+
 private:
     // Member variables
     QMap<QString, QString> vars;

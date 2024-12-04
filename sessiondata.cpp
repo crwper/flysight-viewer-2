@@ -25,3 +25,11 @@ QMap<QString, QVector<double>>& SessionData::operator[](const QString& sensorNam
 QMap<QString, QVector<double>> SessionData::operator[](const QString& sensorName) const {
     return sensors.value(sensorName);
 }
+
+void SessionData::setVar(const QString& key, const QString& value) {
+    vars.insert(key, value);
+}
+
+void SessionData::setSensorMeasurement(const QString& sensorName, const QString& measurementKey, const QVector<double>& data) {
+    sensors[sensorName].insert(measurementKey, data);
+}
