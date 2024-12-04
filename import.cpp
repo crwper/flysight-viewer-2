@@ -66,10 +66,10 @@ bool FSDataImporter::importFile(const QString& fileName, SessionData& sessionDat
     if (!sessionData.vars.contains("DEVICE_ID")) {
         switch (fileType) {
         case FS_FileType::FS1:
-            extractDeviceId(fileName, sessionData, "Processor serial number:");
+            extractDeviceId(fileName, sessionData, "Processor serial number");
             break;
         case FS_FileType::FS2:
-            extractDeviceId(fileName, sessionData, "Device_ID:");
+            extractDeviceId(fileName, sessionData, "Device_ID");
             break;
         }
     }
