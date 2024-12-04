@@ -51,7 +51,7 @@
       <widget class="QTreeWidget" name="logbookTreeWidget">
        <column>
         <property name="text">
-         <string notr="true">1</string>
+         <string notr="true">Details</string>
         </property>
        </column>
       </widget>

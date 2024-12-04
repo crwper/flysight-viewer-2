@@ -34,5 +34,11 @@ private:
 
     // Helper method to merge SessionData
     void mergeSessionData(const SessionData& newSession);
+
+    // Function to populate the logbookTreeWidget
+    void populateLogbookTreeWidget();
+
+    // Function to filter the tree based on search input
+    void filterLogbookTree(const QString &filterText);
 };
 #endif // MAINWINDOW_H

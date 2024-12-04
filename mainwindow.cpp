@@ -14,6 +14,9 @@ MainWindow::MainWindow(QWidget *parent)
     m_settings = new QSettings("FlySight", "Viewer", this);
 
     ui->setupUi(this);
+
+    // Connect the search box to the filter function
+    connect(ui->logbookSearchEdit, &QLineEdit::textChanged, this, &MainWindow::filterLogbookTree);
 }
 
 MainWindow::~MainWindow()
@@ -56,6 +59,9 @@ void MainWindow::on_actionImport_triggered()
     // Update last used folder
     QString lastUsedFolder = QFileInfo(fileNames.last()).absolutePath();
     m_settings->setValue("folder", lastUsedFolder);
+
+    // Populate the logbookTreeWidget after importing
+    populateLogbookTreeWidget();
 }
 
 void MainWindow::mergeSessionData(const SessionData& newSession)
@@ -171,5 +177,108 @@ void MainWindow::mergeSessionData(const SessionData& newSession)
         // SESSION_ID does not exist, add as new SessionData
         m_sessionDataMap.insert(newSessionID, newSession);
         qDebug() << "Added new SessionData with SESSION_ID:" << newSessionID;
+    }
+}
+
+void MainWindow::populateLogbookTreeWidget()
+{
+    // Clear existing items
+    ui->logbookTreeWidget->clear();
+
+    // Iterate through each session in the map
+    QMap<QString, SessionData>::const_iterator it;
+    for (it = m_sessionDataMap.constBegin(); it != m_sessionDataMap.constEnd(); ++it) {
+        const SessionData &session = it.value();
+
+        // Retrieve SESSION_ID and DEVICE_ID
+        QString sessionID = session.getVars().value("SESSION_ID", "Unknown Session");
+        QString deviceID = session.getVars().value("DEVICE_ID", "Unknown Device");
+
+        // Create a top-level item for the session
+        QTreeWidgetItem *sessionItem = new QTreeWidgetItem(ui->logbookTreeWidget);
+        sessionItem->setText(0, QString("Session ID: %1").arg(sessionID));
+        sessionItem->setExpanded(true); // Expand by default
+
+        // Add DEVICE_ID as a child
+        QTreeWidgetItem *deviceItem = new QTreeWidgetItem(sessionItem);
+        deviceItem->setText(0, QString("Device ID: %1").arg(deviceID));
+
+        // Add Variables as a child
+        QTreeWidgetItem *varsItem = new QTreeWidgetItem(sessionItem);
+        varsItem->setText(0, "Variables");
+        varsItem->setExpanded(false); // Collapse by default
+
+        // Iterate through variables
+        for (auto it = session.getVars().constBegin(); it != session.getVars().constEnd(); ++it) {
+            if (it.key() == "SESSION_ID" || it.key() == "DEVICE_ID") {
+                continue; // Already displayed
+            }
+            QTreeWidgetItem *varItem = new QTreeWidgetItem(varsItem);
+            varItem->setText(0, QString("%1: %2").arg(it.key(), it.value()));
+        }
+
+        // Add Sensors as a child
+        QTreeWidgetItem *sensorsItem = new QTreeWidgetItem(sessionItem);
+        sensorsItem->setText(0, "Sensors");
+        sensorsItem->setExpanded(false); // Collapse by default
+
+        // Iterate through sensors
+        for (auto sensorIt = session.getSensors().constBegin(); sensorIt != session.getSensors().constEnd(); ++sensorIt) {
+            QString sensorName = sensorIt.key();
+            QTreeWidgetItem *sensorItem = new QTreeWidgetItem(sensorsItem);
+            sensorItem->setText(0, sensorName);
+            sensorItem->setExpanded(false); // Collapse by default
+
+            // Iterate through measurements
+            for (auto measureIt = sensorIt.value().constBegin(); measureIt != sensorIt.value().constEnd(); ++measureIt) {
+                QString measurementKey = measureIt.key();
+                int dataPoints = measureIt.value().size();
+                QTreeWidgetItem *measurementItem = new QTreeWidgetItem(sensorItem);
+                measurementItem->setText(0, QString("%1: %2 data points").arg(measurementKey).arg(dataPoints));
+            }
+        }
+    }
+
+    // Optionally, resize columns to fit contents
+    ui->logbookTreeWidget->resizeColumnToContents(0);
+}
+
+void MainWindow::filterLogbookTree(const QString &filterText)
+{
+    // Convert filter text to lowercase for case-insensitive matching
+    QString filter = filterText.toLower();
+
+    // Iterate through top-level items (sessions)
+    for (int i = 0; i < ui->logbookTreeWidget->topLevelItemCount(); ++i) {
+        QTreeWidgetItem *sessionItem = ui->logbookTreeWidget->topLevelItem(i);
+        bool sessionVisible = false;
+
+        // Check if SESSION_ID or DEVICE_ID matches the filter
+        if (sessionItem->text(0).toLower().contains(filter)) {
+            sessionVisible = true;
+        } else {
+            // Check child items (Variables and Sensors)
+            for (int j = 0; j < sessionItem->childCount(); ++j) {
+                QTreeWidgetItem *childItem = sessionItem->child(j);
+                if (childItem->text(0).toLower().contains(filter)) {
+                    sessionVisible = true;
+                    break;
+                }
+
+                // Optionally, check deeper levels (e.g., measurements)
+                for (int k = 0; k < childItem->childCount(); ++k) {
+                    QTreeWidgetItem *grandChildItem = childItem->child(k);
+                    if (grandChildItem->text(0).toLower().contains(filter)) {
+                        sessionVisible = true;
+                        break;
+                    }
+                }
+
+                if (sessionVisible) break;
+            }
+        }
+
+        // Show or hide the session item
+        sessionItem->setHidden(!sessionVisible);
     }
 }
