@@ -1,9 +1,12 @@
-// fsdataimporter.cpp
+// import.cpp
 
 #include "import.h"
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QDebug>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QMessageBox>
 #include <QStringTokenizer>
 #include <QTextStream>
@@ -57,6 +60,18 @@ bool FSDataImporter::importFile(const QString& fileName, SessionData& sessionDat
     case FS_FileType::FS2:
         importFS2(in, sessionData);
         break;
+    }
+
+    // After importing, attempt to extract DEVICE_ID based on file type
+    if (!sessionData.vars.contains("DEVICE_ID")) {
+        switch (fileType) {
+        case FS_FileType::FS1:
+            extractDeviceId(fileName, sessionData, "Processor serial number:");
+            break;
+        case FS_FileType::FS2:
+            extractDeviceId(fileName, sessionData, "Device_ID:");
+            break;
+        }
     }
 
     // After importing, check if SESSION_ID is set
@@ -214,6 +229,83 @@ void FSDataImporter::importDataRow(const QString& line, const QString& sensorNam
             }
         }
     }
+}
+
+void FSDataImporter::extractDeviceId(const QString& fileName, SessionData& sessionData, const QString& expectedKey) {
+    // Find the root directory of the FlySight device
+    QString flySightRoot = findFlySightRoot(fileName);
+
+    if (flySightRoot.isEmpty()) {
+        // FLYSIGHT.TXT not found
+        qWarning() << "FLYSIGHT.TXT not found in any parent directories of:" << fileName;
+        return;
+    }
+
+    QString flysightTxtPath = QDir(flySightRoot).absoluteFilePath("FLYSIGHT.TXT");
+
+    // Open FLYSIGHT.TXT and search for the expected key
+    QFile flysightFile(flysightTxtPath);
+    if (!flysightFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        // Fail silently if the file cannot be opened
+        qWarning() << "Failed to open FLYSIGHT.TXT at:" << flysightTxtPath;
+        return;
+    }
+
+    QTextStream in(&flysightFile);
+    while (!in.atEnd()) {
+        QString line = in.readLine().trimmed();
+
+        // Handle comments: ignore everything after ';'
+        int commentIndex = line.indexOf(';');
+        if (commentIndex != -1) {
+            line = line.left(commentIndex).trimmed();
+        }
+
+        if (line.isEmpty()) {
+            // Skip empty lines
+            continue;
+        }
+
+        // Split the line into key and value at the first ':'
+        int colonIndex = line.indexOf(':');
+        if (colonIndex == -1) {
+            // No colon found; invalid line format
+            qWarning() << "Invalid line format (no colon found):" << line;
+            continue;
+        }
+
+        QString key = line.left(colonIndex).trimmed();
+        QString value = line.mid(colonIndex + 1).trimmed();
+
+        if (key == expectedKey) {
+            sessionData.vars["DEVICE_ID"] = value;
+            return;
+        }
+    }
+
+    // Optionally, log that the expected key was not found
+    qWarning() << expectedKey << "not found in FLYSIGHT.TXT";
+}
+
+QString FSDataImporter::findFlySightRoot(const QString& filePath) {
+    QFileInfo fileInfo(filePath);
+    QDir currentDir = fileInfo.absoluteDir();
+
+    while (true) {
+        QString flysightPath = currentDir.absoluteFilePath("FLYSIGHT.TXT");
+        if (QFile::exists(flysightPath)) {
+            // Found FLYSIGHT.TXT in the current directory
+            return currentDir.absolutePath();
+        }
+
+        if (!currentDir.cdUp()) {
+            // Reached the root of the filesystem without finding FLYSIGHT.TXT
+            break;
+        }
+    }
+
+    // FLYSIGHT.TXT not found
+    return QString();
 }
 
 } // namespace FSImport

@@ -25,6 +25,10 @@ private:
     void importFS2(QTextStream& in, SessionData& sessionData);
     void importHeaderRow(const QString& row, FS_Section& section, QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData);
     void importDataRow(const QString& line, const QString& sensorName, const QMap<QString, QVector<QString>>& columnOrder, bool hasMessageKeyInLine, SessionData& sessionData);
+
+    // Helper function to extract device ID
+    void extractDeviceId(const QString& fileName, SessionData& sessionData, const QString& expectedKey);
+    QString findFlySightRoot(const QString& filePath);
 };
 
 } // namespace FSImport
