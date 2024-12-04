@@ -1,6 +1,7 @@
 // fsdataimporter.cpp
 
 #include "import.h"
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QFile>
 #include <QMessageBox>
@@ -11,27 +12,43 @@ namespace FSImport {
 
 bool FSDataImporter::importFile(const QString& fileName, SessionData& sessionData) {
     QFile file(fileName);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    if (!file.open(QIODevice::ReadOnly)) {
         QMessageBox::critical(nullptr, "Import failed", "Couldn't read file");
         return false;
     }
 
-    QTextStream in(&file);
+    // Read the entire file into a QByteArray
+    QByteArray fileData = file.readAll();
 
-    if (!in.atEnd()) {
-        QString firstLine = in.readLine();
+    if (fileData.isEmpty()) {
+        QMessageBox::critical(nullptr, "Import failed", "Empty file");
+        return false;
+    }
 
-        if (firstLine.startsWith("time")) {
-            // Import from FS1 format
-            importFS1(in, firstLine, sessionData);
-        } else if (firstLine.startsWith("$FLYS")) {
-            // Import from FS2 format
-            importFS2(in, firstLine, sessionData);
-        } else {
-            // Unknown format
-            QMessageBox::critical(nullptr, "Import failed", "Unknown file format");
-            return false;
-        }
+    // Create a QTextStream from the QByteArray
+    QTextStream in(fileData);
+
+    // Read the first line
+    QString firstLine = in.readLine();
+
+    if (firstLine.startsWith("time")) {
+        // Import from FS1 format
+        importFS1(in, firstLine, sessionData);
+    } else if (firstLine.startsWith("$FLYS")) {
+        // Import from FS2 format
+        importFS2(in, firstLine, sessionData);
+    } else {
+        // Unknown format
+        QMessageBox::critical(nullptr, "Import failed", "Unknown file format");
+        return false;
+    }
+
+    // After importing, check if SESSION_ID is set
+    if (!sessionData.vars.contains("SESSION_ID")) {
+        // Compute MD5 hash of fileData
+        QByteArray md5Hash = QCryptographicHash::hash(fileData, QCryptographicHash::Md5);
+        QString md5HashString = md5Hash.toHex();
+        sessionData.vars["SESSION_ID"] = md5HashString;
     }
 
     return true;
