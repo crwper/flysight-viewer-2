@@ -25,22 +25,38 @@ bool FSDataImporter::importFile(const QString& fileName, SessionData& sessionDat
         return false;
     }
 
-    // Create a QTextStream from the QByteArray
-    QTextStream in(fileData);
+    // Extract the first line directly from QByteArray
+    int firstNewline = fileData.indexOf('\n');
+    QString firstLine;
+    if (firstNewline != -1) {
+        firstLine = QString::fromUtf8(fileData.left(firstNewline)).trimmed();
+    } else {
+        firstLine = QString::fromUtf8(fileData).trimmed();
+    }
 
-    // Read the first line
-    QString firstLine = in.readLine();
-
+    // Determine file type based on the first line
+    FS_FileType fileType;
     if (firstLine.startsWith("time")) {
-        // Import from FS1 format
-        importFS1(in, firstLine, sessionData);
+        fileType = FS_FileType::FS1;
     } else if (firstLine.startsWith("$FLYS")) {
-        // Import from FS2 format
-        importFS2(in, firstLine, sessionData);
+        fileType = FS_FileType::FS2;
     } else {
         // Unknown format
         QMessageBox::critical(nullptr, "Import failed", "Unknown file format");
         return false;
+    }
+
+    // Create a QTextStream from the QByteArray
+    QTextStream in(&fileData, QIODevice::ReadOnly);
+
+    // Use the fileType to choose the import method
+    switch (fileType) {
+    case FS_FileType::FS1:
+        importFS1(in, sessionData);
+        break;
+    case FS_FileType::FS2:
+        importFS2(in, sessionData);
+        break;
     }
 
     // After importing, check if SESSION_ID is set
@@ -54,19 +70,13 @@ bool FSDataImporter::importFile(const QString& fileName, SessionData& sessionDat
     return true;
 }
 
-void FSDataImporter::importFS1(QTextStream& in, const QString& firstLine, SessionData& sessionData) {
+void FSDataImporter::importFS1(QTextStream& in, SessionData& sessionData) {
     QString sensorName = "GNSS";
     QMap<QString, QVector<QString>> columnOrder;
 
     // Read the first line (column names)
-    QVector<QString> columns;
-    {
-        QStringView lineView(firstLine);
-        QStringTokenizer tokenizer(lineView, u',');
-        for (const QStringView& token : tokenizer) {
-            columns.append(token.toString());
-        }
-    }
+    QString columnLine = in.readLine();
+    QVector<QString> columns = columnLine.split(',', Qt::SkipEmptyParts).toVector().toList().toVector();
     columnOrder[sensorName] = columns;
 
     // Initialize the data map in sensors
@@ -88,14 +98,11 @@ void FSDataImporter::importFS1(QTextStream& in, const QString& firstLine, Sessio
     }
 }
 
-void FSDataImporter::importFS2(QTextStream& in, const QString& firstLine, SessionData& sessionData) {
+void FSDataImporter::importFS2(QTextStream& in, SessionData& sessionData) {
     FS_Section section = FS_Section::HEADER;
 
     // Temporary map to store column order per sensor
     QMap<QString, QVector<QString>> columnOrder;
-
-    // Process the first line as part of the header
-    importHeaderRow(firstLine, section, columnOrder, sessionData);
 
     // Read and process header lines
     while (!in.atEnd() && (section == FS_Section::HEADER)) {
