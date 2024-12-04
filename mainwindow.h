@@ -2,6 +2,8 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QList>
+#include "sessiondata.h"
 
 class QSettings;
 
@@ -26,5 +28,11 @@ private:
     Ui::MainWindow *ui;
 
     QSettings *m_settings;
+
+    // Member variable to store all SessionData objects
+    QList<SessionData> m_sessionDataList;
+
+    // Helper method to merge SessionData
+    void mergeSessionData(const SessionData& newSession);
 };
 #endif // MAINWINDOW_H

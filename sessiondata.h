@@ -18,12 +18,15 @@ public:
     SessionData() = default;
 
     // Accessors for vars and sensors
+    QMap<QString, QString>& getVars();
     const QMap<QString, QString>& getVars() const;
-    const QMap<QString, SensorData>& getSensors() const;
+
+    QMap<QString, QMap<QString, QVector<double>>>& getSensors();
+    const QMap<QString, QMap<QString, QVector<double>>>& getSensors() const;
 
     // Operator[] to access sensor data
-    const SensorData& operator[](const QString& sensorName) const;
-    SensorData& operator[](const QString& sensorName);
+    QMap<QString, QVector<double>>& operator[](const QString& sensorName);
+    QMap<QString, QVector<double>> operator[](const QString& sensorName) const;
 
 private:
     // Member variables
