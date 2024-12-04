@@ -32,6 +32,9 @@ public:
     void setVar(const QString& key, const QString& value);
     void setSensorMeasurement(const QString& sensorName, const QString& measurementKey, const QVector<double>& data);
 
+    // Static constant for default DEVICE_ID
+    static const QString DEFAULT_DEVICE_ID;
+
 private:
     // Member variables
     QMap<QString, QString> vars;

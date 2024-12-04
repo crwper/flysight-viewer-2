@@ -72,6 +72,13 @@ bool FSDataImporter::importFile(const QString& fileName, SessionData& sessionDat
             extractDeviceId(fileName, sessionData, "Device_ID");
             break;
         }
+
+        // After extraction, check again if DEVICE_ID is present
+        if (!sessionData.vars.contains("DEVICE_ID")) {
+            // Assign default DEVICE_ID
+            sessionData.vars.insert("DEVICE_ID", SessionData::DEFAULT_DEVICE_ID);
+            qDebug() << "Assigned default DEVICE_ID to session.";
+        }
     }
 
     // After importing, check if SESSION_ID is set

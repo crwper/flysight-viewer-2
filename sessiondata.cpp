@@ -2,6 +2,9 @@
 
 #include "sessiondata.h"
 
+// Initialize the static constants
+const QString SessionData::DEFAULT_DEVICE_ID = "_";
+
 QMap<QString, QString>& SessionData::getVars() {
     return vars;
 }
