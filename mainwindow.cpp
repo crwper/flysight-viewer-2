@@ -44,23 +44,11 @@ MainWindow::MainWindow(QWidget *parent)
     // Initialize the plot
     ui->centralwidget->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom); // Enable user interactions
     ui->centralwidget->xAxis->setLabel("Time (s)");
-    ui->centralwidget->yAxis->setLabel("GNSS/hMSL");
-    ui->centralwidget->legend->setVisible(true);
-    ui->centralwidget->legend->setBrush(QBrush(QColor(255, 255, 255, 150))); // Semi-transparent background
-    ui->centralwidget->legend->setBorderPen(QPen(Qt::black));
+    ui->centralwidget->legend->setVisible(false);
 
     // Optionally, set a default range or style
     ui->centralwidget->xAxis->setRange(0, 100); // Example range
     ui->centralwidget->yAxis->setRange(0, 1000); // Example range
-
-    // Configure legend
-    ui->centralwidget->legend->setVisible(true);
-    ui->centralwidget->legend->setFont(QFont("Helvetica", 9));
-    ui->centralwidget->legend->setBrush(QBrush(QColor(255, 255, 255, 150)));
-    ui->centralwidget->legend->setBorderPen(QPen(Qt::black));
-
-    // Set legend placement
-    ui->centralwidget->axisRect()->insetLayout()->setInsetAlignment(0, Qt::AlignTop|Qt::AlignRight);
 
     ui->centralwidget->replot();
 }
