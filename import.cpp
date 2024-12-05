@@ -16,7 +16,7 @@ namespace FSImport {
 bool FSDataImporter::importFile(const QString& fileName, SessionData& sessionData) {
     QFile file(fileName);
     if (!file.open(QIODevice::ReadOnly)) {
-        QMessageBox::critical(nullptr, "Import failed", "Couldn't read file");
+        m_lastError = "Couldn't read file";
         return false;
     }
 
@@ -24,7 +24,7 @@ bool FSDataImporter::importFile(const QString& fileName, SessionData& sessionDat
     QByteArray fileData = file.readAll();
 
     if (fileData.isEmpty()) {
-        QMessageBox::critical(nullptr, "Import failed", "Empty file");
+        m_lastError = "Empty file";
         return false;
     }
 
@@ -44,8 +44,7 @@ bool FSDataImporter::importFile(const QString& fileName, SessionData& sessionDat
     } else if (firstLine.startsWith("$FLYS")) {
         fileType = FS_FileType::FS2;
     } else {
-        // Unknown format
-        QMessageBox::critical(nullptr, "Import failed", "Unknown file format");
+        m_lastError = "Unknown file format";
         return false;
     }
 
@@ -313,6 +312,10 @@ QString FSDataImporter::findFlySightRoot(const QString& filePath) {
 
     // FLYSIGHT.TXT not found
     return QString();
+}
+
+QString FSDataImporter::getLastError() const {
+    return m_lastError;
 }
 
 } // namespace FSImport

@@ -2,9 +2,11 @@
 #include "./ui_mainwindow.h"
 #include "import.h"
 #include "plotspec.h"
+#include <QDirIterator>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
+#include <QProgressDialog>
 #include <QRandomGenerator>
 #include <QDebug>
 
@@ -76,8 +78,8 @@ void MainWindow::on_actionImport_triggered()
         return;
     }
 
-    // Sort files from oldest to newest
-    fileNames.sort();
+    // Initialize a map to collect failed imports with error messages
+    QMap<QString, QString> failedImports;
 
     // Import each file
     for (const QString &fileName : fileNames) {
@@ -88,9 +90,10 @@ void MainWindow::on_actionImport_triggered()
             // Merge tempSessionData into m_sessionDataMap
             mergeSessionData(tempSessionData);
         } else {
-            // Handle import failure (e.g., show a message to the user)
-            QMessageBox::warning(this, tr("Import Failed"),
-                                 tr("Failed to import file: %1").arg(fileName));
+            // Failed import with an error message
+            QString errorMessage = importer.getLastError();
+            qWarning() << "Failed to import file:" << fileName << "Error:" << errorMessage;
+            failedImports.insert(fileName, errorMessage);
         }
     }
 
@@ -102,7 +105,130 @@ void MainWindow::on_actionImport_triggered()
     populateLogbookTreeWidget();
 
     // After populating the tree, rebuild the plot
-    rebuildPlot();
+    applyCurrentPlotSpec();
+
+    // Display completion message
+    if (failedImports.size() > 10) {
+        QString message = tr("Track import has been completed.");
+        message += tr("\n\nHowever, %1 files failed to import.").arg(failedImports.size());
+        message += tr("\nPlease check the log for more details.");
+        QMessageBox::warning(this, tr("Import Completed with Some Failures"), message);
+        // Additionally, log the failed file paths to a log file or console
+    } else if (!failedImports.isEmpty()) {
+        // List all failed imports
+        QStringList failedList;
+        for (const QString &filePath : failedImports) {
+            failedList << filePath;
+        }
+        QString message = tr("Track import has been completed.");
+        message += tr("\n\nHowever, some files failed to import:");
+        message += "\n" + failedList.join("\n");
+        QMessageBox::warning(this, tr("Import Completed with Some Failures"), message);
+    }
+}
+
+void MainWindow::on_actionImportFolder_triggered()
+{
+    // Prompt the user to select a folder
+    QString folderPath = QFileDialog::getExistingDirectory(
+        this,
+        tr("Select Folder to Import"),
+        m_settings->value("folder").toString(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
+        );
+
+    // If the user cancels the dialog, exit the function
+    if (folderPath.isEmpty()) {
+        return;
+    }
+
+    // Define file filters (adjust according to your file types)
+    QStringList nameFilters;
+    nameFilters << "*.csv" << "*.CSV"; // Example: CSV files
+
+    // Use QDirIterator to iterate through the folder and its subdirectories
+    QDirIterator it(folderPath, nameFilters, QDir::Files, QDirIterator::Subdirectories);
+
+    // Collect all files to import
+    QStringList filesToImport;
+    while (it.hasNext()) {
+        it.next();
+        filesToImport << it.filePath();
+    }
+
+    // If no files found, inform the user and exit
+    if (filesToImport.isEmpty()) {
+        QMessageBox::information(this, tr("No Files Found"), tr("No files matching the filter were found in the selected folder."));
+        return;
+    }
+
+    // Initialize a map to collect failed imports with error messages
+    QMap<QString, QString> failedImports;
+
+    // Show a progress dialog to inform the user about the import progress
+    QProgressDialog progressDialog(tr("Importing files..."), tr("Cancel"), 0, filesToImport.size(), this);
+    progressDialog.setWindowModality(Qt::WindowModal);
+    progressDialog.setMinimumDuration(0);
+
+    // Iterate through each file and import
+    int current = 0;
+    for (const QString &filePath : filesToImport) {
+        // Update progress dialog
+        progressDialog.setValue(current);
+        if (progressDialog.wasCanceled()) {
+            break; // Exit the loop if the user cancels
+        }
+
+        // Import the file
+        FSImport::FSDataImporter importer;
+        SessionData tempSessionData;
+
+        if (importer.importFile(filePath, tempSessionData)) {
+            // Merge tempSessionData into m_sessionDataMap
+            mergeSessionData(tempSessionData);
+        } else {
+            // Failed import with an error message
+            QString errorMessage = importer.getLastError();
+            qWarning() << "Failed to import file:" << filePath << "Error:" << errorMessage;
+            failedImports.insert(filePath, errorMessage);
+        }
+
+        ++current;
+    }
+
+    // Finish progress dialog
+    progressDialog.setValue(filesToImport.size());
+
+    // Update last used folder
+    m_settings->setValue("folder", folderPath);
+
+    // Populate the logbook tree with the newly imported sessions
+    populateLogbookTreeWidget();
+
+    // Apply the current plot specification once after bulk import
+    applyCurrentPlotSpec();
+
+    // Display completion message
+    if (failedImports.size() > 10) {
+        QString message = tr("Folder import has been completed.");
+        message += tr("\n\nHowever, %1 files failed to import.").arg(failedImports.size());
+        message += tr("\nPlease check the log for more details.");
+        QMessageBox::warning(this, tr("Import Completed with Some Failures"), message);
+        // Additionally, log the failed file paths to a log file or console
+    } else if (!failedImports.isEmpty()) {
+        // List all failed imports
+        QStringList failedList;
+        for (const QString &filePath : failedImports) {
+            failedList << filePath;
+        }
+        QString message = tr("Folder import has been completed.");
+        message += tr("\n\nHowever, some files failed to import:");
+        message += "\n" + failedList.join("\n");
+        QMessageBox::warning(this, tr("Import Completed with Some Failures"), message);
+    } else {
+        // All imports successful
+        QMessageBox::information(this, tr("Import Completed"), tr("All files have been imported successfully."));
+    }
 }
 
 void MainWindow::on_actionDelete_triggered()
@@ -180,7 +306,7 @@ void MainWindow::on_actionDelete_triggered()
                              tr("Selected session(s) have been deleted."));
 
     // After removing items from the tree, rebuild the plot
-    rebuildPlot();
+    applyCurrentPlotSpec();
 }
 
 void MainWindow::updateDeleteActionState(const QItemSelection &selected, const QItemSelection &deselected)
@@ -505,12 +631,6 @@ void MainWindow::filterLogbookTree(const QString &filterText)
         // Show or hide the session item
         sessionItem->setHidden(!sessionVisible);
     }
-}
-
-void MainWindow::rebuildPlot()
-{
-    // Delegate to applyCurrentPlotSpec to handle all plotting
-    applyCurrentPlotSpec();
 }
 
 void MainWindow::initializePlotSpecs()

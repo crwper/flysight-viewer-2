@@ -14,11 +14,17 @@ public:
     // Method to import a file and get the session data
     bool importFile(const QString& fileName, SessionData& sessionData);
 
+    // Report last import error
+    QString getLastError() const;
+
 private:
     // Enums and type definitions
     enum class FS_FileType { FS1, FS2 };
     enum class FS_Section { HEADER, DATA };
     using SensorData = SessionData::SensorData;
+
+    // Last import error
+    QString m_lastError;
 
     // Private helper methods
     void importFS1(QTextStream& in, SessionData& sessionData);

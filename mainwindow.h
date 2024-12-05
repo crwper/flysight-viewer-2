@@ -29,6 +29,7 @@ public:
 
 private slots:
     void on_actionImport_triggered();
+    void on_actionImportFolder_triggered();
     void on_actionDelete_triggered();
     void updateDeleteActionState(const QItemSelection &selected, const QItemSelection &deselected);
     void onSessionItemChanged(QTreeWidgetItem *item, int column);
@@ -61,9 +62,6 @@ private:
     void mergeSessionData(const SessionData& newSession);
     void populateLogbookTreeWidget();
     void filterLogbookTree(const QString &filterText);
-
-    // Helper methods for plotting
-    void rebuildPlot();
 
     // Methods to initialize plot specifications and UI
     void initializePlotSpecs();

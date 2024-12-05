@@ -28,6 +28,7 @@
      <string>Track</string>
     </property>
     <addaction name="actionImport"/>
+    <addaction name="actionImportFolder"/>
     <addaction name="actionDelete"/>
    </widget>
    <addaction name="menuTrack"/>
@@ -101,6 +102,14 @@
   <action name="actionDelete">
    <property name="text">
     <string>Delete</string>
+   </property>
+  </action>
+  <action name="actionImportFolder">
+   <property name="text">
+    <string>Import Folder</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+T</string>
    </property>
   </action>
  </widget>
