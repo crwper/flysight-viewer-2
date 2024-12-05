@@ -4,7 +4,9 @@
 #include <QItemSelection>
 #include <QMainWindow>
 #include <QMap>
+#include <QVector>
 #include "sessiondata.h"
+#include "plotspec.h"
 
 class QCPGraph;
 class QSettings;
@@ -21,7 +23,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
 private slots:
@@ -29,6 +31,7 @@ private slots:
     void on_actionDelete_triggered();
     void updateDeleteActionState(const QItemSelection &selected, const QItemSelection &deselected);
     void onSessionItemChanged(QTreeWidgetItem *item, int column);
+    void onPlotSelectionChanged(QTreeWidgetItem *item, int column);
 
 private:
     Ui::MainWindow *ui;
@@ -44,6 +47,12 @@ private:
     // Map to keep track of session colors
     QMap<QString, QColor> m_sessionColors;
 
+    // Plot specifications
+    QVector<PlotSpec> m_plotSpecs;
+
+    // Currently selected plot specification
+    PlotSpec m_currentPlotSpec;
+
     // Helper methods
     void mergeSessionData(const SessionData& newSession);
     void populateLogbookTreeWidget();
@@ -53,5 +62,12 @@ private:
     void addSessionToPlot(const QString &sessionID);
     void removeSessionFromPlot(const QString &sessionID);
     void rebuildPlot();
+
+    // Methods to initialize plot specifications and UI
+    void initializePlotSpecs();
+    void initializePlotSelectionDock();
+    void populatePlotSelectionTree();
+    void applyCurrentPlotSpec();
 };
+
 #endif // MAINWINDOW_H

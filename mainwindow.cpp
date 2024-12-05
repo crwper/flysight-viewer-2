@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 #include "import.h"
+#include "plotspec.h"
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
@@ -16,6 +17,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->setupUi(this);
 
+    // Initialize plot specifications
+    initializePlotSpecs();
+
+    // Initialize the plot selection dock
+    initializePlotSelectionDock();
+
     // Connect the search box to the filter function
     connect(ui->logbookSearchEdit, &QLineEdit::textChanged, this, &MainWindow::filterLogbookTree);
 
@@ -26,6 +33,10 @@ MainWindow::MainWindow(QWidget *parent)
     // Connect the itemChanged signal to handle checkbox state changes
     connect(ui->logbookTreeWidget, &QTreeWidget::itemChanged,
             this, &MainWindow::onSessionItemChanged);
+
+    // Connect plot selection changes
+    connect(ui->plotSelectionTreeWidget, &QTreeWidget::itemClicked,
+            this, &MainWindow::onPlotSelectionChanged);
 
     // Initialize the Delete action as disabled
     ui->actionDelete->setEnabled(false);
@@ -220,6 +231,50 @@ void MainWindow::onSessionItemChanged(QTreeWidgetItem *item, int column)
     }
 }
 
+void MainWindow::onPlotSelectionChanged(QTreeWidgetItem *item, int column)
+{
+    Q_UNUSED(column);
+
+    // Check if the item is a child (plot item)
+    if (item->parent() != nullptr) {
+        // Ensure only one plot is selected (radio button behavior)
+        // Uncheck all other plot items
+        for (int i = 0; i < ui->plotSelectionTreeWidget->topLevelItemCount(); ++i) {
+            QTreeWidgetItem *categoryItem = ui->plotSelectionTreeWidget->topLevelItem(i);
+            for (int j = 0; j < categoryItem->childCount(); ++j) {
+                QTreeWidgetItem *plotItem = categoryItem->child(j);
+                if (plotItem != item) {
+                    plotItem->setCheckState(0, Qt::Unchecked);
+                }
+            }
+        }
+
+        // Check the selected item if not already checked
+        if (item->checkState(0) != Qt::Checked) {
+            item->setCheckState(0, Qt::Checked);
+        }
+
+        // Find the corresponding PlotSpec
+        QString category = item->parent()->text(0);
+        QString plotName = item->text(0);
+        PlotSpec selectedPlot;
+
+        bool found = false;
+        for (const PlotSpec &plot : m_plotSpecs) {
+            if (plot.category == category && plot.plotName == plotName) {
+                selectedPlot = plot;
+                found = true;
+                break;
+            }
+        }
+
+        if (found) {
+            m_currentPlotSpec = selectedPlot;
+            applyCurrentPlotSpec();
+        }
+    }
+}
+
 void MainWindow::mergeSessionData(const SessionData& newSession)
 {
     // Ensure SESSION_ID exists
@@ -334,6 +389,15 @@ void MainWindow::mergeSessionData(const SessionData& newSession)
         m_sessionDataMap.insert(newSessionID, newSession);
         qDebug() << "Added new SessionData with SESSION_ID:" << newSessionID;
     }
+
+    // After merging, if the session is already selected for plotting, add it to the plot
+    QString sessionID = newSession.getVars().value("SESSION_ID");
+    if (m_sessionDataMap.contains(sessionID) && m_currentPlotSpec.sensorID != "" && m_currentPlotSpec.measurementID != "") {
+        addSessionToPlot(sessionID);
+    }
+
+    // Replot to reflect changes
+    ui->centralwidget->replot();
 }
 
 void MainWindow::populateLogbookTreeWidget()
@@ -416,7 +480,7 @@ void MainWindow::populateLogbookTreeWidget()
         }
     }
 
-    // Optionally, resize columns to fit contents
+    // Resize columns to fit contents
     ui->logbookTreeWidget->resizeColumnToContents(0);
 }
 
@@ -469,29 +533,29 @@ void MainWindow::addSessionToPlot(const QString &sessionID)
 
     const SessionData &session = m_sessionDataMap.value(sessionID);
 
-    // Check if GNSS/hMSL data is available
-    if (!session.getSensors().contains("GNSS")) {
-        qWarning() << "GNSS sensor not found in session:" << sessionID;
+    // Check if the session has the required sensor and measurement
+    if (!session.getSensors().contains(m_currentPlotSpec.sensorID)) {
+        qWarning() << m_currentPlotSpec.sensorID << "sensor not found in session:" << sessionID;
         return;
     }
 
-    const QMap<QString, QVector<double>> &gnssMeasurements = session.getSensors().value("GNSS");
+    const QMap<QString, QVector<double>> &sensorMeasurements = session.getSensors().value(m_currentPlotSpec.sensorID);
 
-    if (!gnssMeasurements.contains("hMSL")) {
-        qWarning() << "hMSL measurement not found in GNSS sensor for session:" << sessionID;
+    if (!sensorMeasurements.contains(m_currentPlotSpec.measurementID)) {
+        qWarning() << m_currentPlotSpec.measurementID << "measurement not found in" << m_currentPlotSpec.sensorID << "sensor for session:" << sessionID;
         return;
     }
 
-    if (!gnssMeasurements.contains("time")) {
-        qWarning() << "Time measurement not found in GNSS sensor for session:" << sessionID;
+    if (!sensorMeasurements.contains("time")) {
+        qWarning() << "Time measurement not found in" << m_currentPlotSpec.sensorID << "sensor for session:" << sessionID;
         return;
     }
 
-    const QVector<double> &hMSLData = gnssMeasurements.value("hMSL");
-    const QVector<double> &timeData = gnssMeasurements.value("time"); // Assuming 'time' measurement exists
+    const QVector<double> &yData = sensorMeasurements.value(m_currentPlotSpec.measurementID);
+    const QVector<double> &xData = sensorMeasurements.value("time");
 
-    if (timeData.size() != hMSLData.size()) {
-        qWarning() << "Time and hMSL data size mismatch for session:" << sessionID;
+    if (xData.size() != yData.size()) {
+        qWarning() << "Time and measurement data size mismatch for session:" << sessionID;
         return;
     }
 
@@ -499,20 +563,15 @@ void MainWindow::addSessionToPlot(const QString &sessionID)
     QCPGraph *graph = ui->centralwidget->addGraph();
     graph->setName(sessionID);
 
-    // Assign a unique color for the graph if not already assigned
-    if (!m_sessionColors.contains(sessionID)) {
-        QColor graphColor = QColor::fromHsv(QRandomGenerator::global()->bounded(360), 255, 200);
-        m_sessionColors.insert(sessionID, graphColor);
-    }
-
-    QColor graphColor = m_sessionColors.value(sessionID);
-    graph->setPen(QPen(graphColor));
+    // Assign the default color
+    graph->setPen(QPen(m_currentPlotSpec.defaultColor));
 
     // Plot the data
-    graph->setData(timeData, hMSLData);
+    graph->setData(xData, yData);
 
     // Optional: Set line style, scatter style, etc.
     graph->setLineStyle(QCPGraph::lsLine);
+    graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
 
     // Rescale axes to fit the new data
     ui->centralwidget->xAxis->rescale();
@@ -556,6 +615,153 @@ void MainWindow::rebuildPlot()
 
         if (isChecked) {
             addSessionToPlot(sessionID);
+        }
+    }
+
+    // Replot to reflect changes
+    ui->centralwidget->replot();
+}
+
+void MainWindow::initializePlotSpecs()
+{
+    m_plotSpecs = {
+        // Category: GNSS
+        {"GNSS", "Altitude", "m", QColor(255, 0, 0), "GNSS", "hMSL"},
+        {"GNSS", "Horizontal speed", "m/s", QColor(0, 255, 0), "GNSS", "velH"},
+        {"GNSS", "Vertical speed", "m/s", QColor(0, 0, 255), "GNSS", "velD"},
+        {"GNSS", "Horizontal accuracy", "m", QColor(0, 255, 0), "GNSS", "hAcc"},
+        {"GNSS", "Vertical accuracy", "m", QColor(0, 0, 255), "GNSS", "vAcc"},
+        {"GNSS", "Speed accuracy", "m/s", QColor(0, 0, 255), "GNSS", "sAcc"},
+        {"GNSS", "Number of satellites", "", QColor(0, 0, 255), "GNSS", "numSV"},
+
+        // Category: IMU
+        {"IMU", "Acceleration X", "m/s²", QColor(255, 165, 0), "IMU", "ax"},
+        {"IMU", "Acceleration Y", "m/s²", QColor(128, 0, 128), "IMU", "ay"},
+        {"IMU", "Acceleration Z", "m/s²", QColor(128, 0, 128), "IMU", "az"},
+        {"IMU", "Rotation X", "deg/s", QColor(255, 165, 0), "IMU", "wx"},
+        {"IMU", "Rotation Y", "deg/s", QColor(128, 0, 128), "IMU", "wy"},
+        {"IMU", "Rotation Z", "deg/s", QColor(128, 0, 128), "IMU", "wz"},
+
+        // Add more categories and plots as needed
+    };
+}
+
+void MainWindow::initializePlotSelectionDock()
+{
+    // Initially populate the tree widget
+    populatePlotSelectionTree();
+
+    // Set the first plot as selected by default, if available
+    if (!m_plotSpecs.isEmpty()) {
+        const PlotSpec &defaultPlot = m_plotSpecs.first();
+        // Find the corresponding tree item and set it as checked
+        QList<QTreeWidgetItem*> categoryItems = ui->plotSelectionTreeWidget->findItems(defaultPlot.category, Qt::MatchExactly);
+        if (!categoryItems.isEmpty()) {
+            QTreeWidgetItem *categoryItem = categoryItems.first();
+            for (int i = 0; i < categoryItem->childCount(); ++i) {
+                QTreeWidgetItem *plotItem = categoryItem->child(i);
+                if (plotItem->text(0) == defaultPlot.plotName) {
+                    plotItem->setCheckState(0, Qt::Checked);
+                    m_currentPlotSpec = defaultPlot;
+                    applyCurrentPlotSpec();
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void MainWindow::populatePlotSelectionTree()
+{
+    ui->plotSelectionTreeWidget->clear();
+
+    // Organize plots by category
+    QMap<QString, QVector<PlotSpec>> categorizedPlots;
+    for (const PlotSpec &plot : m_plotSpecs) {
+        categorizedPlots[plot.category].append(plot);
+    }
+
+    // Iterate through categories and add plots
+    for (auto it = categorizedPlots.constBegin(); it != categorizedPlots.constEnd(); ++it) {
+        const QString &category = it.key();
+        const QVector<PlotSpec> &plots = it.value();
+
+        // Create a top-level item for the category
+        QTreeWidgetItem *categoryItem = new QTreeWidgetItem(ui->plotSelectionTreeWidget);
+        categoryItem->setText(0, category);
+        categoryItem->setFlags(categoryItem->flags() & ~Qt::ItemIsSelectable); // Non-selectable
+
+        // Add plots as child items with radio buttons
+        for (const PlotSpec &plot : plots) {
+            QTreeWidgetItem *plotItem = new QTreeWidgetItem(categoryItem);
+            plotItem->setText(0, plot.plotName);
+            plotItem->setFlags(plotItem->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
+            plotItem->setCheckState(0, Qt::Unchecked);
+        }
+
+        // Expand the category by default
+        categoryItem->setExpanded(true);
+    }
+
+    // Resize columns to fit contents
+    ui->logbookTreeWidget->resizeColumnToContents(0);
+}
+
+void MainWindow::applyCurrentPlotSpec()
+{
+    // Clear existing plots
+    ui->centralwidget->clearGraphs();
+    m_plottedSessions.clear();
+
+    // Update y-axis label
+    QString yAxisLabel;
+    if (m_currentPlotSpec.plotUnits.isEmpty()) {
+        yAxisLabel = QString("%1").arg(m_currentPlotSpec.plotName);
+    } else {
+        yAxisLabel = QString("%1 (%2)").arg(m_currentPlotSpec.plotName, m_currentPlotSpec.plotUnits);
+    }
+    ui->centralwidget->yAxis->setLabel(yAxisLabel);
+
+    // Iterate through all sessions and add plots based on the current PlotSpec
+    for (auto it = m_sessionDataMap.constBegin(); it != m_sessionDataMap.constEnd(); ++it) {
+        const QString &sessionID = it.key();
+        const SessionData &session = it.value();
+
+        // Check if the session has the required sensor and measurement
+        if (session.getSensors().contains(m_currentPlotSpec.sensorID)) {
+            const QMap<QString, QVector<double>> &sensorData = session.getSensors().value(m_currentPlotSpec.sensorID);
+            if (sensorData.contains(m_currentPlotSpec.measurementID)) {
+                // Retrieve data
+                const QVector<double> &yData = sensorData.value(m_currentPlotSpec.measurementID);
+                if (sensorData.contains("time")) {
+                    const QVector<double> &xData = sensorData.value("time");
+                    if (xData.size() != yData.size()) {
+                        qWarning() << "Time and measurement data size mismatch for session:" << sessionID;
+                        continue;
+                    }
+
+                    // Create a new graph
+                    QCPGraph *graph = ui->centralwidget->addGraph();
+                    graph->setName(sessionID);
+
+                    // Assign the default color
+                    graph->setPen(QPen(m_currentPlotSpec.defaultColor));
+
+                    // Set data
+                    graph->setData(xData, yData);
+
+                    // Optional: Set line style, scatter style, etc.
+                    graph->setLineStyle(QCPGraph::lsLine);
+                    graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
+
+                    // Rescale axes to fit the new data
+                    ui->centralwidget->xAxis->rescale();
+                    ui->centralwidget->yAxis->rescale();
+
+                    // Store the graph pointer associated with this session
+                    m_plottedSessions.insert(sessionID, graph);
+                }
+            }
         }
     }
 
