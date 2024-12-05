@@ -217,14 +217,8 @@ void MainWindow::onSessionItemChanged(QTreeWidgetItem *item, int column)
 
     // Check if the item is a top-level session item
     if (item->parent() == nullptr) {
-        QString sessionID = item->data(0, Qt::UserRole).toString();
-        bool isChecked = (item->checkState(0) == Qt::Checked);
-
-        if (isChecked) {
-            addSessionToPlot(sessionID);
-        } else {
-            removeSessionFromPlot(sessionID);
-        }
+        // Reapply the current plot specification to update plots based on session visibility
+        applyCurrentPlotSpec();
 
         // Replot to reflect changes
         ui->centralwidget->replot();
@@ -390,11 +384,8 @@ void MainWindow::mergeSessionData(const SessionData& newSession)
         qDebug() << "Added new SessionData with SESSION_ID:" << newSessionID;
     }
 
-    // After merging, if the session is already selected for plotting, add it to the plot
-    QString sessionID = newSession.getVars().value("SESSION_ID");
-    if (m_sessionDataMap.contains(sessionID) && m_currentPlotSpec.sensorID != "" && m_currentPlotSpec.measurementID != "") {
-        addSessionToPlot(sessionID);
-    }
+    // After merging, reapply the current plot specification to update the plots
+    applyCurrentPlotSpec();
 
     // Replot to reflect changes
     ui->centralwidget->replot();
@@ -524,102 +515,10 @@ void MainWindow::filterLogbookTree(const QString &filterText)
     }
 }
 
-void MainWindow::addSessionToPlot(const QString &sessionID)
-{
-    if (!m_sessionDataMap.contains(sessionID)) {
-        qWarning() << "Session ID not found:" << sessionID;
-        return;
-    }
-
-    const SessionData &session = m_sessionDataMap.value(sessionID);
-
-    // Check if the session has the required sensor and measurement
-    if (!session.getSensors().contains(m_currentPlotSpec.sensorID)) {
-        qWarning() << m_currentPlotSpec.sensorID << "sensor not found in session:" << sessionID;
-        return;
-    }
-
-    const QMap<QString, QVector<double>> &sensorMeasurements = session.getSensors().value(m_currentPlotSpec.sensorID);
-
-    if (!sensorMeasurements.contains(m_currentPlotSpec.measurementID)) {
-        qWarning() << m_currentPlotSpec.measurementID << "measurement not found in" << m_currentPlotSpec.sensorID << "sensor for session:" << sessionID;
-        return;
-    }
-
-    if (!sensorMeasurements.contains("time")) {
-        qWarning() << "Time measurement not found in" << m_currentPlotSpec.sensorID << "sensor for session:" << sessionID;
-        return;
-    }
-
-    const QVector<double> &yData = sensorMeasurements.value(m_currentPlotSpec.measurementID);
-    const QVector<double> &xData = sensorMeasurements.value("time");
-
-    if (xData.size() != yData.size()) {
-        qWarning() << "Time and measurement data size mismatch for session:" << sessionID;
-        return;
-    }
-
-    // Create a new graph for this session
-    QCPGraph *graph = ui->centralwidget->addGraph();
-    graph->setName(sessionID);
-
-    // Assign the default color
-    graph->setPen(QPen(m_currentPlotSpec.defaultColor));
-
-    // Plot the data
-    graph->setData(xData, yData);
-
-    // Optional: Set line style, scatter style, etc.
-    graph->setLineStyle(QCPGraph::lsLine);
-    graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
-
-    // Rescale axes to fit the new data
-    ui->centralwidget->xAxis->rescale();
-    ui->centralwidget->yAxis->rescale();
-
-    // Store the graph pointer associated with this session
-    m_plottedSessions.insert(sessionID, graph);
-}
-
-void MainWindow::removeSessionFromPlot(const QString &sessionID)
-{
-    if (!m_plottedSessions.contains(sessionID)) {
-        qWarning() << "Session not plotted:" << sessionID;
-        return;
-    }
-
-    QCPGraph *graph = m_plottedSessions.value(sessionID);
-
-    // Remove the graph from the plot
-    ui->centralwidget->removeGraph(graph);
-
-    // Remove the session from the map
-    m_plottedSessions.remove(sessionID);
-
-    // Rescale the axes after removing the graph
-    ui->centralwidget->xAxis->rescale();
-    ui->centralwidget->yAxis->rescale();
-}
-
 void MainWindow::rebuildPlot()
 {
-    // Clear all graphs
-    ui->centralwidget->clearGraphs();
-    m_plottedSessions.clear();
-
-    // Iterate through all sessions and add the checked ones
-    for (int i = 0; i < ui->logbookTreeWidget->topLevelItemCount(); ++i) {
-        QTreeWidgetItem *sessionItem = ui->logbookTreeWidget->topLevelItem(i);
-        QString sessionID = sessionItem->data(0, Qt::UserRole).toString();
-        bool isChecked = (sessionItem->checkState(0) == Qt::Checked);
-
-        if (isChecked) {
-            addSessionToPlot(sessionID);
-        }
-    }
-
-    // Replot to reflect changes
-    ui->centralwidget->replot();
+    // Delegate to applyCurrentPlotSpec to handle all plotting
+    applyCurrentPlotSpec();
 }
 
 void MainWindow::initializePlotSpecs()
@@ -704,7 +603,7 @@ void MainWindow::populatePlotSelectionTree()
     }
 
     // Resize columns to fit contents
-    ui->logbookTreeWidget->resizeColumnToContents(0);
+    ui->plotSelectionTreeWidget->resizeColumnToContents(0);
 }
 
 void MainWindow::applyCurrentPlotSpec()
@@ -712,6 +611,8 @@ void MainWindow::applyCurrentPlotSpec()
     // Clear existing plots
     ui->centralwidget->clearGraphs();
     m_plottedSessions.clear();
+
+    qDebug() << "Applying plot spec:" << m_currentPlotSpec.plotName;
 
     // Update y-axis label
     QString yAxisLabel;
@@ -722,44 +623,51 @@ void MainWindow::applyCurrentPlotSpec()
     }
     ui->centralwidget->yAxis->setLabel(yAxisLabel);
 
-    // Iterate through all sessions and add plots based on the current PlotSpec
-    for (auto it = m_sessionDataMap.constBegin(); it != m_sessionDataMap.constEnd(); ++it) {
-        const QString &sessionID = it.key();
-        const SessionData &session = it.value();
+    // Iterate through all sessions and add plots based on the current PlotSpec and session checks
+    for (int i = 0; i < ui->logbookTreeWidget->topLevelItemCount(); ++i) {
+        QTreeWidgetItem *sessionItem = ui->logbookTreeWidget->topLevelItem(i);
+        QString sessionID = sessionItem->data(0, Qt::UserRole).toString();
+        bool isChecked = (sessionItem->checkState(0) == Qt::Checked);
 
-        // Check if the session has the required sensor and measurement
-        if (session.getSensors().contains(m_currentPlotSpec.sensorID)) {
-            const QMap<QString, QVector<double>> &sensorData = session.getSensors().value(m_currentPlotSpec.sensorID);
-            if (sensorData.contains(m_currentPlotSpec.measurementID)) {
-                // Retrieve data
-                const QVector<double> &yData = sensorData.value(m_currentPlotSpec.measurementID);
-                if (sensorData.contains("time")) {
-                    const QVector<double> &xData = sensorData.value("time");
-                    if (xData.size() != yData.size()) {
-                        qWarning() << "Time and measurement data size mismatch for session:" << sessionID;
-                        continue;
+        if (isChecked) {
+            const SessionData &session = m_sessionDataMap.value(sessionID);
+
+            // Check if the session has the required sensor and measurement
+            if (session.getSensors().contains(m_currentPlotSpec.sensorID)) {
+                const QMap<QString, QVector<double>> &sensorData = session.getSensors().value(m_currentPlotSpec.sensorID);
+                if (sensorData.contains(m_currentPlotSpec.measurementID)) {
+                    // Retrieve data
+                    const QVector<double> &yData = sensorData.value(m_currentPlotSpec.measurementID);
+                    if (sensorData.contains("time")) {
+                        const QVector<double> &xData = sensorData.value("time");
+                        if (xData.size() != yData.size()) {
+                            qWarning() << "Time and measurement data size mismatch for session:" << sessionID;
+                            continue;
+                        }
+
+                        // Create a new graph
+                        QCPGraph *graph = ui->centralwidget->addGraph();
+                        graph->setName(sessionID);
+
+                        // Assign the default color
+                        graph->setPen(QPen(m_currentPlotSpec.defaultColor));
+
+                        // Set data
+                        graph->setData(xData, yData);
+
+                        // Optional: Set line style, scatter style, etc.
+                        graph->setLineStyle(QCPGraph::lsLine);
+                        graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
+
+                        // Rescale axes to fit the new data
+                        ui->centralwidget->xAxis->rescale();
+                        ui->centralwidget->yAxis->rescale();
+
+                        // Store the graph pointer associated with this session
+                        m_plottedSessions.insert(sessionID, graph);
+
+                        qDebug() << "Plotted session:" << sessionID << "on plot:" << m_currentPlotSpec.plotName;
                     }
-
-                    // Create a new graph
-                    QCPGraph *graph = ui->centralwidget->addGraph();
-                    graph->setName(sessionID);
-
-                    // Assign the default color
-                    graph->setPen(QPen(m_currentPlotSpec.defaultColor));
-
-                    // Set data
-                    graph->setData(xData, yData);
-
-                    // Optional: Set line style, scatter style, etc.
-                    graph->setLineStyle(QCPGraph::lsLine);
-                    graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
-
-                    // Rescale axes to fit the new data
-                    ui->centralwidget->xAxis->rescale();
-                    ui->centralwidget->yAxis->rescale();
-
-                    // Store the graph pointer associated with this session
-                    m_plottedSessions.insert(sessionID, graph);
                 }
             }
         }

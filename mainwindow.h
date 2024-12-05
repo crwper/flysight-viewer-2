@@ -59,8 +59,6 @@ private:
     void filterLogbookTree(const QString &filterText);
 
     // Helper methods for plotting
-    void addSessionToPlot(const QString &sessionID);
-    void removeSessionFromPlot(const QString &sessionID);
     void rebuildPlot();
 
     // Methods to initialize plot specifications and UI
