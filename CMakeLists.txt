@@ -29,6 +29,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         import.cpp
         sessiondata.h sessiondata.cpp
         plotspec.h
+        calculatedvaluemanager.h calculatedvaluemanager.cpp
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET FlySightViewer APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR

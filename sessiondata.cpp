@@ -21,6 +21,14 @@ const QMap<QString, QMap<QString, QVector<double>>>& SessionData::getSensors() c
     return sensors;
 }
 
+QMap<QString, QMap<QString, QVector<double>>>& SessionData::getCalculatedValues() {
+    return calculatedValues;
+}
+
+const QMap<QString, QMap<QString, QVector<double>>>& SessionData::getCalculatedValues() const {
+    return calculatedValues;
+}
+
 QMap<QString, QVector<double>>& SessionData::operator[](const QString& sensorName) {
     return sensors[sensorName];
 }
@@ -35,4 +43,8 @@ void SessionData::setVar(const QString& key, const QString& value) {
 
 void SessionData::setSensorMeasurement(const QString& sensorName, const QString& measurementKey, const QVector<double>& data) {
     sensors[sensorName].insert(measurementKey, data);
+}
+
+void SessionData::setCalculatedValue(const QString& sensorID, const QString& measurementID, const QVector<double>& data) {
+    calculatedValues[sensorID][measurementID] = data;
 }

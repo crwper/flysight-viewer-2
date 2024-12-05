@@ -11,11 +11,15 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
+    , m_calculatedValueManager(new CalculatedValueManager())
 {
     // Initialize settings object
     m_settings = new QSettings("FlySight", "Viewer", this);
 
     ui->setupUi(this);
+
+    // Initialize calculated values
+    initializeCalculatedValues();
 
     // Initialize plot specifications
     initializePlotSpecs();
@@ -624,49 +628,102 @@ void MainWindow::applyCurrentPlotSpec()
         bool isChecked = (sessionItem->checkState(0) == Qt::Checked);
 
         if (isChecked) {
-            const SessionData &session = m_sessionDataMap.value(sessionID);
+            SessionData &session = m_sessionDataMap[sessionID];
 
-            // Check if the session has the required sensor and measurement
-            if (session.getSensors().contains(m_currentPlotSpec.sensorID)) {
-                const QMap<QString, QVector<double>> &sensorData = session.getSensors().value(m_currentPlotSpec.sensorID);
-                if (sensorData.contains(m_currentPlotSpec.measurementID)) {
-                    // Retrieve data
-                    const QVector<double> &yData = sensorData.value(m_currentPlotSpec.measurementID);
-                    if (sensorData.contains("time")) {
-                        const QVector<double> &xData = sensorData.value("time");
-                        if (xData.size() != yData.size()) {
-                            qWarning() << "Time and measurement data size mismatch for session:" << sessionID;
-                            continue;
-                        }
+            const QVector<double> &yData = m_calculatedValueManager->getMeasurement(session, m_currentPlotSpec.sensorID, m_currentPlotSpec.measurementID);
 
-                        // Create a new graph
-                        QCPGraph *graph = ui->centralwidget->addGraph();
-                        graph->setName(sessionID);
-
-                        // Assign the default color
-                        graph->setPen(QPen(m_currentPlotSpec.defaultColor));
-
-                        // Set data
-                        graph->setData(xData, yData);
-
-                        // Optional: Set line style, scatter style, etc.
-                        graph->setLineStyle(QCPGraph::lsLine);
-                        graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
-
-                        // Rescale axes to fit the new data
-                        ui->centralwidget->xAxis->rescale();
-                        ui->centralwidget->yAxis->rescale();
-
-                        // Store the graph pointer associated with this session
-                        m_plottedSessions.insert(sessionID, graph);
-
-                        qDebug() << "Plotted session:" << sessionID << "on plot:" << m_currentPlotSpec.plotName;
-                    }
-                }
+            if (yData.isEmpty()) {
+                qWarning() << "No data available for plot:" << m_currentPlotSpec.plotName << "in session:" << sessionID;
+                continue;
             }
+
+            // Assume there is a "time" sensor for x-axis
+            const QVector<double> &xData = m_calculatedValueManager->getMeasurement(session, m_currentPlotSpec.sensorID, "time");
+
+            if (xData.isEmpty()) {
+                qWarning() << "No 'time' data available for session:" << sessionID;
+                continue;
+            }
+
+            if (xData.size() != yData.size()) {
+                qWarning() << "Time and measurement data size mismatch for session:" << sessionID;
+                continue;
+            }
+
+            // Create a new graph
+            QCPGraph *graph = ui->centralwidget->addGraph();
+            graph->setName(sessionID);
+
+            // Assign the default color
+            graph->setPen(QPen(m_currentPlotSpec.defaultColor));
+
+            // Set data
+            graph->setData(xData, yData);
+
+            // Optional: Set line style, scatter style, etc.
+            graph->setLineStyle(QCPGraph::lsLine);
+            graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
+
+            // Rescale axes to fit the new data
+            ui->centralwidget->xAxis->rescale();
+            ui->centralwidget->yAxis->rescale();
+
+            // Store the graph pointer associated with this session
+            m_plottedSessions.insert(sessionID, graph);
+
+            qDebug() << "Plotted session:" << sessionID << "on plot:" << m_currentPlotSpec.plotName;
         }
     }
 
     // Replot to reflect changes
     ui->centralwidget->replot();
+}
+
+void MainWindow::initializeCalculatedValues()
+{
+    m_calculatedValueManager->registerCalculatedValue("GNSS", "velH", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
+        QVector<double> velN = calcManager.getMeasurement(session, "GNSS", "velN");
+        QVector<double> velE = calcManager.getMeasurement(session, "GNSS", "velE");
+
+        if (velN.isEmpty() || velE.isEmpty()) {
+            qWarning() << "Cannot calculate total_speed due to missing velN or velE";
+            return QVector<double>();
+        }
+
+        if (velN.size() != velE.size()) {
+            qWarning() << "velN and velE size mismatch in session:" << session.getVars().value("SESSION_ID");
+            return QVector<double>();
+        }
+
+        QVector<double> velH;
+        velH.reserve(velN.size());
+        for(int i = 0; i < velN.size(); ++i){
+            velH.append(std::sqrt(velN[i]*velN[i] + velE[i]*velE[i]));
+        }
+        return velH;
+    });
+
+    m_calculatedValueManager->registerCalculatedValue("GNSS", "vel", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
+        QVector<double> velH = calcManager.getMeasurement(session, "GNSS", "velH");
+        QVector<double> velD = calcManager.getMeasurement(session, "GNSS", "velD");
+
+        if (velH.isEmpty() || velD.isEmpty()) {
+            qWarning() << "Cannot calculate total_speed due to missing velH or velD";
+            return QVector<double>();
+        }
+
+        if (velH.size() != velD.size()) {
+            qWarning() << "velH and velD size mismatch in session:" << session.getVars().value("SESSION_ID");
+            return QVector<double>();
+        }
+
+        QVector<double> vel;
+        vel.reserve(velH.size());
+        for(int i = 0; i < velH.size(); ++i){
+            vel.append(std::sqrt(velH[i]*velH[i] + velD[i]*velD[i]));
+        }
+        return vel;
+    });
+
+    // You can register more calculated values here following the same pattern
 }

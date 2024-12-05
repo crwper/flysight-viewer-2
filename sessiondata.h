@@ -21,16 +21,21 @@ public:
     QMap<QString, QString>& getVars();
     const QMap<QString, QString>& getVars() const;
 
-    QMap<QString, QMap<QString, QVector<double>>>& getSensors();
-    const QMap<QString, QMap<QString, QVector<double>>>& getSensors() const;
+    QMap<QString, SensorData>& getSensors();
+    const QMap<QString, SensorData>& getSensors() const;
+
+    // Accessors for calculated values
+    QMap<QString, SensorData>& getCalculatedValues();
+    const QMap<QString, SensorData>& getCalculatedValues() const;
 
     // Operator[] to access sensor data
-    QMap<QString, QVector<double>>& operator[](const QString& sensorName);
-    QMap<QString, QVector<double>> operator[](const QString& sensorName) const;
+    SensorData& operator[](const QString& sensorName);
+    SensorData operator[](const QString& sensorName) const;
 
     // Setter methods for encapsulation
     void setVar(const QString& key, const QString& value);
     void setSensorMeasurement(const QString& sensorName, const QString& measurementKey, const QVector<double>& data);
+    void setCalculatedValue(const QString& sensorName, const QString& measurementKey, const QVector<double>& data);
 
     // Static constant for default DEVICE_ID
     static const QString DEFAULT_DEVICE_ID;
@@ -39,6 +44,7 @@ private:
     // Member variables
     QMap<QString, QString> vars;
     QMap<QString, SensorData> sensors;
+    QMap<QString, SensorData> calculatedValues;
 
     // Friend class to allow FSDataImporter to access private members
     friend class FSImport::FSDataImporter;

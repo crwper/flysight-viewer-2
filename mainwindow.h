@@ -5,8 +5,9 @@
 #include <QMainWindow>
 #include <QMap>
 #include <QVector>
-#include "sessiondata.h"
+#include "calculatedvaluemanager.h"
 #include "plotspec.h"
+#include "sessiondata.h"
 
 class QCPGraph;
 class QSettings;
@@ -53,6 +54,9 @@ private:
     // Currently selected plot specification
     PlotSpec m_currentPlotSpec;
 
+    // Calculated Value Manager
+    CalculatedValueManager *m_calculatedValueManager;
+
     // Helper methods
     void mergeSessionData(const SessionData& newSession);
     void populateLogbookTreeWidget();
@@ -66,6 +70,9 @@ private:
     void initializePlotSelectionDock();
     void populatePlotSelectionTree();
     void applyCurrentPlotSpec();
+
+    // Helper methods for calculated values
+    void initializeCalculatedValues();
 };
 
 #endif // MAINWINDOW_H
