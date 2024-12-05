@@ -527,17 +527,40 @@ void MainWindow::initializePlotSpecs()
         {"GNSS", "Number of satellites", "", Qt::darkMagenta, "GNSS", "numSV"},
 
         // Category: IMU
-        {"IMU", "Acceleration X", "g", QColor::fromHsv(330, 255, 255), "IMU", "ax"},
-        {"IMU", "Acceleration Y", "g", QColor::fromHsv(0, 255, 255), "IMU", "ay"},
-        {"IMU", "Acceleration Z", "g", QColor::fromHsv(30, 255, 255), "IMU", "az"},
-        {"IMU", "Rotation X", "deg/s", QColor::fromHsv(90, 255, 255), "IMU", "wx"},
-        {"IMU", "Rotation Y", "deg/s", QColor::fromHsv(120, 255, 255), "IMU", "wy"},
-        {"IMU", "Rotation Z", "deg/s", QColor::fromHsv(150, 255, 255), "IMU", "wz"},
+        {"IMU", "Acceleration X", "g", QColor::fromHsv(330, 255, 255, 128), "IMU", "ax"},
+        {"IMU", "Acceleration Y", "g", QColor::fromHsv(0, 255, 255, 128), "IMU", "ay"},
+        {"IMU", "Acceleration Z", "g", QColor::fromHsv(30, 255, 255, 128), "IMU", "az"},
+        {"IMU", "Total acceleration", "g", QColor::fromHsv(0, 255, 255), "IMU", "aTotal"},
+
+        {"IMU", "Rotation X", "deg/s", QColor::fromHsv(90, 255, 255, 128), "IMU", "wx"},
+        {"IMU", "Rotation Y", "deg/s", QColor::fromHsv(120, 255, 255, 128), "IMU", "wy"},
+        {"IMU", "Rotation Z", "deg/s", QColor::fromHsv(150, 255, 255, 128), "IMU", "wz"},
+        {"IMU", "Total rotation", "deg/s", QColor::fromHsv(120, 255, 255), "IMU", "wTotal"},
+
+        {"IMU", "Temperature", "°C", QColor::fromHsv(0, 255, 255, 128), "IMU", "temperature"},
 
         // Category: Magnetometer
-        {"Magnetometer", "Magnetometer X", "gauss", QColor::fromHsv(210, 255, 255), "MAG", "x"},
-        {"Magnetometer", "Magnetometer Y", "gauss", QColor::fromHsv(240, 255, 255), "MAG", "y"},
-        {"Magnetometer", "Magnetometer Z", "gauss", QColor::fromHsv(270, 255, 255), "MAG", "z"},
+        {"Magnetometer", "Magnetic field X", "gauss", QColor::fromHsv(210, 255, 255, 128), "MAG", "x"},
+        {"Magnetometer", "Magnetic field Y", "gauss", QColor::fromHsv(240, 255, 255, 128), "MAG", "y"},
+        {"Magnetometer", "Magnetic field Z", "gauss", QColor::fromHsv(270, 255, 255, 128), "MAG", "z"},
+        {"Magnetometer", "Total magnetic field", "gauss", QColor::fromHsv(240, 255, 255), "MAG", "total"},
+
+        {"Magnetometer", "Temperature", "°C", QColor::fromHsv(90, 255, 255, 128), "MAG", "temperature"},
+
+        // Category: Barometer
+        {"Barometer", "Air pressure", "Pa", QColor::fromHsv(0, 0, 64, 255), "BARO", "pressure"},
+        {"Barometer", "Temperature", "°C", QColor::fromHsv(180, 255, 255, 128), "BARO", "temperature"},
+
+        // Category: Humidity
+        {"Humidity", "Humidity", "%%", QColor::fromHsv(0, 0, 128, 255), "HUM", "humidity"},
+        {"Humidity", "Temperature", "°C", QColor::fromHsv(270, 255, 255, 128), "HUM", "temperature"},
+
+        // Category: Battery
+        {"Battery", "Battery voltage", "V", QColor::fromHsv(300, 255, 255, 255), "VBAT", "voltage"},
+
+        // Category: GNSS time
+        {"GNSS time", "Time of week", "s", QColor::fromHsv(0, 0, 64, 255), "TIME", "tow"},
+        {"GNSS time", "Week number", "", QColor::fromHsv(0, 0, 128, 255), "TIME", "week"},
 
         // Add more categories and plots as needed
     };
@@ -723,6 +746,75 @@ void MainWindow::initializeCalculatedValues()
             vel.append(std::sqrt(velH[i]*velH[i] + velD[i]*velD[i]));
         }
         return vel;
+    });
+
+    m_calculatedValueManager->registerCalculatedValue("IMU", "aTotal", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
+        QVector<double> ax = calcManager.getMeasurement(session, "IMU", "ax");
+        QVector<double> ay = calcManager.getMeasurement(session, "IMU", "ay");
+        QVector<double> az = calcManager.getMeasurement(session, "IMU", "az");
+
+        if (ax.isEmpty() || ay.isEmpty() || az.isEmpty()) {
+            qWarning() << "Cannot calculate aTotal due to missing ax, ay, or az";
+            return QVector<double>();
+        }
+
+        if ((ax.size() != ay.size()) || (ax.size() != az.size())) {
+            qWarning() << "az, ay, or az size mismatch in session:" << session.getVars().value("SESSION_ID");
+            return QVector<double>();
+        }
+
+        QVector<double> aTotal;
+        aTotal.reserve(ax.size());
+        for(int i = 0; i < ax.size(); ++i){
+            aTotal.append(std::sqrt(ax[i]*ax[i] + ay[i]*ay[i] + az[i]*az[i]));
+        }
+        return aTotal;
+    });
+
+    m_calculatedValueManager->registerCalculatedValue("IMU", "wTotal", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
+        QVector<double> wx = calcManager.getMeasurement(session, "IMU", "wx");
+        QVector<double> wy = calcManager.getMeasurement(session, "IMU", "wy");
+        QVector<double> wz = calcManager.getMeasurement(session, "IMU", "wz");
+
+        if (wx.isEmpty() || wy.isEmpty() || wz.isEmpty()) {
+            qWarning() << "Cannot calculate wTotal due to missing wx, wy, or wz";
+            return QVector<double>();
+        }
+
+        if ((wx.size() != wy.size()) || (wx.size() != wz.size())) {
+            qWarning() << "wz, wy, or wz size mismatch in session:" << session.getVars().value("SESSION_ID");
+            return QVector<double>();
+        }
+
+        QVector<double> wTotal;
+        wTotal.reserve(wx.size());
+        for(int i = 0; i < wx.size(); ++i){
+            wTotal.append(std::sqrt(wx[i]*wx[i] + wy[i]*wy[i] + wz[i]*wz[i]));
+        }
+        return wTotal;
+    });
+
+    m_calculatedValueManager->registerCalculatedValue("MAG", "total", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
+        QVector<double> x = calcManager.getMeasurement(session, "MAG", "x");
+        QVector<double> y = calcManager.getMeasurement(session, "MAG", "y");
+        QVector<double> z = calcManager.getMeasurement(session, "MAG", "z");
+
+        if (x.isEmpty() || y.isEmpty() || z.isEmpty()) {
+            qWarning() << "Cannot calculate total due to missing x, y, or z";
+            return QVector<double>();
+        }
+
+        if ((x.size() != y.size()) || (x.size() != z.size())) {
+            qWarning() << "x, y, or z size mismatch in session:" << session.getVars().value("SESSION_ID");
+            return QVector<double>();
+        }
+
+        QVector<double> total;
+        total.reserve(x.size());
+        for(int i = 0; i < x.size(); ++i){
+            total.append(std::sqrt(x[i]*x[i] + y[i]*y[i] + z[i]*z[i]));
+        }
+        return total;
     });
 
     // You can register more calculated values here following the same pattern
