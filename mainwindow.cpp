@@ -375,16 +375,13 @@ void MainWindow::mergeSessionData(const SessionData& newSession)
         m_sessionDataMap.insert(newSessionID, newSession);
         qDebug() << "Added new SessionData with SESSION_ID:" << newSessionID;
     }
-
-    // After merging, reapply the current plot specification to update the plots
-    applyCurrentPlotSpec();
-
-    // Replot to reflect changes
-    ui->centralwidget->replot();
 }
 
 void MainWindow::populateLogbookTreeWidget()
 {
+    // Block signals during import to prevent unnecessary plot updates
+    ui->logbookTreeWidget->blockSignals(true);
+
     // Clear existing items
     ui->logbookTreeWidget->clear();
 
@@ -465,6 +462,9 @@ void MainWindow::populateLogbookTreeWidget()
 
     // Resize columns to fit contents
     ui->logbookTreeWidget->resizeColumnToContents(0);
+
+    // Unblock signals after population
+    ui->logbookTreeWidget->blockSignals(false);
 }
 
 void MainWindow::filterLogbookTree(const QString &filterText)
