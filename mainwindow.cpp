@@ -525,21 +525,27 @@ void MainWindow::initializePlotSpecs()
 {
     m_plotSpecs = {
         // Category: GNSS
-        {"GNSS", "Altitude", "m", QColor(255, 0, 0), "GNSS", "hMSL"},
-        {"GNSS", "Horizontal speed", "m/s", QColor(0, 255, 0), "GNSS", "velH"},
-        {"GNSS", "Vertical speed", "m/s", QColor(0, 0, 255), "GNSS", "velD"},
-        {"GNSS", "Horizontal accuracy", "m", QColor(0, 255, 0), "GNSS", "hAcc"},
-        {"GNSS", "Vertical accuracy", "m", QColor(0, 0, 255), "GNSS", "vAcc"},
-        {"GNSS", "Speed accuracy", "m/s", QColor(0, 0, 255), "GNSS", "sAcc"},
-        {"GNSS", "Number of satellites", "", QColor(0, 0, 255), "GNSS", "numSV"},
+        {"GNSS", "Altitude", "m", Qt::black, "GNSS", "hMSL"},
+        {"GNSS", "Horizontal speed", "m/s", Qt::red, "GNSS", "velH"},
+        {"GNSS", "Vertical speed", "m/s", Qt::green, "GNSS", "velD"},
+        {"GNSS", "Total speed", "m/s", Qt::blue, "GNSS", "vel"},
+        {"GNSS", "Horizontal accuracy", "m", Qt::darkRed, "GNSS", "hAcc"},
+        {"GNSS", "Vertical accuracy", "m", Qt::darkGreen, "GNSS", "vAcc"},
+        {"GNSS", "Speed accuracy", "m/s", Qt::darkBlue, "GNSS", "sAcc"},
+        {"GNSS", "Number of satellites", "", Qt::darkMagenta, "GNSS", "numSV"},
 
         // Category: IMU
-        {"IMU", "Acceleration X", "m/s²", QColor(255, 165, 0), "IMU", "ax"},
-        {"IMU", "Acceleration Y", "m/s²", QColor(128, 0, 128), "IMU", "ay"},
-        {"IMU", "Acceleration Z", "m/s²", QColor(128, 0, 128), "IMU", "az"},
-        {"IMU", "Rotation X", "deg/s", QColor(255, 165, 0), "IMU", "wx"},
-        {"IMU", "Rotation Y", "deg/s", QColor(128, 0, 128), "IMU", "wy"},
-        {"IMU", "Rotation Z", "deg/s", QColor(128, 0, 128), "IMU", "wz"},
+        {"IMU", "Acceleration X", "g", QColor::fromHsv(330, 255, 255), "IMU", "ax"},
+        {"IMU", "Acceleration Y", "g", QColor::fromHsv(0, 255, 255), "IMU", "ay"},
+        {"IMU", "Acceleration Z", "g", QColor::fromHsv(30, 255, 255), "IMU", "az"},
+        {"IMU", "Rotation X", "deg/s", QColor::fromHsv(90, 255, 255), "IMU", "wx"},
+        {"IMU", "Rotation Y", "deg/s", QColor::fromHsv(120, 255, 255), "IMU", "wy"},
+        {"IMU", "Rotation Z", "deg/s", QColor::fromHsv(150, 255, 255), "IMU", "wz"},
+
+        // Category: Magnetometer
+        {"Magnetometer", "Magnetometer X", "gauss", QColor::fromHsv(210, 255, 255), "MAG", "x"},
+        {"Magnetometer", "Magnetometer Y", "gauss", QColor::fromHsv(240, 255, 255), "MAG", "y"},
+        {"Magnetometer", "Magnetometer Z", "gauss", QColor::fromHsv(270, 255, 255), "MAG", "z"},
 
         // Add more categories and plots as needed
     };
