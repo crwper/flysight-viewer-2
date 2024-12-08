@@ -1,10 +1,16 @@
 #include "plotwidget.h"
+#include "mainwindow.h"
 
-PlotWidget::PlotWidget(SessionModel *model, QWidget *parent)
+PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidget *parent)
     : QWidget(parent)
     , customPlot(new QCustomPlot(this))
     , model(model)
-    , currentColor(Qt::blue)
+    , plotModel(plotModel)
+    , currentSensorID("")
+    , currentMeasurementID("")
+    , currentPlotName("")
+    , currentPlotUnits("")
+    , currentColor(Qt::black) // Default color
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(customPlot);
@@ -15,74 +21,92 @@ PlotWidget::PlotWidget(SessionModel *model, QWidget *parent)
 
     // Connect to model changes
     connect(model, &SessionModel::modelChanged, this, &PlotWidget::updatePlot);
-
-    // Initial plot rendering
-    updatePlot();
 }
 
-void PlotWidget::setPlotColor(const QColor &color)
+void PlotWidget::setPlotValue(const QModelIndex &selectedIndex)
 {
-    if (currentColor != color) {
-        currentColor = color;
-        updatePlot(); // Redraw with the new color
+    if (!selectedIndex.isValid()) {
+        qWarning() << "Invalid QModelIndex received.";
+        return;
     }
+
+    // Retrieve data from the model
+    QVariant sensorIDVar = plotModel->data(selectedIndex, MainWindow::SensorIDRole);
+    QVariant measurementIDVar = plotModel->data(selectedIndex, MainWindow::MeasurementIDRole);
+    QVariant colorVar = plotModel->data(selectedIndex, MainWindow::DefaultColorRole);
+    QVariant plotUnitsVar = plotModel->data(selectedIndex, MainWindow::PlotUnitsRole);
+    QVariant plotNameVar = plotModel->data(selectedIndex, Qt::DisplayRole);
+
+    // Validate and assign data
+    if (sensorIDVar.isValid() && measurementIDVar.isValid()) {
+        currentSensorID = sensorIDVar.toString();
+        currentMeasurementID = measurementIDVar.toString();
+    } else {
+        qWarning() << "SensorID or MeasurementID is invalid.";
+        return;
+    }
+
+    if (colorVar.canConvert<QColor>()) {
+        currentColor = colorVar.value<QColor>();
+    } else {
+        qWarning() << "Color data is invalid.";
+        currentColor = Qt::black; // Fallback to default
+    }
+
+    currentPlotName = plotNameVar.toString();
+    currentPlotUnits = plotUnitsVar.toString();
+
+    updatePlot();
 }
 
 void PlotWidget::updatePlot()
 {
+    if (currentSensorID.isEmpty() || currentMeasurementID.isEmpty()) {
+        // No plot value selected
+        customPlot->clearPlottables();
+        customPlot->replot();
+        return;
+    }
+
     // Clear existing plots
     customPlot->clearPlottables();
 
-    // Iterate over model items and plot based on visibility and attributes
-    for (int row = 0; row < model->rowCount(); ++row) {
-        QModelIndex descriptionIndex = model->index(row, SessionModel::Description);
-        bool visible = model->data(descriptionIndex, Qt::CheckStateRole).toInt() == Qt::Checked;
-        if (!visible) {
-            continue;
-        }
-
-        // Retrieve other attributes
-        QString description = model->data(descriptionIndex, Qt::DisplayRole).toString();
-
-        // Create a QCPCurve for each shape
-        QCPCurve *curve = new QCPCurve(customPlot->xAxis, customPlot->yAxis);
-        curve->setName(description);
-
-        // Set the curve's pen to the selected color
-        QPen pen(currentColor);
-        pen.setWidth(2); // Optional: Set pen width
-        curve->setPen(pen);
-
-        // Define the shape based on description
-        if (description == "Circle") {
-            QVector<double> x, y;
-            for (int i = 0; i < 100; ++i) {
-                double a = i / 99. * 2 * 3.1415926535;
-                x.append(-2.5 + 0.5 * cos(a));
-                y.append(0.5 * sin(a));
-            }
-            curve->setData(x, y);
-        } else if (description == "Square") {
-            QVector<double> x = { -0.5, 0.5, 0.5, -0.5, -0.5 };
-            QVector<double> y = { 0.5, 0.5, -0.5, -0.5, 0.5 };
-            curve->setData(x, y);
-        } else if (description == "Triangle") {
-            QVector<double> x = { 2.5, 3, 2, 2.5 };
-            QVector<double> y = { 0.5, -0.5, -0.5, 0.5 };
-            curve->setData(x, y);
-        }
-
-        // Customize graph appearance based on other attributes if needed
+    // Retrieve data from the SessionModel based on currentSensorID and currentMeasurementID
+    QVector<double> xData, yData;
+    /*
+    if (!model->getData(currentSensorID, currentMeasurementID, xData, yData)) {
+        qWarning() << "No data available for sensor:" << currentSensorID << "measurement:" << currentMeasurementID;
+        return;
     }
+    */
 
-    customPlot->xAxis->setRange(-5, 5);
-    customPlot->yAxis->setRange(-5, 5);
+    // Create a new graph
+    QCPGraph *graph = customPlot->addGraph();
+    graph->setName(currentPlotName);
+    graph->setPen(QPen(currentColor, 2));
+
+    // Set the data
+    graph->setData(xData, yData);
+
+    // Set axis labels with units
+    // Assuming x-axis is time; adjust as needed
+    customPlot->xAxis->setLabel("Time (s)");
+    customPlot->yAxis->setLabel(currentPlotName + " (" + currentPlotUnits + ")");
+
+    // Rescale axes to fit the data
+    customPlot->rescaleAxes();
+
+    // Replot to display the updated graph
     customPlot->replot();
 }
 
 void PlotWidget::setupPlot()
 {
-    // Additional plot setup (axes labels, etc.)
-    customPlot->xAxis->setLabel("X Axis");
-    customPlot->yAxis->setLabel("Y Axis");
+    // Basic plot setup
+    customPlot->legend->setVisible(true);
+    customPlot->xAxis->setLabel("Time (s)");
+    customPlot->yAxis->setLabel("Value");
+
+    // Enable interactions if needed
+    customPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectPlottables);
 }

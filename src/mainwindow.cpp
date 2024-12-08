@@ -13,6 +13,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_settings(new QSettings("FlySight", "Viewer", this))
     , ui(new Ui::MainWindow)
     , model(new SessionModel(this))
+    , plotModel (new QStandardItemModel(this))
 {
     ui->setupUi(this);
 
@@ -22,19 +23,19 @@ MainWindow::MainWindow(QWidget *parent)
     logbookDock->setWidget(logbookView);
     addDockWidget(Qt::RightDockWidgetArea, logbookDock);
 
-    // Add plot view
-    PlotWidget *plotWidget = new PlotWidget(model, this);
-    setCentralWidget(plotWidget);
-
     logbookView->setModel(model);
     logbookView->setRootIsDecorated(false);
     logbookView->header()->setDefaultSectionSize(100);
 
-    // Setup color selection
-    setupColorSelection();
+    // Add plot widget
+    PlotWidget *plotWidget = new PlotWidget(model, plotModel, this); // Pass plotModel
+    setCentralWidget(plotWidget);
 
-    // Connect color selection to plot widget
-    connect(this, &MainWindow::colorSelected, plotWidget, &PlotWidget::setPlotColor);
+    // Connect plot value selection to plot widget
+    connect(this, &MainWindow::plotValueSelected, plotWidget, &PlotWidget::setPlotValue);
+
+    // Setup plot values
+    setupPlotValues();
 }
 
 MainWindow::~MainWindow()
@@ -195,76 +196,141 @@ void MainWindow::on_action_Delete_triggered()
 
 }
 
-void MainWindow::setupColorSelection()
+void MainWindow::setupPlotValues()
 {
     // Create the dock widget
-    colorDock = new QDockWidget(tr("Colors"), this);
-    colorTreeView = new QTreeView(colorDock);
-    colorDock->setWidget(colorTreeView);
-    addDockWidget(Qt::LeftDockWidgetArea, colorDock);
+    plotDock = new QDockWidget(tr("Plot Values"), this);
+    plotTreeView = new QTreeView(plotDock);
+    plotDock->setWidget(plotTreeView);
+    addDockWidget(Qt::LeftDockWidgetArea, plotDock);
 
-    // Create the model
-    colorModel = new QStandardItemModel(this);
-    colorTreeView->setModel(colorModel);
-    colorTreeView->setHeaderHidden(true); // Hide the header
+    // Attach the model
+    plotTreeView->setModel(plotModel);
+    plotTreeView->setHeaderHidden(true); // Hide the header
 
-    // Populate the model with categories and colors
-    // "Cool colours" categoryq
-    QStandardItem *coolItem = new QStandardItem("Cool colours");
-    coolItem->setFlags(Qt::ItemIsEnabled); // Non-checkable
-    colorModel->appendRow(coolItem);
+    QVector<PlotValue> plotValues = {
+        // Category: GNSS
+        {"GNSS", "Altitude", "m", Qt::black, "GNSS", "hMSL"},
+        {"GNSS", "Horizontal speed", "m/s", Qt::red, "GNSS", "velH"},
+        {"GNSS", "Vertical speed", "m/s", Qt::green, "GNSS", "velD"},
+        {"GNSS", "Total speed", "m/s", Qt::blue, "GNSS", "vel"},
+        {"GNSS", "Horizontal accuracy", "m", Qt::darkRed, "GNSS", "hAcc"},
+        {"GNSS", "Vertical accuracy", "m", Qt::darkGreen, "GNSS", "vAcc"},
+        {"GNSS", "Speed accuracy", "m/s", Qt::darkBlue, "GNSS", "sAcc"},
+        {"GNSS", "Number of satellites", "", Qt::darkMagenta, "GNSS", "numSV"},
 
-    QStandardItem *blueItem = new QStandardItem("Blue");
-    blueItem->setCheckable(true);
-    blueItem->setData(QColor(Qt::blue), Qt::UserRole + 1); // Store color data
-    coolItem->appendRow(blueItem);
+        // Category: IMU
+        {"IMU", "Acceleration X", "g", QColor::fromHsv(330, 255, 255, 128), "IMU", "ax"},
+        {"IMU", "Acceleration Y", "g", QColor::fromHsv(0, 255, 255, 128), "IMU", "ay"},
+        {"IMU", "Acceleration Z", "g", QColor::fromHsv(30, 255, 255, 128), "IMU", "az"},
+        {"IMU", "Total acceleration", "g", QColor::fromHsv(0, 255, 255), "IMU", "aTotal"},
 
-    QStandardItem *greenItem = new QStandardItem("Green");
-    greenItem->setCheckable(true);
-    greenItem->setData(QColor(Qt::green), Qt::UserRole + 1);
-    coolItem->appendRow(greenItem);
+        {"IMU", "Rotation X", "deg/s", QColor::fromHsv(90, 255, 255, 128), "IMU", "wx"},
+        {"IMU", "Rotation Y", "deg/s", QColor::fromHsv(120, 255, 255, 128), "IMU", "wy"},
+        {"IMU", "Rotation Z", "deg/s", QColor::fromHsv(150, 255, 255, 128), "IMU", "wz"},
+        {"IMU", "Total rotation", "deg/s", QColor::fromHsv(120, 255, 255), "IMU", "wTotal"},
 
-    // "Warm colours" category
-    QStandardItem *warmItem = new QStandardItem("Warm colours");
-    warmItem->setFlags(Qt::ItemIsEnabled); // Non-checkable
-    colorModel->appendRow(warmItem);
+        {"IMU", "Temperature", "°C", QColor::fromHsv(0, 255, 255, 128), "IMU", "temperature"},
 
-    QStandardItem *redItem = new QStandardItem("Red");
-    redItem->setCheckable(true);
-    redItem->setData(QColor(Qt::red), Qt::UserRole + 1);
-    warmItem->appendRow(redItem);
+        // Category: Magnetometer
+        {"Magnetometer", "Magnetic field X", "gauss", QColor::fromHsv(210, 255, 255, 128), "MAG", "x"},
+        {"Magnetometer", "Magnetic field Y", "gauss", QColor::fromHsv(240, 255, 255, 128), "MAG", "y"},
+        {"Magnetometer", "Magnetic field Z", "gauss", QColor::fromHsv(270, 255, 255, 128), "MAG", "z"},
+        {"Magnetometer", "Total magnetic field", "gauss", QColor::fromHsv(240, 255, 255), "MAG", "total"},
 
-    QStandardItem *orangeItem = new QStandardItem("Magenta");
-    orangeItem->setCheckable(true);
-    orangeItem->setData(QColor(Qt::magenta), Qt::UserRole + 1);
-    warmItem->appendRow(orangeItem);
+        {"Magnetometer", "Temperature", "°C", QColor::fromHsv(90, 255, 255, 128), "MAG", "temperature"},
 
-    // Optionally, set a default checked color
-    blueItem->setCheckState(Qt::Checked);
+        // Category: Barometer
+        {"Barometer", "Air pressure", "Pa", QColor::fromHsv(0, 0, 64, 255), "BARO", "pressure"},
+        {"Barometer", "Temperature", "°C", QColor::fromHsv(180, 255, 255, 128), "BARO", "temperature"},
 
-    // Connect to itemChanged signal to enforce mutual exclusivity
-    connect(colorModel, &QStandardItemModel::itemChanged, this, [=](QStandardItem *item){
+        // Category: Humidity
+        {"Humidity", "Humidity", "%%", QColor::fromHsv(0, 0, 128, 255), "HUM", "humidity"},
+        {"Humidity", "Temperature", "°C", QColor::fromHsv(270, 255, 255, 128), "HUM", "temperature"},
+
+        // Category: Battery
+        {"Battery", "Battery voltage", "V", QColor::fromHsv(300, 255, 255, 255), "VBAT", "voltage"},
+
+        // Category: GNSS time
+        {"GNSS time", "Time of week", "s", QColor::fromHsv(0, 0, 64, 255), "TIME", "tow"},
+        {"GNSS time", "Week number", "", QColor::fromHsv(0, 0, 128, 255), "TIME", "week"},
+
+        // Add more categories and plots as needed
+    };
+
+    // Variable to hold the first checked item
+    QStandardItem* firstCheckedItem = nullptr;
+
+    // Populate the model with plot values and track the first checked item
+    populatePlotModel(plotModel, plotValues, &firstCheckedItem);
+
+    // Connect to itemChanged signal to handle plot selection
+    connect(plotModel, &QStandardItemModel::itemChanged, this, [=](QStandardItem *item){
         if (item->isCheckable() && item->checkState() == Qt::Checked) {
             // Uncheck all other items
-            QList<QStandardItem*> allItems = colorModel->findItems("*", Qt::MatchWildcard | Qt::MatchRecursive);
+            QList<QStandardItem*> allItems = plotModel->findItems("*", Qt::MatchWildcard | Qt::MatchRecursive);
             for(auto &otherItem : allItems) {
                 if(otherItem != item && otherItem->isCheckable() && otherItem->checkState() == Qt::Checked){
                     otherItem->setCheckState(Qt::Unchecked);
                 }
             }
-            // Emit the selected color
-            QColor selectedColor = item->data(Qt::UserRole + 1).value<QColor>();
-            emit colorSelected(selectedColor);
+
+            // Get the QModelIndex of the selected item
+            QModelIndex selectedIndex = plotModel->indexFromItem(item);
+
+            // Emit the signal with the selected index
+            emit plotValueSelected(selectedIndex);
         }
     });
 
-    // Emit the initial selected color based on the default checked item
-    QList<QStandardItem*> checkedItems = colorModel->findItems("*", Qt::MatchWildcard | Qt::MatchRecursive, Qt::CheckStateRole);
-    for(auto &item : checkedItems){
-        if(item->checkState() == Qt::Checked){
-            QColor selectedColor = item->data(Qt::UserRole + 1).value<QColor>();
-            emit colorSelected(selectedColor);
-            break;
+    // Emit the initial selected plot value based on the first checked item
+    if (firstCheckedItem) {
+        QModelIndex selectedIndex = plotModel->indexFromItem(firstCheckedItem);
+        emit plotValueSelected(selectedIndex);
+    }
+}
+
+void MainWindow::populatePlotModel(
+    QStandardItemModel* plotModel,
+    const QVector<PlotValue>& plotValues,
+    QStandardItem** firstCheckedItem)
+{
+    // Create a map to keep track of category items
+    QMap<QString, QStandardItem*> categoryItemsMap;
+
+    for (const PlotValue& pv : plotValues) {
+        // Check if the category already exists
+        if (!categoryItemsMap.contains(pv.category)) {
+            // Create a new category item
+            QStandardItem* categoryItem = new QStandardItem(pv.category);
+            categoryItem->setFlags(Qt::ItemIsEnabled); // Non-checkable
+
+            // Append the category to the model
+            plotModel->appendRow(categoryItem);
+
+            // Add to the map
+            categoryItemsMap.insert(pv.category, categoryItem);
         }
+
+        // Create a new plot item
+        QStandardItem* plotItem = new QStandardItem(pv.plotName);
+        plotItem->setCheckable(true); // Make the plot checkable
+
+        // Check the first item
+        if (*firstCheckedItem == nullptr) {
+            plotItem->setCheckState(Qt::Checked);
+            *firstCheckedItem = plotItem; // Track the first checked item
+        } else {
+            plotItem->setCheckState(Qt::Unchecked);
+        }
+
+        // Store data in the item
+        plotItem->setData(pv.defaultColor, DefaultColorRole);
+        plotItem->setData(pv.sensorID, SensorIDRole);
+        plotItem->setData(pv.measurementID, MeasurementIDRole);
+        plotItem->setData(pv.plotUnits, PlotUnitsRole);
+
+        // Append the plot item under its category
+        categoryItemsMap[pv.category]->appendRow(plotItem);
     }
 }

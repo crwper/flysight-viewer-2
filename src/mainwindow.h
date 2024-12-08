@@ -21,8 +21,15 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+    enum PlotRoles {
+        DefaultColorRole = Qt::UserRole + 1,
+        SensorIDRole,
+        MeasurementIDRole,
+        PlotUnitsRole
+    };
+
 signals:
-    void colorSelected(const QColor &color);
+    void plotValueSelected(const QModelIndex &selectedIndex);
 
 private slots:
     void on_action_Import_triggered();
@@ -30,17 +37,30 @@ private slots:
     void on_action_Delete_triggered();
 
 private:
+    // Plot values
+    typedef struct {
+        QString category;          // Category name
+        QString plotName;          // Display name of the plot
+        QString plotUnits;         // Units for the y-axis
+        QColor defaultColor;       // Default color for the plot
+        QString sensorID;          // Sensor name (e.g., "GNSS")
+        QString measurementID;     // Measurement name (e.g., "hMSL")
+    } PlotValue;
+
     QSettings *m_settings;
     Ui::MainWindow *ui;
 
     SessionModel *model;
 
-    // Color selection components
-    QDockWidget *colorDock;
-    QTreeView *colorTreeView;
-    QStandardItemModel *colorModel;
+    // Plot value selection components
+    QDockWidget *plotDock;
+    QTreeView *plotTreeView;
+    QStandardItemModel *plotModel;
 
-    void setupColorSelection();
+    // Helper functions for plot values
+    void setupPlotValues();
+    void populatePlotModel(QStandardItemModel* plotModel, const QVector<PlotValue>& plotValues,
+                           QStandardItem** firstCheckedItem);
 
     // Helper function for importing files
     void importFiles(const QStringList &fileNames, bool showProgress);
