@@ -3,20 +3,15 @@
 
 #include <QAbstractTableModel>
 #include <QVector>
+#include "sessiondata.h"
 
 class SessionModel : public QAbstractTableModel
 {
     Q_OBJECT
 public:
-    struct Item {
-        bool visible;
-        QString description;
-        int numCorners;
-    };
-
     enum Columns {
         Description = 0,
-        NumberOfCorners,
+        NumberOfSensors,
         ColumnCount
     };
 
@@ -33,7 +28,7 @@ public:
 
     Qt::ItemFlags flags(const QModelIndex &index) const override;
 
-    void addItem(const Item &item);
+    void mergeSessionData(const SessionData& newSession);
 
     // Add more methods as needed (e.g., removeItem, clear, etc.)
 
@@ -41,7 +36,7 @@ signals:
     void modelChanged();
 
 private:
-    QVector<Item> items;
+    QVector<SessionData> m_sessionData;
 };
 
 #endif // SESSIONMODEL_H

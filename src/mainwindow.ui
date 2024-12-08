@@ -23,7 +23,40 @@
      <height>22</height>
     </rect>
    </property>
+   <widget class="QMenu" name="menuTrack">
+    <property name="title">
+     <string>&amp;Track</string>
+    </property>
+    <addaction name="action_Import"/>
+    <addaction name="actionImportFolder"/>
+    <addaction name="action_Delete"/>
+   </widget>
+   <addaction name="menuTrack"/>
   </widget>
+  <action name="action_Import">
+   <property name="text">
+    <string>&amp;Import...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+T</string>
+   </property>
+  </action>
+  <action name="actionImportFolder">
+   <property name="text">
+    <string>Import &amp;Folder...</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+T</string>
+   </property>
+  </action>
+  <action name="action_Delete">
+   <property name="text">
+    <string>&amp;Delete</string>
+   </property>
+   <property name="shortcut">
+    <string>Del</string>
+   </property>
+  </action>
  </widget>
  <resources/>
  <connections/>

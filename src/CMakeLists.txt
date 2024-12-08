@@ -27,6 +27,8 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         sessionmodel.h sessionmodel.cpp
         plotwidget.h plotwidget.cpp
         qcustomplot/qcustomplot.cpp qcustomplot/qcustomplot.h
+        sessiondata.cpp sessiondata.h
+        import.cpp import.h
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET FlySightViewer APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR

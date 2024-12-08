@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QSettings>
 #include <QStandardItemModel>
 #include <QTreeView>
 #include "sessionmodel.h"
@@ -23,7 +24,13 @@ public:
 signals:
     void colorSelected(const QColor &color);
 
+private slots:
+    void on_action_Import_triggered();
+    void on_actionImportFolder_triggered();
+    void on_action_Delete_triggered();
+
 private:
+    QSettings *m_settings;
     Ui::MainWindow *ui;
 
     SessionModel *model;
@@ -34,5 +41,8 @@ private:
     QStandardItemModel *colorModel;
 
     void setupColorSelection();
+
+    // Helper function for importing files
+    void importFiles(const QStringList &fileNames, bool showProgress);
 };
 #endif // MAINWINDOW_H
