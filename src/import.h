@@ -29,12 +29,15 @@ private:
     // Private helper methods
     void importFS1(QTextStream& in, SessionData& sessionData);
     void importFS2(QTextStream& in, SessionData& sessionData);
-    void importHeaderRow(const QString& row, FS_Section& section, QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData);
-    void importDataRow(const QString& line, const QString& sensorName, const QMap<QString, QVector<QString>>& columnOrder, bool hasMessageKeyInLine, SessionData& sessionData);
+    FS_Section importHeaderRow(const QString& line, QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData);
+    void importDataRow(const QString& line, const QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData);
 
     // Helper function to extract device ID
     void extractDeviceId(const QString& fileName, SessionData& sessionData, const QString& expectedKey);
     QString findFlySightRoot(const QString& filePath);
+
+    // Default sensor ID for FS1 files
+    static constexpr char DefaultSensorId[] = "GNSS";
 
     static QString getDescription(const QString& fileName);
 };

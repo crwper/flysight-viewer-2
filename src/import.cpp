@@ -99,16 +99,15 @@ bool FSDataImporter::importFile(const QString& fileName, SessionData& sessionDat
 }
 
 void FSDataImporter::importFS1(QTextStream& in, SessionData& sessionData) {
-    QString sensorName = "GNSS";
     QMap<QString, QVector<QString>> columnOrder;
 
     // Read the first line (column names)
     QString columnLine = in.readLine();
     QVector<QString> columns = columnLine.split(',', Qt::SkipEmptyParts).toVector().toList().toVector();
-    columnOrder[sensorName] = columns;
+    columnOrder[DefaultSensorId] = columns;
 
     // Initialize the data map in sensors
-    SessionData::SensorData& sensor = sessionData.sensors[sensorName];
+    SessionData::SensorData& sensor = sessionData.sensors[DefaultSensorId];
     for (const QString& colName : columns) {
         sensor[colName]; // Initialize empty QVector<double> for each column
     }
@@ -122,7 +121,7 @@ void FSDataImporter::importFS1(QTextStream& in, SessionData& sessionData) {
     // Process data lines
     while (!in.atEnd()) {
         QString dataLine = in.readLine();
-        importDataRow(dataLine, sensorName, columnOrder, false, sessionData);
+        importDataRow(dataLine, columnOrder, sessionData);
     }
 }
 
@@ -135,65 +134,77 @@ void FSDataImporter::importFS2(QTextStream& in, SessionData& sessionData) {
     // Read and process header lines
     while (!in.atEnd() && (section == FS_Section::HEADER)) {
         QString line = in.readLine();
-        importHeaderRow(line, section, columnOrder, sessionData);
+        section = importHeaderRow(line, columnOrder, sessionData);
     }
 
     // Process data lines
     while (!in.atEnd()) {
         QString line = in.readLine();
-        importDataRow(line, QString(), columnOrder, true, sessionData);
+        importDataRow(line, columnOrder, sessionData);
     }
 }
 
-void FSDataImporter::importHeaderRow(const QString& row, FS_Section& section, QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData) {
-    if (row == "$DATA") {
+FSDataImporter::FS_Section FSDataImporter::importHeaderRow(
+    const QString& line,
+    QMap<QString, QVector<QString>>& columnOrder,
+    SessionData& sessionData)
+{
+    // By default, stay in HEADER section
+    FS_Section section = FS_Section::HEADER;
+
+    if (line == "$DATA") {
         section = FS_Section::DATA;
     } else {
-        QStringView rowView(row);
-        QStringTokenizer tokenizer(rowView, u',');
+        QStringView lineView(line);
+        QStringTokenizer tokenizer(lineView, u',');
         auto it = tokenizer.begin();
-        if (it == tokenizer.end()) return;
 
-        QStringView token0 = *it++;
-        if (token0 == u"$VAR") {
-            if (it == tokenizer.end()) return;
-            QStringView varName = *it++;
-            if (it == tokenizer.end()) return;
-            QStringView varValue = *it;
-            sessionData.vars[varName.toString()] = varValue.toString();
-        } else if (token0 == u"$COL") {
-            if (it == tokenizer.end()) return;
-            QStringView sensorName = *it++;
-            QVector<QString> columns;
-            for (; it != tokenizer.end(); ++it) {
-                columns.append(it->toString());
-            }
-            // Store the columns in the temporary columnOrder map
-            columnOrder[sensorName.toString()] = columns;
+        if (it != tokenizer.end()) {
+            QStringView token0 = *it++;
+            if (token0 == u"$VAR") {
+                if (it != tokenizer.end()) {
+                    QStringView varName = *it++;
+                    if (it != tokenizer.end()) {
+                        QStringView varValue = *it;
+                        sessionData.setVar(varName.toString(), varValue.toString());
+                    }
+                }
+            } else if (token0 == u"$COL") {
+                if (it != tokenizer.end()) {
+                    QStringView sensorName = *it++;
+                    QVector<QString> columns;
 
-            // Initialize the data map in sensors
-            SessionData::SensorData& sensor = sessionData.sensors[sensorName.toString()];
-            for (const QString& colName : columns) {
-                sensor[colName]; // Initialize empty QVector<double> for each column
+                    for (; it != tokenizer.end(); ++it) {
+                        columns.append(it->toString());
+                    }
+
+                    columnOrder[sensorName.toString()] = columns;
+
+                    // Initialize sensor measurements as empty
+                    for (const QString &colName : columns) {
+                        sessionData.setSensorMeasurement(sensorName.toString(), colName, {});
+                    }
+                }
+            } else if (token0 == u"$UNIT") {
+                // Ignore $UNIT lines
             }
-        } else if (token0 == u"$UNIT") {
-            // Ignore $UNIT lines
         }
     }
+
+    return section;
 }
 
-void FSDataImporter::importDataRow(const QString& line, const QString& sensorName, const QMap<QString, QVector<QString>>& columnOrder, bool hasSensorKeyInLine, SessionData& sessionData) {
+void FSDataImporter::importDataRow(const QString& line, const QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData) {
     QStringView lineView(line);
     QStringTokenizer tokenizer(lineView, u',');
     auto it = tokenizer.begin();
 
-    QString key = sensorName;
+    QString key = DefaultSensorId;
 
     // For FS2 format, the first token is the sensor key
-    if (hasSensorKeyInLine) {
+    if (line.startsWith("$")) {
         if (it == tokenizer.end()) return;
         QStringView token0 = *it++;
-        if (!token0.startsWith(u'$')) return; // Invalid format
         key = token0.mid(1).toString(); // Remove the '$' at the start
     }
 
