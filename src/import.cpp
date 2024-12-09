@@ -92,6 +92,9 @@ bool FSDataImporter::importFile(const QString& fileName, SessionData& sessionDat
         sessionData.vars["SESSION_ID"] = md5HashString;
     }
 
+    // Initialize visibility
+    sessionData.vars["VISIBLE"] = "true";
+
     return true;
 }
 

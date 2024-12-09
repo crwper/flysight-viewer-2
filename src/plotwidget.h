@@ -1,33 +1,33 @@
+// plotwidget.h
+
 #ifndef PLOTWIDGET_H
 #define PLOTWIDGET_H
 
 #include <QWidget>
 #include "qcustomplot/qcustomplot.h"
 #include "sessionmodel.h"
+#include "calculatedvaluemanager.h"
 
 class PlotWidget : public QWidget
 {
     Q_OBJECT
 public:
-    PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidget *parent = nullptr);
+    PlotWidget(SessionModel *model, QStandardItemModel *plotModel, CalculatedValueManager* calcManager, QWidget *parent = nullptr);
 
 public slots:
-    void setPlotValue(const QModelIndex &selectedIndex);
-
-private slots:
-    void updatePlot();
+    void updatePlot(); // Updated to remove parameters
 
 private:
     QCustomPlot *customPlot;
     SessionModel *model;
     QStandardItemModel *plotModel;
+    CalculatedValueManager* m_calculatedValueManager;
 
-    // Store current plot settings
-    QString currentSensorID;
-    QString currentMeasurementID;
-    QString currentPlotName;
-    QString currentPlotUnits;
-    QColor currentColor;
+    // To keep track of plotted graphs to update or clear
+    QList<QCPGraph*> m_plottedGraphs;
+
+    // Map to associate plot values with their corresponding y-axes
+    QMap<QString, QCPAxis*> m_plotValueAxes;
 
     void setupPlot();
 };

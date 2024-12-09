@@ -35,7 +35,7 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const
         break;
     case Qt::CheckStateRole:
         if (index.column() == Description) {
-            bool visible = item.getVars().value("VISIBLE", "true").toLower() == "true";
+            bool visible = item.getVars().value("VISIBLE") == "true";
             return visible ? Qt::Checked : Qt::Unchecked;
         }
         break;
@@ -97,7 +97,7 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
             }
         }
     } else if (role == Qt::CheckStateRole && index.column() == Description) {
-        bool visible = item.getVars().value("VISIBLE", "true").toLower() == "true";
+        bool visible = item.getVars().value("VISIBLE") == "true";
         bool newVisible = (value.toInt() == Qt::Checked);
         if (visible != newVisible) {
             item.getVars()["VISIBLE"] = newVisible ? "true" : "false";
@@ -262,4 +262,9 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
 
         qDebug() << "Added new SessionData with SESSION_ID:" << newSessionID;
     }
+}
+
+const QVector<SessionData>& SessionModel::getAllSessions() const
+{
+    return m_sessionData;
 }

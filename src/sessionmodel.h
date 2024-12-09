@@ -30,7 +30,7 @@ public:
 
     void mergeSessionData(const SessionData& newSession);
 
-    // Add more methods as needed (e.g., removeItem, clear, etc.)
+    const QVector<SessionData>& getAllSessions() const;
 
 signals:
     void modelChanged();

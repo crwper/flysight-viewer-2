@@ -14,8 +14,12 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
     , model(new SessionModel(this))
     , plotModel (new QStandardItemModel(this))
+    , m_calculatedValueManager(new CalculatedValueManager())
 {
     ui->setupUi(this);
+
+    // Initialize calculated values
+    initializeCalculatedValues();
 
     // Add logbook view
     QDockWidget *logbookDock = new QDockWidget(tr("Logbook"), this);
@@ -28,11 +32,8 @@ MainWindow::MainWindow(QWidget *parent)
     logbookView->header()->setDefaultSectionSize(100);
 
     // Add plot widget
-    PlotWidget *plotWidget = new PlotWidget(model, plotModel, this); // Pass plotModel
+    PlotWidget *plotWidget = new PlotWidget(model, plotModel, m_calculatedValueManager, this);
     setCentralWidget(plotWidget);
-
-    // Connect plot value selection to plot widget
-    connect(this, &MainWindow::plotValueSelected, plotWidget, &PlotWidget::setPlotValue);
 
     // Setup plot values
     setupPlotValues();
@@ -258,42 +259,24 @@ void MainWindow::setupPlotValues()
         // Add more categories and plots as needed
     };
 
-    // Variable to hold the first checked item
-    QStandardItem* firstCheckedItem = nullptr;
-
     // Populate the model with plot values and track the first checked item
-    populatePlotModel(plotModel, plotValues, &firstCheckedItem);
+    populatePlotModel(plotModel, plotValues);
 
     // Connect to itemChanged signal to handle plot selection
     connect(plotModel, &QStandardItemModel::itemChanged, this, [=](QStandardItem *item){
-        if (item->isCheckable() && item->checkState() == Qt::Checked) {
-            // Uncheck all other items
-            QList<QStandardItem*> allItems = plotModel->findItems("*", Qt::MatchWildcard | Qt::MatchRecursive);
-            for(auto &otherItem : allItems) {
-                if(otherItem != item && otherItem->isCheckable() && otherItem->checkState() == Qt::Checked){
-                    otherItem->setCheckState(Qt::Unchecked);
-                }
-            }
-
-            // Get the QModelIndex of the selected item
-            QModelIndex selectedIndex = plotModel->indexFromItem(item);
-
-            // Emit the signal with the selected index
-            emit plotValueSelected(selectedIndex);
+        if (item->isCheckable()) {
+            // Emit the modelChanged signal to trigger plot updates
+            emit model->modelChanged();
         }
     });
 
-    // Emit the initial selected plot value based on the first checked item
-    if (firstCheckedItem) {
-        QModelIndex selectedIndex = plotModel->indexFromItem(firstCheckedItem);
-        emit plotValueSelected(selectedIndex);
-    }
+    // Emit the initial plot based on the checked items
+    emit model->modelChanged();
 }
 
 void MainWindow::populatePlotModel(
     QStandardItemModel* plotModel,
-    const QVector<PlotValue>& plotValues,
-    QStandardItem** firstCheckedItem)
+    const QVector<PlotValue>& plotValues)
 {
     // Create a map to keep track of category items
     QMap<QString, QStandardItem*> categoryItemsMap;
@@ -315,14 +298,7 @@ void MainWindow::populatePlotModel(
         // Create a new plot item
         QStandardItem* plotItem = new QStandardItem(pv.plotName);
         plotItem->setCheckable(true); // Make the plot checkable
-
-        // Check the first item
-        if (*firstCheckedItem == nullptr) {
-            plotItem->setCheckState(Qt::Checked);
-            *firstCheckedItem = plotItem; // Track the first checked item
-        } else {
-            plotItem->setCheckState(Qt::Unchecked);
-        }
+        plotItem->setCheckState(Qt::Unchecked);
 
         // Store data in the item
         plotItem->setData(pv.defaultColor, DefaultColorRole);
@@ -333,4 +309,122 @@ void MainWindow::populatePlotModel(
         // Append the plot item under its category
         categoryItemsMap[pv.category]->appendRow(plotItem);
     }
+}
+
+void MainWindow::initializeCalculatedValues()
+{
+    m_calculatedValueManager->registerCalculatedValue("GNSS", "velH", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
+        QVector<double> velN = calcManager.getMeasurement(session, "GNSS", "velN");
+        QVector<double> velE = calcManager.getMeasurement(session, "GNSS", "velE");
+
+        if (velN.isEmpty() || velE.isEmpty()) {
+            qWarning() << "Cannot calculate total_speed due to missing velN or velE";
+            return QVector<double>();
+        }
+
+        if (velN.size() != velE.size()) {
+            qWarning() << "velN and velE size mismatch in session:" << session.getVars().value("SESSION_ID");
+            return QVector<double>();
+        }
+
+        QVector<double> velH;
+        velH.reserve(velN.size());
+        for(int i = 0; i < velN.size(); ++i){
+            velH.append(std::sqrt(velN[i]*velN[i] + velE[i]*velE[i]));
+        }
+        return velH;
+    });
+
+    m_calculatedValueManager->registerCalculatedValue("GNSS", "vel", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
+        QVector<double> velH = calcManager.getMeasurement(session, "GNSS", "velH");
+        QVector<double> velD = calcManager.getMeasurement(session, "GNSS", "velD");
+
+        if (velH.isEmpty() || velD.isEmpty()) {
+            qWarning() << "Cannot calculate total_speed due to missing velH or velD";
+            return QVector<double>();
+        }
+
+        if (velH.size() != velD.size()) {
+            qWarning() << "velH and velD size mismatch in session:" << session.getVars().value("SESSION_ID");
+            return QVector<double>();
+        }
+
+        QVector<double> vel;
+        vel.reserve(velH.size());
+        for(int i = 0; i < velH.size(); ++i){
+            vel.append(std::sqrt(velH[i]*velH[i] + velD[i]*velD[i]));
+        }
+        return vel;
+    });
+
+    m_calculatedValueManager->registerCalculatedValue("IMU", "aTotal", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
+        QVector<double> ax = calcManager.getMeasurement(session, "IMU", "ax");
+        QVector<double> ay = calcManager.getMeasurement(session, "IMU", "ay");
+        QVector<double> az = calcManager.getMeasurement(session, "IMU", "az");
+
+        if (ax.isEmpty() || ay.isEmpty() || az.isEmpty()) {
+            qWarning() << "Cannot calculate aTotal due to missing ax, ay, or az";
+            return QVector<double>();
+        }
+
+        if ((ax.size() != ay.size()) || (ax.size() != az.size())) {
+            qWarning() << "az, ay, or az size mismatch in session:" << session.getVars().value("SESSION_ID");
+            return QVector<double>();
+        }
+
+        QVector<double> aTotal;
+        aTotal.reserve(ax.size());
+        for(int i = 0; i < ax.size(); ++i){
+            aTotal.append(std::sqrt(ax[i]*ax[i] + ay[i]*ay[i] + az[i]*az[i]));
+        }
+        return aTotal;
+    });
+
+    m_calculatedValueManager->registerCalculatedValue("IMU", "wTotal", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
+        QVector<double> wx = calcManager.getMeasurement(session, "IMU", "wx");
+        QVector<double> wy = calcManager.getMeasurement(session, "IMU", "wy");
+        QVector<double> wz = calcManager.getMeasurement(session, "IMU", "wz");
+
+        if (wx.isEmpty() || wy.isEmpty() || wz.isEmpty()) {
+            qWarning() << "Cannot calculate wTotal due to missing wx, wy, or wz";
+            return QVector<double>();
+        }
+
+        if ((wx.size() != wy.size()) || (wx.size() != wz.size())) {
+            qWarning() << "wz, wy, or wz size mismatch in session:" << session.getVars().value("SESSION_ID");
+            return QVector<double>();
+        }
+
+        QVector<double> wTotal;
+        wTotal.reserve(wx.size());
+        for(int i = 0; i < wx.size(); ++i){
+            wTotal.append(std::sqrt(wx[i]*wx[i] + wy[i]*wy[i] + wz[i]*wz[i]));
+        }
+        return wTotal;
+    });
+
+    m_calculatedValueManager->registerCalculatedValue("MAG", "total", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
+        QVector<double> x = calcManager.getMeasurement(session, "MAG", "x");
+        QVector<double> y = calcManager.getMeasurement(session, "MAG", "y");
+        QVector<double> z = calcManager.getMeasurement(session, "MAG", "z");
+
+        if (x.isEmpty() || y.isEmpty() || z.isEmpty()) {
+            qWarning() << "Cannot calculate total due to missing x, y, or z";
+            return QVector<double>();
+        }
+
+        if ((x.size() != y.size()) || (x.size() != z.size())) {
+            qWarning() << "x, y, or z size mismatch in session:" << session.getVars().value("SESSION_ID");
+            return QVector<double>();
+        }
+
+        QVector<double> total;
+        total.reserve(x.size());
+        for(int i = 0; i < x.size(); ++i){
+            total.append(std::sqrt(x[i]*x[i] + y[i]*y[i] + z[i]*z[i]));
+        }
+        return total;
+    });
+
+    // You can register more calculated values here following the same pattern
 }

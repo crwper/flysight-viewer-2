@@ -5,6 +5,7 @@
 #include <QSettings>
 #include <QStandardItemModel>
 #include <QTreeView>
+#include "calculatedvaluemanager.h"
 #include "sessionmodel.h"
 
 QT_BEGIN_NAMESPACE
@@ -57,12 +58,17 @@ private:
     QTreeView *plotTreeView;
     QStandardItemModel *plotModel;
 
+    // Calculated Value Manager
+    CalculatedValueManager *m_calculatedValueManager;
+
     // Helper functions for plot values
     void setupPlotValues();
-    void populatePlotModel(QStandardItemModel* plotModel, const QVector<PlotValue>& plotValues,
-                           QStandardItem** firstCheckedItem);
+    void populatePlotModel(QStandardItemModel* plotModel, const QVector<PlotValue>& plotValues);
 
     // Helper function for importing files
     void importFiles(const QStringList &fileNames, bool showProgress);
+
+    // Helper methods for calculated values
+    void initializeCalculatedValues();
 };
 #endif // MAINWINDOW_H
