@@ -12,9 +12,9 @@
 #include <QStringTokenizer>
 #include <QTextStream>
 
-namespace FSImport {
+namespace FlySight {
 
-bool FSDataImporter::importFile(const QString& fileName, SessionData& sessionData) {
+bool DataImporter::importFile(const QString& fileName, SessionData& sessionData) {
     QFile file(fileName);
     if (!file.open(QIODevice::ReadOnly)) {
         m_lastError = "Couldn't read file";
@@ -98,7 +98,7 @@ bool FSDataImporter::importFile(const QString& fileName, SessionData& sessionDat
     return true;
 }
 
-void FSDataImporter::importFS1(QTextStream& in, SessionData& sessionData) {
+void DataImporter::importFS1(QTextStream& in, SessionData& sessionData) {
     QMap<QString, QVector<QString>> columnOrder;
 
     // Read the first line (column names)
@@ -125,7 +125,7 @@ void FSDataImporter::importFS1(QTextStream& in, SessionData& sessionData) {
     }
 }
 
-void FSDataImporter::importFS2(QTextStream& in, SessionData& sessionData) {
+void DataImporter::importFS2(QTextStream& in, SessionData& sessionData) {
     FS_Section section = FS_Section::HEADER;
 
     // Temporary map to store column order per sensor
@@ -144,7 +144,7 @@ void FSDataImporter::importFS2(QTextStream& in, SessionData& sessionData) {
     }
 }
 
-FSDataImporter::FS_Section FSDataImporter::importHeaderRow(
+DataImporter::FS_Section DataImporter::importHeaderRow(
     const QString& line,
     QMap<QString, QVector<QString>>& columnOrder,
     SessionData& sessionData)
@@ -194,7 +194,7 @@ FSDataImporter::FS_Section FSDataImporter::importHeaderRow(
     return section;
 }
 
-void FSDataImporter::importDataRow(const QString& line, const QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData) {
+void DataImporter::importDataRow(const QString& line, const QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData) {
     QStringView lineView(line);
     QStringTokenizer tokenizer(lineView, u',');
     auto it = tokenizer.begin();
@@ -255,7 +255,7 @@ void FSDataImporter::importDataRow(const QString& line, const QMap<QString, QVec
     }
 }
 
-void FSDataImporter::extractDeviceId(const QString& fileName, SessionData& sessionData, const QString& expectedKey) {
+void DataImporter::extractDeviceId(const QString& fileName, SessionData& sessionData, const QString& expectedKey) {
     // Find the root directory of the FlySight device
     QString flySightRoot = findFlySightRoot(fileName);
 
@@ -311,7 +311,7 @@ void FSDataImporter::extractDeviceId(const QString& fileName, SessionData& sessi
     qWarning() << expectedKey << "not found in FLYSIGHT.TXT";
 }
 
-QString FSDataImporter::findFlySightRoot(const QString& filePath) {
+QString DataImporter::findFlySightRoot(const QString& filePath) {
     QFileInfo fileInfo(filePath);
     QDir currentDir = fileInfo.absoluteDir();
 
@@ -332,11 +332,11 @@ QString FSDataImporter::findFlySightRoot(const QString& filePath) {
     return QString();
 }
 
-QString FSDataImporter::getLastError() const {
+QString DataImporter::getLastError() const {
     return m_lastError;
 }
 
-QString FSDataImporter::getDescription(const QString& fileName)
+QString DataImporter::getDescription(const QString& fileName)
 {
     QString description;
 
@@ -372,4 +372,4 @@ QString FSDataImporter::getDescription(const QString& fileName)
     return description;
 }
 
-} // namespace FSImport
+} // namespace FlySight

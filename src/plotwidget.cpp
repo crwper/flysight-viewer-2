@@ -1,6 +1,8 @@
 #include "plotwidget.h"
 #include "mainwindow.h"
 
+namespace FlySight {
+
 PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel,
                        CalculatedValueManager* calcManager, QWidget *parent)
     : QWidget(parent)
@@ -148,3 +150,5 @@ void PlotWidget::setupPlot()
     // Enable interactions if needed
     customPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectPlottables);
 }
+
+} // namespace FlySight

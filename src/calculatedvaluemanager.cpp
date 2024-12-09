@@ -1,6 +1,8 @@
 #include "calculatedvaluemanager.h"
 #include <QDebug>
 
+namespace FlySight {
+
 void CalculatedValueManager::registerCalculatedValue(const QString &sensorID, const QString &measurementID, CalculationFunction func)
 {
     m_calculations[sensorID][measurementID] = func;
@@ -64,3 +66,5 @@ void CalculatedValueManager::clearCache(SessionData& session)
     session.getCalculatedValues().clear();
     qDebug() << "Cleared calculated values cache for session:" << session.getVars().value("SESSION_ID");
 }
+
+} // namespace FlySight

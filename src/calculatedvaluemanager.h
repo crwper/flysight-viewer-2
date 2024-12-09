@@ -7,6 +7,8 @@
 #include <functional>
 #include "sessiondata.h"
 
+namespace FlySight {
+
 class CalculatedValueManager
 {
 public:
@@ -29,5 +31,7 @@ private:
     // Set to track active calculations for cycle detection
     QSet<QString> m_activeCalculations;
 };
+
+} // namespace FlySight
 
 #endif // CALCULATEDVALUEMANAGER_H

@@ -5,11 +5,11 @@
 #include <QString>
 #include <QTextStream>
 
-namespace FSImport {
+namespace FlySight {
 
-class FSDataImporter {
+class DataImporter {
 public:
-    FSDataImporter() = default;
+    DataImporter() = default;
 
     // Method to import a file and get the session data
     bool importFile(const QString& fileName, SessionData& sessionData);
@@ -42,6 +42,6 @@ private:
     static QString getDescription(const QString& fileName);
 };
 
-} // namespace FSImport
+} // namespace FlySight
 
 #endif // IMPORT_H

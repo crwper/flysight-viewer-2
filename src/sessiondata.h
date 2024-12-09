@@ -5,9 +5,9 @@
 #include <QString>
 #include <QVector>
 
-namespace FSImport {
-    class FSDataImporter;
-}
+namespace FlySight {
+
+class FSDataImporter;
 
 class SessionData {
 public:
@@ -52,7 +52,9 @@ private:
     QMap<QString, SensorData> calculatedValues;
 
     // Friend class to allow FSDataImporter to access private members
-    friend class FSImport::FSDataImporter;
+    friend class DataImporter;
 };
+
+} // namespace FlySight
 
 #endif // SESSIONDATA_H

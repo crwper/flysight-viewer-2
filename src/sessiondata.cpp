@@ -2,6 +2,8 @@
 
 #include "sessiondata.h"
 
+namespace FlySight {
+
 // Initialize the static constants
 const QString SessionData::DEFAULT_DEVICE_ID = "_";
 
@@ -48,3 +50,5 @@ void SessionData::setSensorMeasurement(const QString& sensorName, const QString&
 void SessionData::setCalculatedValue(const QString& sensorID, const QString& measurementID, const QVector<double>& data) {
     calculatedValues[sensorID][measurementID] = data;
 }
+
+} // namespace FlySight

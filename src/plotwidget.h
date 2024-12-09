@@ -8,6 +8,8 @@
 #include "sessionmodel.h"
 #include "calculatedvaluemanager.h"
 
+namespace FlySight {
+
 class PlotWidget : public QWidget
 {
     Q_OBJECT
@@ -31,5 +33,7 @@ private:
 
     void setupPlot();
 };
+
+} // namespace FlySight
 
 #endif // PLOTWIDGET_H

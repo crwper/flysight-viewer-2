@@ -5,6 +5,8 @@
 #include <QVector>
 #include "sessiondata.h"
 
+namespace FlySight {
+
 class SessionModel : public QAbstractTableModel
 {
     Q_OBJECT
@@ -38,5 +40,7 @@ signals:
 private:
     QVector<SessionData> m_sessionData;
 };
+
+} // namespace FlySight
 
 #endif // SESSIONMODEL_H

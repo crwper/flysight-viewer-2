@@ -1,6 +1,8 @@
 #include "sessionmodel.h"
 #include <QMessageBox>
 
+namespace FlySight {
+
 SessionModel::SessionModel(QObject *parent)
     : QAbstractTableModel(parent)
 {
@@ -268,3 +270,5 @@ const QVector<SessionData>& SessionModel::getAllSessions() const
 {
     return m_sessionData;
 }
+
+} // namespace FlySight

@@ -14,6 +14,8 @@ class MainWindow;
 }
 QT_END_NAMESPACE
 
+namespace FlySight {
+
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -71,4 +73,7 @@ private:
     // Helper methods for calculated values
     void initializeCalculatedValues();
 };
+
+} // namespace FlySight
+
 #endif // MAINWINDOW_H

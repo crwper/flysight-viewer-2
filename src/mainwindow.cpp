@@ -8,6 +8,8 @@
 #include "import.h"
 #include "plotwidget.h"
 
+namespace FlySight {
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_settings(new QSettings("FlySight", "Viewer", this))
@@ -136,7 +138,7 @@ void MainWindow::importFiles(
             }
 
             // Import the file
-            FSImport::FSDataImporter importer;
+            DataImporter importer;
             SessionData tempSessionData;
 
             if (importer.importFile(filePath, tempSessionData)) {
@@ -157,7 +159,7 @@ void MainWindow::importFiles(
     } else {
         // No progress dialog
         for (const QString &filePath : fileNames) {
-            FSImport::FSDataImporter importer;
+            DataImporter importer;
             SessionData tempSessionData;
 
             if (importer.importFile(filePath, tempSessionData)) {
@@ -428,3 +430,5 @@ void MainWindow::initializeCalculatedValues()
 
     // You can register more calculated values here following the same pattern
 }
+
+} // namespace FlySight
