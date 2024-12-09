@@ -35,7 +35,7 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const
         break;
     case Qt::CheckStateRole:
         if (index.column() == Description) {
-            bool visible = item.getVars().value("VISIBLE") == "true";
+            bool visible = item.isVisible();
             return visible ? Qt::Checked : Qt::Unchecked;
         }
         break;
@@ -97,10 +97,10 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
             }
         }
     } else if (role == Qt::CheckStateRole && index.column() == Description) {
-        bool visible = item.getVars().value("VISIBLE") == "true";
+        bool visible = item.isVisible();
         bool newVisible = (value.toInt() == Qt::Checked);
         if (visible != newVisible) {
-            item.getVars()["VISIBLE"] = newVisible ? "true" : "false";
+            item.setVisible(newVisible);
             somethingChanged = true;
         }
     }

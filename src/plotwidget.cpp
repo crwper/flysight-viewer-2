@@ -78,7 +78,7 @@ void PlotWidget::updatePlot()
                 // Iterate through all sessions to plot
                 for(const auto& session : sessions){
                     // Check for session visibility
-                    if (session.getVars().value("VISIBLE") != "true") {
+                    if (!session.isVisible()) {
                         continue;
                     }
 

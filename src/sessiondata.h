@@ -17,6 +17,10 @@ public:
     // Constructors
     SessionData() = default;
 
+    // Accessors for visibility
+    bool isVisible() const { return m_visible; }
+    void setVisible(bool visible) { m_visible = visible; }
+
     // Accessors for vars and sensors
     QMap<QString, QString>& getVars();
     const QMap<QString, QString>& getVars() const;
@@ -42,6 +46,7 @@ public:
 
 private:
     // Member variables
+    bool m_visible;
     QMap<QString, QString> vars;
     QMap<QString, SensorData> sensors;
     QMap<QString, SensorData> calculatedValues;

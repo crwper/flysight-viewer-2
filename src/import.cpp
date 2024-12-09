@@ -93,7 +93,7 @@ bool FSDataImporter::importFile(const QString& fileName, SessionData& sessionDat
     }
 
     // Initialize visibility
-    sessionData.vars["VISIBLE"] = "true";
+    sessionData.setVisible(true);
 
     return true;
 }
