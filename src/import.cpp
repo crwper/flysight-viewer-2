@@ -63,10 +63,10 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
     }
 
     // Set default description
-    sessionData.getVars()["DESCRIPTION"] = getDescription(fileName);
+    sessionData.setVar("DESCRIPTION", getDescription(fileName));
 
     // After importing, attempt to extract DEVICE_ID based on file type
-    if (!sessionData.vars.contains("DEVICE_ID")) {
+    if (!sessionData.hasVar("DEVICE_ID")) {
         switch (fileType) {
         case FS_FileType::FS1:
             extractDeviceId(fileName, sessionData, "Processor serial number");
@@ -77,19 +77,19 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
         }
 
         // After extraction, check again if DEVICE_ID is present
-        if (!sessionData.vars.contains("DEVICE_ID")) {
+        if (!sessionData.hasVar("DEVICE_ID")) {
             // Assign default DEVICE_ID
-            sessionData.vars.insert("DEVICE_ID", SessionData::DEFAULT_DEVICE_ID);
+            sessionData.setVar("DEVICE_ID", SessionData::DEFAULT_DEVICE_ID);
             qDebug() << "Assigned default DEVICE_ID to session.";
         }
     }
 
     // After importing, check if SESSION_ID is set
-    if (!sessionData.vars.contains("SESSION_ID")) {
+    if (!sessionData.hasVar("SESSION_ID")) {
         // Compute MD5 hash of fileData
         QByteArray md5Hash = QCryptographicHash::hash(fileData, QCryptographicHash::Md5);
         QString md5HashString = md5Hash.toHex();
-        sessionData.vars["SESSION_ID"] = md5HashString;
+        sessionData.setVar("SESSION_ID", md5HashString);
     }
 
     // Initialize visibility
@@ -302,7 +302,7 @@ void DataImporter::extractDeviceId(const QString& fileName, SessionData& session
         QString value = line.mid(colonIndex + 1).trimmed();
 
         if (key == expectedKey) {
-            sessionData.vars["DEVICE_ID"] = value;
+            sessionData.setVar("DEVICE_ID", value);
             return;
         }
     }

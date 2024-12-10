@@ -64,7 +64,7 @@ void CalculatedValueManager::clearCache(SessionData& session)
 {
     // Clear all calculated values in the session
     session.getCalculatedValues().clear();
-    qDebug() << "Cleared calculated values cache for session:" << session.getVars().value("SESSION_ID");
+    qDebug() << "Cleared calculated values cache for session:" << session.getVar("SESSION_ID");
 }
 
 } // namespace FlySight

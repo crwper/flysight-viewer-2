@@ -21,10 +21,13 @@ public:
     bool isVisible() const { return m_visible; }
     void setVisible(bool visible) { m_visible = visible; }
 
-    // Accessors for vars and sensors
-    QMap<QString, QString>& getVars();
-    const QMap<QString, QString>& getVars() const;
+    // Var getters/setters
+    QStringList varKeys() const;
+    bool hasVar(const QString &key) const;
+    QString getVar(const QString &key) const;
+    void setVar(const QString &key, const QString &value);
 
+    // Sensor data getters/setters
     QMap<QString, SensorData>& getSensors();
     const QMap<QString, SensorData>& getSensors() const;
 
@@ -37,7 +40,6 @@ public:
     SensorData operator[](const QString& sensorName) const;
 
     // Setter methods for encapsulation
-    void setVar(const QString& key, const QString& value);
     void setSensorMeasurement(const QString& sensorName, const QString& measurementKey, const QVector<double>& data);
     void setCalculatedValue(const QString& sensorName, const QString& measurementKey, const QVector<double>& data);
 
@@ -47,7 +49,7 @@ public:
 private:
     // Member variables
     bool m_visible;
-    QMap<QString, QString> vars;
+    QMap<QString, QString> m_vars;
     QMap<QString, SensorData> sensors;
     QMap<QString, SensorData> calculatedValues;
 

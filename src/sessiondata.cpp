@@ -7,12 +7,20 @@ namespace FlySight {
 // Initialize the static constants
 const QString SessionData::DEFAULT_DEVICE_ID = "_";
 
-QMap<QString, QString>& SessionData::getVars() {
-    return vars;
+QStringList SessionData::varKeys() const {
+    return m_vars.keys();
 }
 
-const QMap<QString, QString>& SessionData::getVars() const {
-    return vars;
+bool SessionData::hasVar(const QString &key) const {
+    return m_vars.contains(key);
+}
+
+QString SessionData::getVar(const QString &key) const {
+    return m_vars.value(key, QString());
+}
+
+void SessionData::setVar(const QString& key, const QString& value) {
+    m_vars.insert(key, value);
 }
 
 QMap<QString, QMap<QString, QVector<double>>>& SessionData::getSensors() {
@@ -37,10 +45,6 @@ QMap<QString, QVector<double>>& SessionData::operator[](const QString& sensorNam
 
 QMap<QString, QVector<double>> SessionData::operator[](const QString& sensorName) const {
     return sensors.value(sensorName);
-}
-
-void SessionData::setVar(const QString& key, const QString& value) {
-    vars.insert(key, value);
 }
 
 void SessionData::setSensorMeasurement(const QString& sensorName, const QString& measurementKey, const QVector<double>& data) {

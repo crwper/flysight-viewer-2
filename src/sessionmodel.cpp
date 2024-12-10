@@ -31,7 +31,7 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const
     switch (role) {
     case Qt::DisplayRole:
         if (index.column() == Description)
-            return item.getVars().value("DESCRIPTION");
+            return item.getVar("DESCRIPTION");
         if (index.column() == NumberOfSensors)
             return item.getSensors().size();
         break;
@@ -43,7 +43,7 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const
         break;
     case Qt::EditRole:
         if (index.column() == Description)
-            return item.getVars().value("DESCRIPTION");
+            return item.getVar("DESCRIPTION");
         if (index.column() == NumberOfSensors)
             return item.getSensors().size();
         break;
@@ -93,8 +93,8 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
     if (role == Qt::EditRole) {
         if (index.column() == Description) {
             QString newDescription = value.toString();
-            if (item.getVars().value("DESCRIPTION") != newDescription) {
-                item.getVars()["DESCRIPTION"] = newDescription;
+            if (item.getVar("DESCRIPTION") != newDescription) {
+                item.setVar("DESCRIPTION", newDescription);
                 somethingChanged = true;
             }
         }
@@ -118,37 +118,43 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
 void SessionModel::mergeSessionData(const SessionData& newSession)
 {
     // Ensure SESSION_ID exists
-    if (!newSession.getVars().contains("SESSION_ID")) {
+    if (!newSession.hasVar("SESSION_ID")) {
         QMessageBox::critical(nullptr, tr("Import failed"), tr("No session ID found"));
         return;
     }
 
-    QString newSessionID = newSession.getVars().value("SESSION_ID");
+    QString newSessionID = newSession.getVar("SESSION_ID");
 
     // Check if SESSION_ID exists in m_sessionData
     auto sessionIt = std::find_if(
         m_sessionData.begin(), m_sessionData.end(),
         [&newSessionID](const SessionData &item) {
-            return item.getVars().value("SESSION_ID") == newSessionID;
+            return item.getVar("SESSION_ID") == newSessionID;
         });
 
     if (sessionIt != m_sessionData.end()) {
         SessionData &existingSession = *sessionIt;
 
-        // Retrieve variables from both sessions
-        QMap<QString, QString> existingVars = existingSession.getVars();
-        QMap<QString, QString> newVars = newSession.getVars();
+        QStringList existingKeys = existingSession.varKeys();
+        QStringList newKeys = newSession.varKeys();
 
-        // Check for exact match of variable sets
         bool varsMatch = false;
-        if (existingVars.size() == newVars.size()) {
+        if (existingKeys.size() == newKeys.size()) {
             varsMatch = true; // Assume match until proven otherwise
-            for (auto it = newVars.constBegin(); it != newVars.constEnd(); ++it) {
-                if (it.key() == "DESCRIPTION") {
+
+            // Iterate over the new session's keys (excluding "DESCRIPTION")
+            for (const QString &key : newKeys) {
+                if (key == "DESCRIPTION") {
                     continue;
                 }
 
-                if (!existingVars.contains(it.key()) || existingVars.value(it.key()) != it.value()) {
+                // Check both existence and equality of values
+                bool existingHasKey = existingSession.hasVar(key);
+                bool newHasKey = newSession.hasVar(key);
+
+                // If either session doesn't have the key, or the values don't match, break
+                if (!existingHasKey || !newHasKey ||
+                    existingSession.getVar(key) != newSession.getVar(key)) {
                     varsMatch = false;
                     break;
                 }
@@ -162,7 +168,7 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
             QString uniqueSessionID = newSessionID;
             while (std::any_of(m_sessionData.begin(), m_sessionData.end(),
                                [&uniqueSessionID](const SessionData &item) {
-                                   return item.getVars().value("SESSION_ID") == uniqueSessionID;
+                                   return item.getVar("SESSION_ID") == uniqueSessionID;
                                })) {
                 uniqueSessionID = QString("%1_%2").arg(newSessionID).arg(suffix++);
             }
@@ -213,7 +219,7 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
             QString uniqueSessionID = newSessionID;
             while (std::any_of(m_sessionData.begin(), m_sessionData.end(),
                                [&uniqueSessionID](const SessionData &item) {
-                                   return item.getVars().value("SESSION_ID") == uniqueSessionID;
+                                   return item.getVar("SESSION_ID") == uniqueSessionID;
                                })) {
                 uniqueSessionID = QString("%1_%2").arg(newSessionID).arg(suffix++);
             }
