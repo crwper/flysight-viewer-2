@@ -33,7 +33,7 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const
         if (index.column() == Description)
             return item.getVar("DESCRIPTION");
         if (index.column() == NumberOfSensors)
-            return item.getSensors().size();
+            return item.sensorKeys().size();
         break;
     case Qt::CheckStateRole:
         if (index.column() == Description) {
@@ -45,7 +45,7 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const
         if (index.column() == Description)
             return item.getVar("DESCRIPTION");
         if (index.column() == NumberOfSensors)
-            return item.getSensors().size();
+            return item.sensorKeys().size();
         break;
     case Qt::UserRole:
         // Optionally, return additional data here
@@ -184,25 +184,23 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
             return;
         }
 
-        // Retrieve sensors from both sessions
-        const QMap<QString, QMap<QString, QVector<double>>> &existingSensors = existingSession.getSensors();
-        const QMap<QString, QMap<QString, QVector<double>>> &newSensors = newSession.getSensors();
+        // Retrieve sensor names from both sessions
+        QStringList newSensorKeys = newSession.sensorKeys();
 
         // Check for overlapping sensors
         bool noOverlap = true;
-        for (auto sensorIt = newSensors.constBegin(); sensorIt != newSensors.constEnd(); ++sensorIt) {
-            QString sensorName = sensorIt.key();
-            const QMap<QString, QVector<double>> &newMeasurements = sensorIt.value();
+        for (const QString &sensorKey : newSensorKeys) {
+            // Get the new session's measurements for this sensor
+            QStringList newMeasurementKeys = newSession.measurementKeys(sensorKey);
 
-            if (existingSensors.contains(sensorName)) {
-                const QMap<QString, QVector<double>> &existingMeasurements = existingSensors.value(sensorName);
-
-                for (auto measureIt = newMeasurements.constBegin(); measureIt != newMeasurements.constEnd(); ++measureIt) {
-                    QString measurementKey = measureIt.key();
-                    if (existingMeasurements.contains(measurementKey)) {
+            // Check if the existing session has this sensor
+            if (existingSession.hasSensor(sensorKey)) {
+                // Check each measurement to see if it already exists
+                for (const QString &measurementKey : newMeasurementKeys) {
+                    if (existingSession.hasMeasurement(sensorKey, measurementKey)) {
                         // Overlapping sensor/measurement key found
                         noOverlap = false;
-                        qWarning() << "Overlapping sensor/measurement key:" << sensorName << "/" << measurementKey
+                        qWarning() << "Overlapping sensor/measurement key:" << sensorKey << "/" << measurementKey
                                    << "for SESSION_ID:" << newSessionID;
                         break;
                     }
@@ -236,21 +234,13 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
         }
 
         // Merge sensors and measurements
-        for (auto sensorIt = newSensors.constBegin(); sensorIt != newSensors.constEnd(); ++sensorIt) {
-            QString sensorName = sensorIt.key();
-            const QMap<QString, QVector<double>> &newMeasurements = sensorIt.value();
+        for (const QString &sensorName : newSensorKeys) {
+            QStringList newMeasurements = newSession.measurementKeys(sensorName);
 
-            if (!existingSession.getSensors().contains(sensorName)) {
-                // Add the entire sensor if it doesn't exist
-                existingSession.getSensors().insert(sensorName, newMeasurements);
-            } else {
-                // Merge new measurements into existing sensor
-                QMap<QString, QVector<double>> &existingMeasurements = existingSession.getSensors()[sensorName];
-                for (auto measureIt = newMeasurements.constBegin(); measureIt != newMeasurements.constEnd(); ++measureIt) {
-                    QString measurementKey = measureIt.key();
-                    const QVector<double> &data = measureIt.value();
-                    existingMeasurements.insert(measurementKey, data);
-                }
+            // Simply set the measurements, regardless of whether the sensor exists.
+            for (const QString &measurementKey : newMeasurements) {
+                QVector<double> data = newSession.getMeasurement(sensorName, measurementKey);
+                existingSession.setMeasurement(sensorName, measurementKey, data);
             }
         }
 

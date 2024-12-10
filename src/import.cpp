@@ -107,7 +107,7 @@ void DataImporter::importFS1(QTextStream& in, SessionData& sessionData) {
     columnOrder[DefaultSensorId] = columns;
 
     // Initialize the data map in sensors
-    SessionData::SensorData& sensor = sessionData.sensors[DefaultSensorId];
+    SessionData::SensorData& sensor = sessionData.m_sensors[DefaultSensorId];
     for (const QString& colName : columns) {
         sensor[colName]; // Initialize empty QVector<double> for each column
     }
@@ -182,7 +182,7 @@ DataImporter::FS_Section DataImporter::importHeaderRow(
 
                     // Initialize sensor measurements as empty
                     for (const QString &colName : columns) {
-                        sessionData.setSensorMeasurement(sensorName.toString(), colName, {});
+                        sessionData.setMeasurement(sensorName.toString(), colName, {});
                     }
                 }
             } else if (token0 == u"$UNIT") {
@@ -215,7 +215,7 @@ void DataImporter::importDataRow(const QString& line, const QMap<QString, QVecto
         return;
     }
 
-    SessionData::SensorData& sensor = sessionData.sensors[key];
+    SessionData::SensorData& sensor = sessionData.m_sensors[key];
 
     QVector<QStringView> dataFields;
     for (; it != tokenizer.end(); ++it) {

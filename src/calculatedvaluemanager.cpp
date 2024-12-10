@@ -11,9 +11,8 @@ void CalculatedValueManager::registerCalculatedValue(const QString &sensorID, co
 QVector<double> CalculatedValueManager::getMeasurement(SessionData& session, const QString& sensorID, const QString& measurementID)
 {
     // Check if the measurement exists in sensors
-    if (session.getSensors().contains(sensorID) &&
-        session.getSensors().value(sensorID).contains(measurementID)) {
-        return session.getSensors().value(sensorID).value(measurementID);
+    if (session.hasMeasurement(sensorID, measurementID)) {
+        return session.getMeasurement(sensorID, measurementID);
     }
 
     // Check if the calculated value is already present

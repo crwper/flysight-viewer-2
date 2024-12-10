@@ -23,12 +23,33 @@ void SessionData::setVar(const QString& key, const QString& value) {
     m_vars.insert(key, value);
 }
 
-QMap<QString, QMap<QString, QVector<double>>>& SessionData::getSensors() {
-    return sensors;
+QStringList SessionData::sensorKeys() const {
+    return m_sensors.keys();
 }
 
-const QMap<QString, QMap<QString, QVector<double>>>& SessionData::getSensors() const {
-    return sensors;
+bool SessionData::hasSensor(const QString &key) const {
+    return m_sensors.contains(key);
+}
+
+QStringList SessionData::measurementKeys(const QString &sensorKey) const {
+    if (!m_sensors.contains(sensorKey)) return QStringList();
+    return m_sensors.value(sensorKey).keys();
+}
+
+bool SessionData::hasMeasurement(const QString &sensorKey, const QString &measurementKey) const {
+    auto sensorIt = m_sensors.find(sensorKey);
+    if (sensorIt == m_sensors.end()) return false;
+    return sensorIt.value().contains(measurementKey);
+}
+
+QVector<double> SessionData::getMeasurement(const QString &sensorKey, const QString &measurementKey) const {
+    if (!hasMeasurement(sensorKey, measurementKey))
+        return QVector<double>();
+    return m_sensors.value(sensorKey).value(measurementKey);
+}
+
+void SessionData::setMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data) {
+    m_sensors[sensorKey].insert(measurementKey, data);
 }
 
 QMap<QString, QMap<QString, QVector<double>>>& SessionData::getCalculatedValues() {
@@ -37,18 +58,6 @@ QMap<QString, QMap<QString, QVector<double>>>& SessionData::getCalculatedValues(
 
 const QMap<QString, QMap<QString, QVector<double>>>& SessionData::getCalculatedValues() const {
     return calculatedValues;
-}
-
-QMap<QString, QVector<double>>& SessionData::operator[](const QString& sensorName) {
-    return sensors[sensorName];
-}
-
-QMap<QString, QVector<double>> SessionData::operator[](const QString& sensorName) const {
-    return sensors.value(sensorName);
-}
-
-void SessionData::setSensorMeasurement(const QString& sensorName, const QString& measurementKey, const QVector<double>& data) {
-    sensors[sensorName].insert(measurementKey, data);
 }
 
 void SessionData::setCalculatedValue(const QString& sensorID, const QString& measurementID, const QVector<double>& data) {

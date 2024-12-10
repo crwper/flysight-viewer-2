@@ -7,8 +7,6 @@
 
 namespace FlySight {
 
-class FSDataImporter;
-
 class SessionData {
 public:
     // Types
@@ -28,19 +26,20 @@ public:
     void setVar(const QString &key, const QString &value);
 
     // Sensor data getters/setters
-    QMap<QString, SensorData>& getSensors();
-    const QMap<QString, SensorData>& getSensors() const;
+    QStringList sensorKeys() const;
+    bool hasSensor(const QString &key) const;
+
+    // Measurement getters/setters
+    QStringList measurementKeys(const QString &sensorKey) const;
+    bool hasMeasurement(const QString& sensorKey, const QString& measurementKey) const;
+    QVector<double> getMeasurement(const QString& sensorKey, const QString& measurementKey) const;
+    void setMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
 
     // Accessors for calculated values
     QMap<QString, SensorData>& getCalculatedValues();
     const QMap<QString, SensorData>& getCalculatedValues() const;
 
-    // Operator[] to access sensor data
-    SensorData& operator[](const QString& sensorName);
-    SensorData operator[](const QString& sensorName) const;
-
     // Setter methods for encapsulation
-    void setSensorMeasurement(const QString& sensorName, const QString& measurementKey, const QVector<double>& data);
     void setCalculatedValue(const QString& sensorName, const QString& measurementKey, const QVector<double>& data);
 
     // Static constant for default DEVICE_ID
@@ -50,7 +49,7 @@ private:
     // Member variables
     bool m_visible;
     QMap<QString, QString> m_vars;
-    QMap<QString, SensorData> sensors;
+    QMap<QString, SensorData> m_sensors;
     QMap<QString, SensorData> calculatedValues;
 
     // Friend class to allow FSDataImporter to access private members
