@@ -16,9 +16,8 @@ QVector<double> CalculatedValueManager::getMeasurement(SessionData& session, con
     }
 
     // Check if the calculated value is already present
-    if (session.getCalculatedValues().contains(sensorID) &&
-        session.getCalculatedValues().value(sensorID).contains(measurementID)) {
-        return session.getCalculatedValues().value(sensorID).value(measurementID);
+    if (session.hasCalculatedValue(sensorID, measurementID)) {
+        return session.getCalculatedValue(sensorID, measurementID);
     }
 
     // Check if a calculation is registered
@@ -57,13 +56,6 @@ QVector<double> CalculatedValueManager::getMeasurement(SessionData& session, con
     }
 
     return calculatedData;
-}
-
-void CalculatedValueManager::clearCache(SessionData& session)
-{
-    // Clear all calculated values in the session
-    session.getCalculatedValues().clear();
-    qDebug() << "Cleared calculated values cache for session:" << session.getVar("SESSION_ID");
 }
 
 } // namespace FlySight

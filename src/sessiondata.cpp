@@ -52,16 +52,20 @@ void SessionData::setMeasurement(const QString& sensorKey, const QString& measur
     m_sensors[sensorKey].insert(measurementKey, data);
 }
 
-QMap<QString, QMap<QString, QVector<double>>>& SessionData::getCalculatedValues() {
-    return calculatedValues;
+bool SessionData::hasCalculatedValue(const QString &sensorKey, const QString &measurementKey) const {
+    auto calculatedValueIt = m_calculatedValues.find(sensorKey);
+    if (calculatedValueIt == m_calculatedValues.end()) return false;
+    return calculatedValueIt.value().contains(measurementKey);
 }
 
-const QMap<QString, QMap<QString, QVector<double>>>& SessionData::getCalculatedValues() const {
-    return calculatedValues;
+QVector<double> SessionData::getCalculatedValue(const QString &sensorKey, const QString &measurementKey) const {
+    if (!hasCalculatedValue(sensorKey, measurementKey))
+        return QVector<double>();
+    return m_calculatedValues.value(sensorKey).value(measurementKey);
 }
 
-void SessionData::setCalculatedValue(const QString& sensorID, const QString& measurementID, const QVector<double>& data) {
-    calculatedValues[sensorID][measurementID] = data;
+void SessionData::setCalculatedValue(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data) {
+    m_calculatedValues[sensorKey].insert(measurementKey, data);
 }
 
 } // namespace FlySight

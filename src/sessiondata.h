@@ -35,12 +35,10 @@ public:
     QVector<double> getMeasurement(const QString& sensorKey, const QString& measurementKey) const;
     void setMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
 
-    // Accessors for calculated values
-    QMap<QString, SensorData>& getCalculatedValues();
-    const QMap<QString, SensorData>& getCalculatedValues() const;
-
-    // Setter methods for encapsulation
-    void setCalculatedValue(const QString& sensorName, const QString& measurementKey, const QVector<double>& data);
+    // Calculated value getters/setters
+    bool hasCalculatedValue(const QString& sensorKey, const QString& measurementKey) const;
+    QVector<double> getCalculatedValue(const QString& sensorKey, const QString& measurementKey) const;
+    void setCalculatedValue(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
 
     // Static constant for default DEVICE_ID
     static const QString DEFAULT_DEVICE_ID;
@@ -50,7 +48,7 @@ private:
     bool m_visible;
     QMap<QString, QString> m_vars;
     QMap<QString, SensorData> m_sensors;
-    QMap<QString, SensorData> calculatedValues;
+    QMap<QString, SensorData> m_calculatedValues;
 
     // Friend class to allow FSDataImporter to access private members
     friend class DataImporter;

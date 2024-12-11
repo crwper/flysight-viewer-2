@@ -21,9 +21,6 @@ public:
     // Computes it on demand and caches the result in SessionData::calculatedValues
     QVector<double> getMeasurement(SessionData& session, const QString& sensorID, const QString& measurementID);
 
-    // Clears the cache within SessionData (optional)
-    void clearCache(SessionData& session);
-
 private:
     // Map of sensorID -> measurementID -> function
     QMap<QString, QMap<QString, CalculationFunction>> m_calculations;
