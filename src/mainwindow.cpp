@@ -5,8 +5,14 @@
 #include <QHeaderView>
 #include <QStandardItem>
 #include <QTreeView>
+#include <QFileDialog>
+#include <QProgressDialog>
+#include <QMessageBox>
+#include <QDirIterator>
+
 #include "import.h"
 #include "plotwidget.h"
+#include "sessiondata.h"
 
 namespace FlySight {
 
@@ -16,7 +22,6 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
     , model(new SessionModel(this))
     , plotModel (new QStandardItemModel(this))
-    , m_calculatedValueManager(new CalculatedValueManager())
 {
     ui->setupUi(this);
 
@@ -34,7 +39,7 @@ MainWindow::MainWindow(QWidget *parent)
     logbookView->header()->setDefaultSectionSize(100);
 
     // Add plot widget
-    PlotWidget *plotWidget = new PlotWidget(model, plotModel, m_calculatedValueManager, this);
+    PlotWidget *plotWidget = new PlotWidget(model, plotModel, this);
     setCentralWidget(plotWidget);
 
     // Setup plot values
@@ -85,7 +90,7 @@ void MainWindow::on_actionImportFolder_triggered()
 
     // Define file filters (adjust according to your file types)
     QStringList nameFilters;
-    nameFilters << "*.csv" << "*.CSV"; // Example: CSV files
+    nameFilters << "*.csv" << "*.CSV";
 
     // Use QDirIterator to iterate through the folder and its subdirectories
     QDirIterator it(folderPath, nameFilters, QDir::Files, QDirIterator::Subdirectories);
@@ -110,7 +115,6 @@ void MainWindow::on_actionImportFolder_triggered()
     m_settings->setValue("folder", folderPath);
 }
 
-// Helper Function Implementation
 void MainWindow::importFiles(
     const QStringList &fileNames,
     bool showProgress
@@ -248,7 +252,7 @@ void MainWindow::setupPlotValues()
         {"Barometer", "Temperature", "°C", QColor::fromHsv(180, 255, 255, 128), "BARO", "temperature"},
 
         // Category: Humidity
-        {"Humidity", "Humidity", "%%", QColor::fromHsv(0, 0, 128, 255), "HUM", "humidity"},
+        {"Humidity", "Humidity", "%", QColor::fromHsv(0, 0, 128, 255), "HUM", "humidity"},
         {"Humidity", "Temperature", "°C", QColor::fromHsv(270, 255, 255, 128), "HUM", "temperature"},
 
         // Category: Battery
@@ -315,9 +319,9 @@ void MainWindow::populatePlotModel(
 
 void MainWindow::initializeCalculatedValues()
 {
-    m_calculatedValueManager->registerCalculatedValue("GNSS", "velH", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
-        QVector<double> velN = calcManager.getMeasurement(session, "GNSS", "velN");
-        QVector<double> velE = calcManager.getMeasurement(session, "GNSS", "velE");
+    SessionData::registerCalculatedValue("GNSS", "velH", [](SessionData& session) -> QVector<double> {
+        QVector<double> velN = session.getMeasurement("GNSS", "velN");
+        QVector<double> velE = session.getMeasurement("GNSS", "velE");
 
         if (velN.isEmpty() || velE.isEmpty()) {
             qWarning() << "Cannot calculate total_speed due to missing velN or velE";
@@ -337,9 +341,9 @@ void MainWindow::initializeCalculatedValues()
         return velH;
     });
 
-    m_calculatedValueManager->registerCalculatedValue("GNSS", "vel", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
-        QVector<double> velH = calcManager.getMeasurement(session, "GNSS", "velH");
-        QVector<double> velD = calcManager.getMeasurement(session, "GNSS", "velD");
+    SessionData::registerCalculatedValue("GNSS", "vel", [](SessionData& session) -> QVector<double> {
+        QVector<double> velH = session.getMeasurement("GNSS", "velH");
+        QVector<double> velD = session.getMeasurement("GNSS", "velD");
 
         if (velH.isEmpty() || velD.isEmpty()) {
             qWarning() << "Cannot calculate total_speed due to missing velH or velD";
@@ -359,10 +363,10 @@ void MainWindow::initializeCalculatedValues()
         return vel;
     });
 
-    m_calculatedValueManager->registerCalculatedValue("IMU", "aTotal", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
-        QVector<double> ax = calcManager.getMeasurement(session, "IMU", "ax");
-        QVector<double> ay = calcManager.getMeasurement(session, "IMU", "ay");
-        QVector<double> az = calcManager.getMeasurement(session, "IMU", "az");
+    SessionData::registerCalculatedValue("IMU", "aTotal", [](SessionData& session) -> QVector<double> {
+        QVector<double> ax = session.getMeasurement("IMU", "ax");
+        QVector<double> ay = session.getMeasurement("IMU", "ay");
+        QVector<double> az = session.getMeasurement("IMU", "az");
 
         if (ax.isEmpty() || ay.isEmpty() || az.isEmpty()) {
             qWarning() << "Cannot calculate aTotal due to missing ax, ay, or az";
@@ -382,10 +386,10 @@ void MainWindow::initializeCalculatedValues()
         return aTotal;
     });
 
-    m_calculatedValueManager->registerCalculatedValue("IMU", "wTotal", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
-        QVector<double> wx = calcManager.getMeasurement(session, "IMU", "wx");
-        QVector<double> wy = calcManager.getMeasurement(session, "IMU", "wy");
-        QVector<double> wz = calcManager.getMeasurement(session, "IMU", "wz");
+    SessionData::registerCalculatedValue("IMU", "wTotal", [](SessionData& session) -> QVector<double> {
+        QVector<double> wx = session.getMeasurement("IMU", "wx");
+        QVector<double> wy = session.getMeasurement("IMU", "wy");
+        QVector<double> wz = session.getMeasurement("IMU", "wz");
 
         if (wx.isEmpty() || wy.isEmpty() || wz.isEmpty()) {
             qWarning() << "Cannot calculate wTotal due to missing wx, wy, or wz";
@@ -405,10 +409,10 @@ void MainWindow::initializeCalculatedValues()
         return wTotal;
     });
 
-    m_calculatedValueManager->registerCalculatedValue("MAG", "total", [](SessionData& session, CalculatedValueManager& calcManager) -> QVector<double> {
-        QVector<double> x = calcManager.getMeasurement(session, "MAG", "x");
-        QVector<double> y = calcManager.getMeasurement(session, "MAG", "y");
-        QVector<double> z = calcManager.getMeasurement(session, "MAG", "z");
+    SessionData::registerCalculatedValue("MAG", "total", [](SessionData& session) -> QVector<double> {
+        QVector<double> x = session.getMeasurement("MAG", "x");
+        QVector<double> y = session.getMeasurement("MAG", "y");
+        QVector<double> z = session.getMeasurement("MAG", "z");
 
         if (x.isEmpty() || y.isEmpty() || z.isEmpty()) {
             qWarning() << "Cannot calculate total due to missing x, y, or z";

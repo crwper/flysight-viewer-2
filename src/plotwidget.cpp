@@ -3,13 +3,11 @@
 
 namespace FlySight {
 
-PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel,
-                       CalculatedValueManager* calcManager, QWidget *parent)
+PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidget *parent)
     : QWidget(parent)
     , customPlot(new QCustomPlot(this))
     , model(model)
     , plotModel(plotModel)
-    , m_calculatedValueManager(calcManager)
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(customPlot);
@@ -84,26 +82,24 @@ void PlotWidget::updatePlot()
                         continue;
                     }
 
-                    QString sessionID = session.getVar(SessionKeys::SessionId);
-
-                    // Get yData using CalculatedValueManager
-                    QVector<double> yData = m_calculatedValueManager->getMeasurement(const_cast<SessionData&>(session), sensorID, measurementID);
+                    // Get yData directly from session
+                    QVector<double> yData = const_cast<SessionData&>(session).getMeasurement(sensorID, measurementID);
 
                     if(yData.isEmpty()){
-                        qWarning() << "No data available for plot:" << plotName << "in session:" << sessionID;
+                        qWarning() << "No data available for plot:" << plotName << "in session:" << session.getVar(SessionKeys::SessionId);
                         continue;
                     }
 
                     // Assume there is a "time" measurement for x-axis
-                    QVector<double> xData = m_calculatedValueManager->getMeasurement(const_cast<SessionData&>(session), sensorID, "time");
+                    QVector<double> xData = const_cast<SessionData&>(session).getMeasurement(sensorID, "time");
 
                     if(xData.isEmpty()){
-                        qWarning() << "No 'time' data available for session:" << sessionID;
+                        qWarning() << "No 'time' data available for session:" << session.getVar(SessionKeys::SessionId);
                         continue;
                     }
 
                     if(xData.size() != yData.size()){
-                        qWarning() << "Time and measurement data size mismatch for session:" << sessionID;
+                        qWarning() << "Time and measurement data size mismatch for session:" << session.getVar(SessionKeys::SessionId);
                         continue;
                     }
 
@@ -123,7 +119,7 @@ void PlotWidget::updatePlot()
                     // Add to the list of plotted graphs
                     m_plottedGraphs.append(graph);
 
-                    qDebug() << "Plotted session:" << sessionID << "on plot:" << plotName;
+                    qDebug() << "Plotted session:" << session.getVar(SessionKeys::SessionId) << "on plot:" << plotName;
                 }
             }
         }

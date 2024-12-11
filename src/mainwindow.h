@@ -5,7 +5,6 @@
 #include <QSettings>
 #include <QStandardItemModel>
 #include <QTreeView>
-#include "calculatedvaluemanager.h"
 #include "sessionmodel.h"
 
 QT_BEGIN_NAMESPACE
@@ -59,9 +58,6 @@ private:
     QDockWidget *plotDock;
     QTreeView *plotTreeView;
     QStandardItemModel *plotModel;
-
-    // Calculated Value Manager
-    CalculatedValueManager *m_calculatedValueManager;
 
     // Helper functions for plot values
     void setupPlotValues();
