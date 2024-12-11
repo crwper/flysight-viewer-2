@@ -4,8 +4,14 @@
 
 namespace FlySight {
 
-// Initialize the static constants
-const QString SessionData::DEFAULT_DEVICE_ID = "_";
+// Accessors for visibility
+bool SessionData::isVisible() const {
+    return m_vars.value(SessionKeys::Visible, "true") == "true";
+}
+
+void SessionData::setVisible(bool visible) {
+    m_vars.insert(SessionKeys::Visible, visible ? "true" : "false");
+}
 
 QStringList SessionData::varKeys() const {
     return m_vars.keys();

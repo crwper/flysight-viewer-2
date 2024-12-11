@@ -325,7 +325,7 @@ void MainWindow::initializeCalculatedValues()
         }
 
         if (velN.size() != velE.size()) {
-            qWarning() << "velN and velE size mismatch in session:" << session.getVar("SESSION_ID");
+            qWarning() << "velN and velE size mismatch in session:" << session.getVar(SessionKeys::SessionId);
             return QVector<double>();
         }
 
@@ -347,7 +347,7 @@ void MainWindow::initializeCalculatedValues()
         }
 
         if (velH.size() != velD.size()) {
-            qWarning() << "velH and velD size mismatch in session:" << session.getVar("SESSION_ID");
+            qWarning() << "velH and velD size mismatch in session:" << session.getVar(SessionKeys::SessionId);
             return QVector<double>();
         }
 
@@ -370,7 +370,7 @@ void MainWindow::initializeCalculatedValues()
         }
 
         if ((ax.size() != ay.size()) || (ax.size() != az.size())) {
-            qWarning() << "az, ay, or az size mismatch in session:" << session.getVar("SESSION_ID");
+            qWarning() << "az, ay, or az size mismatch in session:" << session.getVar(SessionKeys::SessionId);
             return QVector<double>();
         }
 
@@ -393,7 +393,7 @@ void MainWindow::initializeCalculatedValues()
         }
 
         if ((wx.size() != wy.size()) || (wx.size() != wz.size())) {
-            qWarning() << "wz, wy, or wz size mismatch in session:" << session.getVar("SESSION_ID");
+            qWarning() << "wz, wy, or wz size mismatch in session:" << session.getVar(SessionKeys::SessionId);
             return QVector<double>();
         }
 
@@ -416,7 +416,7 @@ void MainWindow::initializeCalculatedValues()
         }
 
         if ((x.size() != y.size()) || (x.size() != z.size())) {
-            qWarning() << "x, y, or z size mismatch in session:" << session.getVar("SESSION_ID");
+            qWarning() << "x, y, or z size mismatch in session:" << session.getVar(SessionKeys::SessionId);
             return QVector<double>();
         }
 

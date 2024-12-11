@@ -84,7 +84,7 @@ void PlotWidget::updatePlot()
                         continue;
                     }
 
-                    QString sessionID = session.getVar("SESSION_ID");
+                    QString sessionID = session.getVar(SessionKeys::SessionId);
 
                     // Get yData using CalculatedValueManager
                     QVector<double> yData = m_calculatedValueManager->getMeasurement(const_cast<SessionData&>(session), sensorID, measurementID);

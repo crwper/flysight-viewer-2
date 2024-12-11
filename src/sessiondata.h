@@ -7,6 +7,13 @@
 
 namespace FlySight {
 
+namespace SessionKeys {
+constexpr char DeviceId[] = "DEVICE_ID";
+constexpr char SessionId[] = "SESSION_ID";
+constexpr char Visible[] = "_VISIBLE";
+constexpr char Description[] = "_DESCRIPTION";
+}
+
 class SessionData {
 public:
     // Types
@@ -16,8 +23,8 @@ public:
     SessionData() = default;
 
     // Accessors for visibility
-    bool isVisible() const { return m_visible; }
-    void setVisible(bool visible) { m_visible = visible; }
+    bool isVisible() const;
+    void setVisible(bool visible);
 
     // Var getters/setters
     QStringList varKeys() const;
@@ -40,12 +47,8 @@ public:
     QVector<double> getCalculatedValue(const QString& sensorKey, const QString& measurementKey) const;
     void setCalculatedValue(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
 
-    // Static constant for default DEVICE_ID
-    static const QString DEFAULT_DEVICE_ID;
-
 private:
     // Member variables
-    bool m_visible;
     QMap<QString, QString> m_vars;
     QMap<QString, SensorData> m_sensors;
     QMap<QString, SensorData> m_calculatedValues;
