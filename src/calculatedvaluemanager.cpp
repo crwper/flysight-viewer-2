@@ -8,47 +8,39 @@ void CalculatedValueManager::registerCalculatedValue(const QString &sensorID, co
     m_calculations[sensorID][measurementID] = func;
 }
 
-QVector<double> CalculatedValueManager::getMeasurement(SessionData& session, const QString& sensorID, const QString& measurementID)
+QVector<double> CalculatedValueManager::getMeasurement(SessionData &session, const QString &sensorID, const QString &measurementID)
 {
-    // Check if the measurement exists in sensors
+    // If the measurement is already available (raw or calculated), return it
     if (session.hasMeasurement(sensorID, measurementID)) {
         return session.getMeasurement(sensorID, measurementID);
     }
 
-    // Check if the calculated value is already present
-    if (session.hasCalculatedValue(sensorID, measurementID)) {
-        return session.getCalculatedValue(sensorID, measurementID);
-    }
-
     // Check if a calculation is registered
-    if (!m_calculations.contains(sensorID) ||
-        !m_calculations[sensorID].contains(measurementID)) {
+    if (!m_calculations.contains(sensorID) || !m_calculations[sensorID].contains(measurementID)) {
         qWarning() << "Calculated value not registered for" << sensorID << "/" << measurementID;
         return QVector<double>();
     }
 
-    // Create a unique key for cycle detection
-    QString key = sensorID + "/" + measurementID;
+    CalculationKey key{sensorID, measurementID};
 
     // Check for circular dependency
     if (m_activeCalculations.contains(key)) {
-        qWarning() << "Circular dependency detected while calculating" << key;
+        qWarning() << "Circular dependency detected while calculating" << sensorID << "/" << measurementID;
         return QVector<double>();
     }
 
-    // Mark this calculation as active
-    m_activeCalculations.insert(key);
+    // Mark active
+    m_activeCalculations.insert(key, true);
 
     // Perform the calculation
     CalculationFunction func = m_calculations[sensorID][measurementID];
     QVector<double> calculatedData = func(session, *this);
 
-    // Unmark this calculation
+    // Unmark
     m_activeCalculations.remove(key);
 
-    // Check if calculation was successful
+    // Cache the result if not empty
     if (!calculatedData.isEmpty()) {
-        // Cache the result
         session.setCalculatedValue(sensorID, measurementID, calculatedData);
         qDebug() << "Calculated and cached value for" << sensorID << "/" << measurementID;
     } else {
