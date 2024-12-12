@@ -16,7 +16,8 @@ public:
     PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidget *parent = nullptr);
 
 public slots:
-    void updatePlot(); // Updated to remove parameters
+    void updatePlot();
+    void onXAxisRangeChanged(const QCPRange &newRange);
 
 private:
     QCustomPlot *customPlot;
@@ -29,7 +30,13 @@ private:
     // Map to associate plot values with their corresponding y-axes
     QMap<QString, QCPAxis*> m_plotValueAxes;
 
+    // Flag to prevent recursion
+    bool m_updatingYAxis = false;
+
     void setupPlot();
+
+    // Helper function to interpolate Y at a given X
+    static double interpolateY(const QCPGraph* graph, double x);
 };
 
 } // namespace FlySight

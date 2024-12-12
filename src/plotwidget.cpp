@@ -1,6 +1,8 @@
 #include "plotwidget.h"
 #include "mainwindow.h"
 
+#include <algorithm>
+
 namespace FlySight {
 
 PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidget *parent)
@@ -19,6 +21,14 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
     // Connect to model changes
     connect(model, &SessionModel::modelChanged, this, &PlotWidget::updatePlot);
     connect(plotModel, &QStandardItemModel::modelReset, this, &PlotWidget::updatePlot);
+
+    // Connect xAxis range changes to the new slot
+    connect(
+        customPlot->xAxis,
+        QOverload<const QCPRange &>::of(&QCPAxis::rangeChanged),
+        this,
+        &PlotWidget::onXAxisRangeChanged
+        );
 }
 
 void PlotWidget::updatePlot()
@@ -135,6 +145,89 @@ void PlotWidget::updatePlot()
 
     // Replot to display the updated graph
     customPlot->replot();
+}
+
+void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
+{
+    if (m_updatingYAxis)
+        return; // Prevent recursion
+
+    m_updatingYAxis = true;
+
+    for(auto it = m_plotValueAxes.constBegin(); it != m_plotValueAxes.constEnd(); ++it){
+        QCPAxis* yAxis = it.value();
+
+        double yMin = std::numeric_limits<double>::max();
+        double yMax = std::numeric_limits<double>::lowest();
+
+        // Iterate through all graphs and find those assigned to this yAxis
+        for(int i = 0; i < customPlot->graphCount(); ++i){
+            QCPGraph* graph = customPlot->graph(i);
+
+            if(graph->valueAxis() != yAxis){
+                continue;
+            }
+
+            // Efficiently find data within the new x range
+            QCPDataContainer<QCPGraphData>::const_iterator itLower = graph->data()->findBegin(newRange.lower, false);
+            QCPDataContainer<QCPGraphData>::const_iterator itUpper = graph->data()->findEnd(newRange.upper, false);
+
+            for(auto it = itLower; it != itUpper; ++it){
+                double y = it->value;
+                yMin = std::min(yMin, y);
+                yMax = std::max(yMax, y);
+            }
+
+            // Interpolate at newRange.lower
+            double yLower = interpolateY(graph, newRange.lower);
+            if (!std::isnan(yLower)) {
+                yMin = std::min(yMin, yLower);
+                yMax = std::max(yMax, yLower);
+            }
+
+            // Interpolate at newRange.upper
+            double yUpper = interpolateY(graph, newRange.upper);
+            if (!std::isnan(yUpper)) {
+                yMin = std::min(yMin, yUpper);
+                yMax = std::max(yMax, yUpper);
+            }
+        }
+
+        if(yMin < yMax){
+            // Add 5% padding to the y-axis range for better visualization
+            double padding = (yMax - yMin) * 0.05;
+            if(padding == 0){
+                padding = 1.0; // Fallback padding
+            }
+
+            yAxis->setRange(yMin - padding, yMax + padding);
+        }
+    }
+
+    customPlot->replot();
+
+    m_updatingYAxis = false;
+}
+
+double PlotWidget::interpolateY(const QCPGraph* graph, double x) {
+    auto itLower = graph->data()->findBegin(x, false);
+    if (itLower == graph->data()->constBegin() || itLower == graph->data()->constEnd()) {
+        return std::numeric_limits<double>::quiet_NaN(); // Cannot interpolate
+    }
+
+    auto itPrev = itLower;
+    --itPrev;
+
+    double x1 = itPrev->key;
+    double y1 = itPrev->value;
+    double x2 = itLower->key;
+    double y2 = itLower->value;
+
+    if (x2 == x1) {
+        return std::numeric_limits<double>::quiet_NaN(); // Avoid division by zero
+    }
+
+    return y1 + (y2 - y1) * (x - x1) / (x2 - x1);
 }
 
 void PlotWidget::setupPlot()
