@@ -213,7 +213,8 @@ void MainWindow::setupPlotValues()
 
     // Attach the model
     plotTreeView->setModel(plotModel);
-    plotTreeView->setHeaderHidden(true); // Hide the header
+    plotTreeView->setHeaderHidden(true);
+    plotTreeView->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
     // Angular spread for grouped colours
     const int group_a = 40;
@@ -273,12 +274,21 @@ void MainWindow::setupPlotValues()
     // Populate the model with plot values and track the first checked item
     populatePlotModel(plotModel, plotValues);
 
-    // Connect to itemChanged signal to handle plot selection
-    connect(plotModel, &QStandardItemModel::itemChanged, this, [=](QStandardItem *item){
-        if (item->isCheckable()) {
-            // Emit the modelChanged signal to trigger plot updates
-            emit model->modelChanged();
-        }
+    // Connect to clicked signal to handle plot selection
+    connect(plotTreeView, &QTreeView::clicked, this, [this](const QModelIndex &index) {
+        if (!index.isValid())
+            return;
+        // Check if item is checkable
+        QVariant checkStateVar = plotModel->data(index, Qt::CheckStateRole);
+        if (!checkStateVar.isValid())
+            return;
+
+        Qt::CheckState state = static_cast<Qt::CheckState>(checkStateVar.toInt());
+        Qt::CheckState newState = (state == Qt::Checked) ? Qt::Unchecked : Qt::Checked;
+        plotModel->setData(index, newState, Qt::CheckStateRole);
+
+        // Update views
+        emit model->modelChanged();
     });
 
     // Emit the initial plot based on the checked items
@@ -310,6 +320,9 @@ void MainWindow::populatePlotModel(
         QStandardItem* plotItem = new QStandardItem(pv.plotName);
         plotItem->setCheckable(true); // Make the plot checkable
         plotItem->setCheckState(Qt::Unchecked);
+
+        plotItem->setFlags(plotItem->flags() & ~Qt::ItemIsEditable);
+        plotItem->setFlags(plotItem->flags() & ~Qt::ItemIsUserCheckable);
 
         // Store data in the item
         plotItem->setData(pv.defaultColor, DefaultColorRole);
