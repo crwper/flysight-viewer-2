@@ -14,6 +14,9 @@ constexpr char DeviceId[] = "DEVICE_ID";
 constexpr char SessionId[] = "SESSION_ID";
 constexpr char Visible[] = "_VISIBLE";
 constexpr char Description[] = "_DESCRIPTION";
+constexpr char Time[] = "_time";
+constexpr char TimeFitA[] = "_TIME_FIT_A";
+constexpr char TimeFitB[] = "_TIME_FIT_B";
 }
 
 class SessionData {

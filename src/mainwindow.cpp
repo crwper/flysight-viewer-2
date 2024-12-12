@@ -437,7 +437,96 @@ void MainWindow::initializeCalculatedValues()
         return total;
     });
 
-    // You can register more calculated values here following the same pattern
+    // Helper lambda to compute _time for non-GNSS sensors
+    auto compute_time = [](SessionData &session, const QString &sensorID) -> QVector<double> {
+        // If GNSS, just return the GNSS time (already UTC)
+        if (sensorID == "GNSS") {
+            return session.getMeasurement("GNSS", "time");
+        }
+
+        // For non-GNSS sensors, we need TIME sensor data and a linear fit
+        bool haveFit = session.hasVar(SessionKeys::TimeFitA) && session.hasVar(SessionKeys::TimeFitB);
+        double a = 0.0, b = 0.0;
+        if (!haveFit) {
+            // Attempt to compute the fit
+            if (!session.hasSensor("TIME") ||
+                !session.hasMeasurement("TIME", "time") ||
+                !session.hasMeasurement("TIME", "tow") ||
+                !session.hasMeasurement("TIME", "week")) {
+                // TIME sensor not available or incomplete data
+                return {};
+            }
+
+            QVector<double> systemTime = session.getMeasurement("TIME", "time");
+            QVector<double> tow = session.getMeasurement("TIME", "tow");
+            QVector<double> week = session.getMeasurement("TIME", "week");
+
+            int N = std::min({systemTime.size(), tow.size(), week.size()});
+            if (N < 2) {
+                // Not enough points for a linear fit
+                return {};
+            }
+
+            // Compute UTC time
+            QVector<double> utcTime(N);
+            for (int i = 0; i < N; ++i) {
+                utcTime[i] = week[i] * 604800 + tow[i] + 315964800;
+            }
+
+            // Perform a linear fit: utcTime = a*systemTime + b
+            double sumS = 0.0, sumU = 0.0, sumSS = 0.0, sumSU = 0.0;
+            for (int i = 0; i < N; ++i) {
+                double S = systemTime[i];
+                double U = utcTime[i];
+                sumS += S;
+                sumU += U;
+                sumSS += S * S;
+                sumSU += S * U;
+            }
+
+            double denom = (N * sumSS - sumS * sumS);
+            if (denom == 0.0) {
+                // Degenerate fit
+                return {};
+            }
+
+            a = (N * sumSU - sumS * sumU) / denom;
+            b = (sumU - a * sumS) / N;
+
+            // Store fit parameters
+            session.setVar(SessionKeys::TimeFitA, QString::number(a, 'g', 17));
+            session.setVar(SessionKeys::TimeFitB, QString::number(b, 'g', 17));
+        } else {
+            // Already computed fit
+            a = session.getVar(SessionKeys::TimeFitA).toDouble();
+            b = session.getVar(SessionKeys::TimeFitB).toDouble();
+        }
+
+        // Now convert the sensor's 'time' measurement using the linear fit
+        if (!session.hasMeasurement(sensorID, "time")) {
+            return {};
+        }
+
+        QVector<double> sensorSystemTime = session.getMeasurement(sensorID, "time");
+        QVector<double> result(sensorSystemTime.size());
+        for (int i = 0; i < sensorSystemTime.size(); ++i) {
+            result[i] = a * sensorSystemTime[i] + b;
+        }
+        return result;
+    };
+
+    // Register for GNSS
+    SessionData::registerCalculatedValue("GNSS", SessionKeys::Time, [](SessionData &s) {
+        return s.getMeasurement("GNSS", "time");
+    });
+
+    // Register for other sensors
+    QStringList sensors = {"BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
+    for (const QString &sens : sensors) {
+        SessionData::registerCalculatedValue(sens, SessionKeys::Time, [compute_time, sens](SessionData &s) {
+            return compute_time(s, sens);
+        });
+    }
 }
 
 } // namespace FlySight
