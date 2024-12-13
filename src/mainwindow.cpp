@@ -78,17 +78,33 @@ void MainWindow::on_action_Import_triggered()
 
 void MainWindow::on_actionImportFolder_triggered()
 {
-    // Prompt the user to select a folder
-    QString folderPath = QFileDialog::getExistingDirectory(
-        this,
-        tr("Select Folder to Import"),
-        m_settings->value("folder").toString(),
-        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
-        );
+    // Open the file dialog
+    QFileDialog dialog(this, tr("Select Folder to Import"));
+    dialog.setFileMode(QFileDialog::Directory);
+    dialog.setDirectory(m_settings->value("folder").toString());
 
-    // If the user cancels the dialog, exit the function
-    if (folderPath.isEmpty()) {
+    // Show dialog and get the selected directory
+    if (dialog.exec() != QDialog::Accepted) {
         return;
+    }
+
+    // The path returned
+    QString selectedDir;
+    const QList<QString> selectedFiles = dialog.selectedFiles();
+    if (!selectedFiles.isEmpty()) {
+        selectedDir = selectedFiles.first();
+    }
+
+    // Directory the user navigated to
+    QString enteredDir = dialog.directory().absolutePath();
+
+    // Store the appropriate directory based on user interaction
+    if (selectedDir != enteredDir) {
+        // User selected a specific folder
+        m_settings->setValue("folder", QFileInfo(selectedDir).absolutePath());
+    } else {
+        // User just confirmed the navigated directory
+        m_settings->setValue("folder", enteredDir);
     }
 
     // Define file filters (adjust according to your file types)
@@ -96,7 +112,7 @@ void MainWindow::on_actionImportFolder_triggered()
     nameFilters << "*.csv" << "*.CSV";
 
     // Use QDirIterator to iterate through the folder and its subdirectories
-    QDirIterator it(folderPath, nameFilters, QDir::Files, QDirIterator::Subdirectories);
+    QDirIterator it(selectedDir, nameFilters, QDir::Files, QDirIterator::Subdirectories);
 
     // Collect all files to import
     QStringList filesToImport;
@@ -113,9 +129,6 @@ void MainWindow::on_actionImportFolder_triggered()
 
     // Call the helper function with showing progress
     importFiles(filesToImport, filesToImport.size() > 5);
-
-    // Update last used folder
-    m_settings->setValue("folder", folderPath);
 }
 
 void MainWindow::importFiles(
