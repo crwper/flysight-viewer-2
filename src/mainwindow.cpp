@@ -112,7 +112,7 @@ void MainWindow::on_actionImportFolder_triggered()
     }
 
     // Call the helper function with showing progress
-    importFiles(filesToImport, true);
+    importFiles(filesToImport, filesToImport.size() > 5);
 
     // Update last used folder
     m_settings->setValue("folder", folderPath);
@@ -213,7 +213,7 @@ void MainWindow::importFiles(
     }
 
     // Display completion message
-    if (failedImports.size() > 10) {
+    if (failedImports.size() > 5) {
         QString message = tr("Import has been completed.");
         message += tr("\nHowever, %1 files failed to import.").arg(failedImports.size());
         QMessageBox::warning(this, tr("Import Completed with Some Failures"), message);
