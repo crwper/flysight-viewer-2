@@ -18,6 +18,7 @@ public:
 public slots:
     void updatePlot();
     void onXAxisRangeChanged(const QCPRange &newRange);
+    void setXAxisRange(double min, double max);
 
 private:
     QCustomPlot *customPlot;

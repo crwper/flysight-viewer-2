@@ -32,6 +32,7 @@ public:
 
 signals:
     void plotValueSelected(const QModelIndex &selectedIndex);
+    void newTimeRange(double min, double max);
 
 private slots:
     void on_action_Import_triggered();

@@ -135,16 +135,8 @@ void PlotWidget::updatePlot()
         }
     }
 
-    // Rescale each y-axis to fit its data
-    for(auto it = m_plotValueAxes.constBegin(); it != m_plotValueAxes.constEnd(); ++it){
-        it.value()->rescale();
-    }
-
-    // Rescale x-axis based on all data
-    customPlot->xAxis->rescale();
-
     // Replot to display the updated graph
-    customPlot->replot();
+    onXAxisRangeChanged(customPlot->xAxis->range());
 }
 
 void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
@@ -228,6 +220,12 @@ double PlotWidget::interpolateY(const QCPGraph* graph, double x) {
     }
 
     return y1 + (y2 - y1) * (x - x1) / (x2 - x1);
+}
+
+void PlotWidget::setXAxisRange(double min, double max)
+{
+    // Directly set the x-axis range
+    customPlot->xAxis->setRange(min, max);
 }
 
 void PlotWidget::setupPlot()

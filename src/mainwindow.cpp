@@ -42,6 +42,9 @@ MainWindow::MainWindow(QWidget *parent)
     PlotWidget *plotWidget = new PlotWidget(model, plotModel, this);
     setCentralWidget(plotWidget);
 
+    // Connect the newTimeRange signal to PlotWidget's setXAxisRange slot
+    connect(this, &MainWindow::newTimeRange, plotWidget, &PlotWidget::setXAxisRange);
+
     // Setup plot values
     setupPlotValues();
 }
@@ -127,6 +130,10 @@ void MainWindow::importFiles(
     // Initialize a map to collect failed imports with error messages
     QMap<QString, QString> failedImports;
 
+    // Variables to track the overall min and max time from newly imported files
+    double newMinTime = std::numeric_limits<double>::max();
+    double newMaxTime = std::numeric_limits<double>::lowest();
+
     if (showProgress) {
         // Show progress dialog
         QProgressDialog progressDialog(tr("Importing files..."), tr("Cancel"), 0, fileNames.size(), this);
@@ -148,6 +155,17 @@ void MainWindow::importFiles(
             if (importer.importFile(filePath, tempSessionData)) {
                 // Merge tempSessionData into model
                 model->mergeSessionData(tempSessionData);
+
+                // Collect min and max time from tempSessionData
+                for (const QString &sensorKey : tempSessionData.sensorKeys()) {
+                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, SessionKeys::Time);
+                    if (!times.isEmpty()) {
+                        double minTime = *std::min_element(times.begin(), times.end());
+                        double maxTime = *std::max_element(times.begin(), times.end());
+                        newMinTime = std::min(newMinTime, minTime);
+                        newMaxTime = std::max(newMaxTime, maxTime);
+                    }
+                }
             } else {
                 // Failed import with an error message
                 QString errorMessage = importer.getLastError();
@@ -169,6 +187,17 @@ void MainWindow::importFiles(
             if (importer.importFile(filePath, tempSessionData)) {
                 // Merge tempSessionData into model
                 model->mergeSessionData(tempSessionData);
+
+                // Collect min and max time from tempSessionData
+                for (const QString &sensorKey : tempSessionData.sensorKeys()) {
+                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, SessionKeys::Time);
+                    if (!times.isEmpty()) {
+                        double minTime = *std::min_element(times.begin(), times.end());
+                        double maxTime = *std::max_element(times.begin(), times.end());
+                        newMinTime = std::min(newMinTime, minTime);
+                        newMaxTime = std::max(newMaxTime, maxTime);
+                    }
+                }
             } else {
                 // Failed import with an error message
                 QString errorMessage = importer.getLastError();
@@ -176,6 +205,11 @@ void MainWindow::importFiles(
                 failedImports.insert(filePath, errorMessage);
             }
         }
+    }
+
+    // Emit the new time range if valid
+    if (newMinTime != std::numeric_limits<double>::max() && newMaxTime != std::numeric_limits<double>::lowest()) {
+        emit newTimeRange(newMinTime, newMaxTime);
     }
 
     // Display completion message
