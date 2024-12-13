@@ -70,7 +70,11 @@ void PlotWidget::updatePlot()
                     QCPAxis *newYAxis = customPlot->axisRect()->addAxis(QCPAxis::atLeft);
 
                     // Set axis label
-                    newYAxis->setLabel(plotName + " (" + plotUnits + ")");
+                    if (!plotUnits.isEmpty()) {
+                        newYAxis->setLabel(plotName + " (" + plotUnits + ")");
+                    } else {
+                        newYAxis->setLabel(plotName);
+                    }
 
                     // Set axis color
                     newYAxis->setLabelColor(color);
