@@ -33,3 +33,7 @@ build*/
 
 # Header file with keys
 secrets.h
+
+# PowerShell script
+/combine.ps1
+/combined.txt
