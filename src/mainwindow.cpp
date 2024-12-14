@@ -2,7 +2,6 @@
 #include "./ui_mainwindow.h"
 
 #include <QDockWidget>
-#include <QHeaderView>
 #include <QStandardItem>
 #include <QTreeView>
 #include <QFileDialog>
@@ -23,7 +22,6 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
     , model(new SessionModel(this))
     , plotModel (new QStandardItemModel(this))
-    , logbookView(new QTreeView(this))
 {
     ui->setupUi(this);
 
@@ -32,16 +30,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Add logbook view
     QDockWidget *logbookDock = new QDockWidget(tr("Logbook"), this);
+    logbookView = new LogbookView(model, this);
     logbookDock->setWidget(logbookView);
     addDockWidget(Qt::RightDockWidgetArea, logbookDock);
-
-    logbookView->setModel(model);
-    logbookView->setRootIsDecorated(false);
-    logbookView->header()->setDefaultSectionSize(100);
-    logbookView->setMouseTracking(true); // Enable mouse tracking
-
-    // Install event filter to detect hover events on logbookView
-    logbookView->viewport()->installEventFilter(this);
 
     // Add plot widget
     PlotWidget *plotWidget = new PlotWidget(model, plotModel, this);
@@ -57,34 +48,6 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow()
 {
     delete ui;
-}
-
-bool MainWindow::eventFilter(QObject *obj, QEvent *event)
-{
-    if (obj == logbookView->viewport()) {
-        if (event->type() == QEvent::MouseMove) {
-            QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
-            QPoint pos = mouseEvent->pos();
-            QModelIndex index = logbookView->indexAt(pos);
-            if (index.isValid()) {
-                QString sessionId = model->getAllSessions().at(index.row()).getVar(SessionKeys::SessionId);
-                if (model->hoveredSessionId() != sessionId) {
-                    model->setHoveredSessionId(sessionId);
-                }
-            } else {
-                if (!model->hoveredSessionId().isEmpty()) {
-                    model->setHoveredSessionId(QString());
-                }
-            }
-        } else if (event->type() == QEvent::Leave) {
-            if (!model->hoveredSessionId().isEmpty()) {
-                model->setHoveredSessionId(QString());
-            }
-        }
-    }
-
-    // Allow the base class to process other events
-    return QMainWindow::eventFilter(obj, event);
 }
 
 void MainWindow::on_action_Import_triggered()

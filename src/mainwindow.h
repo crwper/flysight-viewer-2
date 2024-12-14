@@ -6,6 +6,7 @@
 #include <QStandardItemModel>
 #include <QTreeView>
 #include "sessionmodel.h"
+#include "logbookview.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -34,9 +35,6 @@ signals:
     void plotValueSelected(const QModelIndex &selectedIndex);
     void newTimeRange(double min, double max);
 
-protected:
-    bool eventFilter(QObject *obj, QEvent *event) override;
-
 private slots:
     void on_action_Import_triggered();
     void on_actionImportFolder_triggered();
@@ -62,7 +60,7 @@ private:
     QDockWidget *plotDock;
     QTreeView *plotTreeView;
     QStandardItemModel *plotModel;
-    QTreeView *logbookView;
+    LogbookView *logbookView;
 
     // Helper functions for plot values
     void setupPlotValues();

@@ -29,6 +29,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         qcustomplot/qcustomplot.cpp qcustomplot/qcustomplot.h
         sessiondata.cpp sessiondata.h
         import.cpp import.h
+        logbookview.h logbookview.cpp
 
 
     )
