@@ -411,16 +411,21 @@ void PlotWidget::onHoveredSessionChanged(const QString& sessionId)
     for(auto graph : m_plottedGraphs){
         QString graphSessionId = m_graphToSessionMap.value(graph, QString());
 
-        if(graphSessionId == sessionId && !sessionId.isEmpty()){
+        if(graphSessionId == sessionId || sessionId.isEmpty()){
             // Highlight this graph
-            QPen highlightPen = graph->pen();
-            highlightPen.setWidth(highlightPen.width() + 1); // Thicker line
-            graph->setPen(highlightPen);
+            if(m_graphDefaultPens.contains(graph)){
+                QPen highlightPen = m_graphDefaultPens.value(graph);
+                graph->setPen(highlightPen);
+            }
         }
         else{
             // Revert to default pen
             if(m_graphDefaultPens.contains(graph)){
-                graph->setPen(m_graphDefaultPens.value(graph));
+                QPen highlightPen = m_graphDefaultPens.value(graph);
+                QColor color = highlightPen.color();
+                color.setAlpha(32);
+                highlightPen.setColor(color);
+                graph->setPen(highlightPen);
             }
         }
     }
