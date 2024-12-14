@@ -24,6 +24,9 @@ protected:
     // Override event handlers to capture enter and leave events
     bool eventFilter(QObject *obj, QEvent *event) override;
 
+private slots:
+    void onHoveredSessionChanged(const QString& sessionId);
+
 private:
     QCustomPlot *customPlot;
     SessionModel *model;
@@ -48,6 +51,12 @@ private:
 
     // Flag to track cursor state
     bool isCursorOverPlot;
+
+    // Mapping from graph to SESSION_ID
+    QMap<QCPGraph*, QString> m_graphToSessionMap;
+
+    // Mapping from graph to its default pen
+    QMap<QCPGraph*, QPen> m_graphDefaultPens;
 
     void setupPlot();
     void setupCrosshairs();

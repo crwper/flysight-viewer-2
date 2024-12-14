@@ -49,6 +49,13 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
         this,
         &PlotWidget::onXAxisRangeChanged
         );
+
+
+    // Connect to hoveredSessionChanged signal
+    connect(model, &SessionModel::hoveredSessionChanged, this, &PlotWidget::onHoveredSessionChanged);
+
+    // Initial plot
+    updatePlot();
 }
 
 void PlotWidget::setupPlot()
@@ -90,6 +97,11 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                 crosshairH->setVisible(false);
                 crosshairV->setVisible(false);
                 customPlot->replot();
+
+                // Clear hovered session
+                if (!model->hoveredSessionId().isEmpty()) {
+                    model->setHoveredSessionId(QString());
+                }
             }
             break;
 
@@ -116,10 +128,31 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                 crosshairH->setVisible(false);
                 crosshairV->setVisible(false);
                 customPlot->replot();
+
+                // Clear hovered session
+                if (!model->hoveredSessionId().isEmpty()) {
+                    model->setHoveredSessionId(QString());
+                }
             }
 
             if (isCursorOverPlot) {
                 updateCrosshairs(pos);
+
+                // Detect if a graph is under the cursor
+                QCPAbstractPlottable *plottable = customPlot->plottableAt(pos, false);
+                QCPGraph *graph = dynamic_cast<QCPGraph*>(plottable);
+
+                if (graph) {
+                    QString sessionId = m_graphToSessionMap.value(graph, QString());
+                    if (!sessionId.isEmpty() && model->hoveredSessionId() != sessionId) {
+                        model->setHoveredSessionId(sessionId);
+                    }
+                } else {
+                    // Not over any graph
+                    if (!model->hoveredSessionId().isEmpty()) {
+                        model->setHoveredSessionId(QString());
+                    }
+                }
             }
 
             break;
@@ -167,6 +200,8 @@ void PlotWidget::updatePlot()
     // Clear existing plots and graphs
     customPlot->clearPlottables();
     m_plottedGraphs.clear();
+    m_graphToSessionMap.clear();
+    m_graphDefaultPens.clear();
 
     // Remove existing custom y-axes
     QList<QCPAxis*> axesToRemove = m_plotValueAxes.values();
@@ -263,6 +298,13 @@ void PlotWidget::updatePlot()
 
                     // Add to the list of plotted graphs
                     m_plottedGraphs.append(graph);
+
+                    // Map graph to session ID
+                    QString sessionId = session.getVar(SessionKeys::SessionId);
+                    m_graphToSessionMap.insert(graph, sessionId);
+
+                    // Store the default pen for later use
+                    m_graphDefaultPens.insert(graph, graph->pen());
 
                     qDebug() << "Plotted session:" << session.getVar(SessionKeys::SessionId) << "on plot:" << plotName;
                 }
@@ -361,6 +403,30 @@ void PlotWidget::setXAxisRange(double min, double max)
 {
     // Directly set the x-axis range
     customPlot->xAxis->setRange(min, max);
+}
+
+void PlotWidget::onHoveredSessionChanged(const QString& sessionId)
+{
+    // Iterate through all plotted graphs
+    for(auto graph : m_plottedGraphs){
+        QString graphSessionId = m_graphToSessionMap.value(graph, QString());
+
+        if(graphSessionId == sessionId && !sessionId.isEmpty()){
+            // Highlight this graph
+            QPen highlightPen = graph->pen();
+            highlightPen.setWidth(highlightPen.width() + 1); // Thicker line
+            graph->setPen(highlightPen);
+        }
+        else{
+            // Revert to default pen
+            if(m_graphDefaultPens.contains(graph)){
+                graph->setPen(m_graphDefaultPens.value(graph));
+            }
+        }
+    }
+
+    // Replot to apply the changes
+    customPlot->replot();
 }
 
 } // namespace FlySight

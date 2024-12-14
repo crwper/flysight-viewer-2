@@ -34,6 +34,9 @@ signals:
     void plotValueSelected(const QModelIndex &selectedIndex);
     void newTimeRange(double min, double max);
 
+protected:
+    bool eventFilter(QObject *obj, QEvent *event) override;
+
 private slots:
     void on_action_Import_triggered();
     void on_actionImportFolder_triggered();
@@ -59,6 +62,7 @@ private:
     QDockWidget *plotDock;
     QTreeView *plotTreeView;
     QStandardItemModel *plotModel;
+    QTreeView *logbookView;
 
     // Helper functions for plot values
     void setupPlotValues();

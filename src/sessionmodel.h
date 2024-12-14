@@ -34,11 +34,23 @@ public:
 
     const QVector<SessionData>& getAllSessions() const;
 
+    // Hovered session management
+    QString hoveredSessionId() const;
+    void setHoveredSessionId(const QString& sessionId);
+
+    enum CustomRoles {
+        IsHoveredRole = Qt::UserRole + 100
+    };
+
 signals:
     void modelChanged();
+    void hoveredSessionChanged(const QString& sessionId);
 
 private:
     QVector<SessionData> m_sessionData;
+    QString m_hoveredSessionId;
+
+    int getSessionRow(const QString& sessionId) const;
 };
 
 } // namespace FlySight

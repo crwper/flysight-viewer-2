@@ -47,9 +47,19 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const
         if (index.column() == NumberOfSensors)
             return item.sensorKeys().size();
         break;
-    case Qt::UserRole:
-        // Optionally, return additional data here
+    // Handle BackgroundRole for highlighting
+    case Qt::BackgroundRole: {
+        QString currentSessionId = item.getVar(SessionKeys::SessionId);
+        if (currentSessionId == m_hoveredSessionId) {
+            return QBrush(Qt::yellow); // Highlight color
+        }
         break;
+    }
+    // Handle IsHoveredRole
+    case CustomRoles::IsHoveredRole: {
+        QString currentSessionId = item.getVar(SessionKeys::SessionId);
+        return (currentSessionId == m_hoveredSessionId) ? true : false;
+    }
     default:
         break;
     }
@@ -265,6 +275,55 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
 const QVector<SessionData>& SessionModel::getAllSessions() const
 {
     return m_sessionData;
+}
+
+
+QString SessionModel::hoveredSessionId() const
+{
+    return m_hoveredSessionId;
+}
+
+int SessionModel::getSessionRow(const QString& sessionId) const
+{
+    for(int row = 0; row < m_sessionData.size(); ++row){
+        if(m_sessionData[row].getVar(SessionKeys::SessionId) == sessionId){
+            return row;
+        }
+    }
+    return -1;
+}
+
+void SessionModel::setHoveredSessionId(const QString& sessionId)
+{
+    if (m_hoveredSessionId == sessionId)
+        return; // No change
+
+    QString oldSessionId = m_hoveredSessionId;
+    m_hoveredSessionId = sessionId;
+
+    qDebug() << "SessionModel: hoveredSessionId changed from" << oldSessionId << "to" << m_hoveredSessionId;
+
+    emit hoveredSessionChanged(sessionId);
+
+    // Notify dataChanged for old hovered session (all columns)
+    if (!oldSessionId.isEmpty()) {
+        int oldRow = getSessionRow(oldSessionId);
+        if (oldRow != -1) {
+            QModelIndex topLeft = this->index(oldRow, 0);
+            QModelIndex bottomRight = this->index(oldRow, ColumnCount - 1);
+            emit dataChanged(topLeft, bottomRight, {Qt::BackgroundRole, CustomRoles::IsHoveredRole});
+        }
+    }
+
+    // Notify dataChanged for new hovered session (all columns)
+    if (!sessionId.isEmpty()) {
+        int newRow = getSessionRow(sessionId);
+        if (newRow != -1) {
+            QModelIndex topLeft = this->index(newRow, 0);
+            QModelIndex bottomRight = this->index(newRow, ColumnCount - 1);
+            emit dataChanged(topLeft, bottomRight, {Qt::BackgroundRole, CustomRoles::IsHoveredRole});
+        }
+    }
 }
 
 } // namespace FlySight
