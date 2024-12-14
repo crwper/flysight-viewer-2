@@ -2,6 +2,11 @@
 #include "mainwindow.h"
 
 #include <algorithm>
+#include <QVBoxLayout>
+#include <QMouseEvent>
+#include <QPixmap>
+#include <QBitmap>
+#include <QPainter>
 
 namespace FlySight {
 
@@ -10,6 +15,7 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
     , customPlot(new QCustomPlot(this))
     , model(model)
     , plotModel(plotModel)
+    , isCursorOverPlot(false)
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(customPlot);
@@ -17,6 +23,20 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
 
     // Initial plot setup
     setupPlot();
+
+    // Setup crosshairs
+    setupCrosshairs();
+
+    // Install event filter on customPlot to handle mouse events
+    customPlot->installEventFilter(this);
+
+    // Create a transparent cursor
+    QPixmap pixmap(16, 16);
+    pixmap.fill(Qt::transparent);
+    transparentCursor = QCursor(pixmap);
+
+    // Store the original cursor
+    originalCursor = customPlot->cursor();
 
     // Connect to model changes
     connect(model, &SessionModel::modelChanged, this, &PlotWidget::updatePlot);
@@ -29,6 +49,117 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
         this,
         &PlotWidget::onXAxisRangeChanged
         );
+}
+
+void PlotWidget::setupPlot()
+{
+    // Basic plot setup
+    customPlot->xAxis->setLabel("Time (s)");
+    customPlot->yAxis->setVisible(false);
+
+    // Enable interactions if needed
+    customPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectPlottables);
+}
+
+void PlotWidget::setupCrosshairs()
+{
+    // Initialize horizontal crosshair
+    crosshairH = new QCPItemLine(customPlot);
+    crosshairH->setPen(QPen(Qt::gray, 1));
+    crosshairH->setVisible(false); // Hidden by default
+
+    // Initialize vertical crosshair
+    crosshairV = new QCPItemLine(customPlot);
+    crosshairV->setPen(QPen(Qt::gray, 1));
+    crosshairV->setVisible(false); // Hidden by default
+
+    customPlot->replot();
+}
+
+bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
+{
+    if (obj == customPlot) {
+        switch (event->type()) {
+        case QEvent::Leave:
+            // Mouse left the plot widget
+            if (isCursorOverPlot) {
+                isCursorOverPlot = false;
+                // Restore the original cursor
+                customPlot->setCursor(originalCursor);
+                // Hide crosshairs
+                crosshairH->setVisible(false);
+                crosshairV->setVisible(false);
+                customPlot->replot();
+            }
+            break;
+
+        case QEvent::MouseMove: {
+            QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+            QPoint pos = mouseEvent->pos();
+
+            bool currentlyOverPlot = isCursorOverPlotArea(pos);
+            if (currentlyOverPlot && !isCursorOverPlot) {
+                // Cursor has entered the plot area
+                isCursorOverPlot = true;
+                // Hide the regular cursor
+                customPlot->setCursor(transparentCursor);
+                // Show crosshairs
+                crosshairH->setVisible(true);
+                crosshairV->setVisible(true);
+                customPlot->replot();
+            } else if (!currentlyOverPlot && isCursorOverPlot) {
+                // Cursor has left the plot area
+                isCursorOverPlot = false;
+                // Restore the original cursor
+                customPlot->setCursor(originalCursor);
+                // Hide crosshairs
+                crosshairH->setVisible(false);
+                crosshairV->setVisible(false);
+                customPlot->replot();
+            }
+
+            if (isCursorOverPlot) {
+                updateCrosshairs(pos);
+            }
+
+            break;
+        }
+
+        default:
+            break;
+        }
+    }
+    // Standard event processing
+    return QWidget::eventFilter(obj, event);
+}
+
+bool PlotWidget::isCursorOverPlotArea(const QPoint &pos) const
+{
+    // Get the axis rect
+    QCPAxisRect *axisRect = customPlot->axisRect();
+
+    // Get the plotting area rectangle in pixel coordinates
+    QRect plotAreaRect = axisRect->rect();
+
+    // Check if the position is within the axis rect
+    return plotAreaRect.contains(pos);
+}
+
+void PlotWidget::updateCrosshairs(const QPoint &pos)
+{
+    // Convert pixel position to plot coordinates
+    double x = customPlot->xAxis->pixelToCoord(pos.x());
+    double y = customPlot->yAxis->pixelToCoord(pos.y());
+
+    // Set the positions of the crosshairs
+    crosshairH->start->setCoords(customPlot->xAxis->range().lower, y);
+    crosshairH->end->setCoords(customPlot->xAxis->range().upper, y);
+
+    crosshairV->start->setCoords(x, customPlot->yAxis->range().lower);
+    crosshairV->end->setCoords(x, customPlot->yAxis->range().upper);
+
+    // Update plot without triggering a full replot
+    customPlot->replot(QCustomPlot::rpQueuedReplot);
 }
 
 void PlotWidget::updatePlot()
@@ -230,16 +361,6 @@ void PlotWidget::setXAxisRange(double min, double max)
 {
     // Directly set the x-axis range
     customPlot->xAxis->setRange(min, max);
-}
-
-void PlotWidget::setupPlot()
-{
-    // Basic plot setup
-    customPlot->xAxis->setLabel("Time (s)");
-    customPlot->yAxis->setVisible(false);
-
-    // Enable interactions if needed
-    customPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectPlottables);
 }
 
 } // namespace FlySight

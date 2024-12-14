@@ -20,6 +20,10 @@ public slots:
     void onXAxisRangeChanged(const QCPRange &newRange);
     void setXAxisRange(double min, double max);
 
+protected:
+    // Override event handlers to capture enter and leave events
+    bool eventFilter(QObject *obj, QEvent *event) override;
+
 private:
     QCustomPlot *customPlot;
     SessionModel *model;
@@ -34,7 +38,21 @@ private:
     // Flag to prevent recursion
     bool m_updatingYAxis = false;
 
+    // Crosshair items
+    QCPItemLine *crosshairH;
+    QCPItemLine *crosshairV;
+
+    // Transparent cursor
+    QCursor transparentCursor;
+    QCursor originalCursor;
+
+    // Flag to track cursor state
+    bool isCursorOverPlot;
+
     void setupPlot();
+    void setupCrosshairs();
+    void updateCrosshairs(const QPoint &pos);
+    bool isCursorOverPlotArea(const QPoint &pos) const;
 
     // Helper function to interpolate Y at a given X
     static double interpolateY(const QCPGraph* graph, double x);
