@@ -18,6 +18,9 @@ LogbookView::LogbookView(SessionModel *model, QWidget *parent)
     setLayout(layout);
 
     setupView();
+
+    // Connect to hoveredSessionChanged signal
+    connect(model, &SessionModel::hoveredSessionChanged, this, &LogbookView::onHoveredSessionChanged);
 }
 
 void LogbookView::setupView()
@@ -26,6 +29,11 @@ void LogbookView::setupView()
     treeView->setRootIsDecorated(false);
     treeView->header()->setDefaultSectionSize(100);
     treeView->setMouseTracking(true); // Enable mouse tracking
+
+    // Ensure native hover highlighting is enabled
+    treeView->setSelectionMode(QAbstractItemView::SingleSelection);
+    treeView->setSelectionBehavior(QAbstractItemView::SelectRows);
+    treeView->setUniformRowHeights(true);
 
     // Install event filter to detect hover events on treeView
     treeView->viewport()->installEventFilter(this);
@@ -57,6 +65,23 @@ bool LogbookView::eventFilter(QObject *obj, QEvent *event)
 
     // Allow the base class to process other events
     return QWidget::eventFilter(obj, event);
+}
+
+void LogbookView::onHoveredSessionChanged(const QString& sessionId)
+{
+    if(sessionId.isEmpty()){
+        // Clear selection if no session is hovered
+        treeView->selectionModel()->clearSelection();
+        return;
+    }
+
+    int row = model->getSessionRow(sessionId);
+    if(row != -1){
+        QModelIndex index = model->index(row, SessionModel::Description); // Assuming Description is the first column
+        treeView->setCurrentIndex(index);
+        treeView->selectionModel()->select(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+        treeView->scrollTo(index, QAbstractItemView::EnsureVisible);
+    }
 }
 
 } // namespace FlySight

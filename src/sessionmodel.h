@@ -38,6 +38,8 @@ public:
     QString hoveredSessionId() const;
     void setHoveredSessionId(const QString& sessionId);
 
+    int getSessionRow(const QString& sessionId) const;
+
     enum CustomRoles {
         IsHoveredRole = Qt::UserRole + 100
     };
@@ -50,7 +52,6 @@ private:
     QVector<SessionData> m_sessionData;
     QString m_hoveredSessionId;
 
-    int getSessionRow(const QString& sessionId) const;
 };
 
 } // namespace FlySight

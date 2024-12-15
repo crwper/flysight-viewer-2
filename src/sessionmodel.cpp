@@ -47,14 +47,6 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const
         if (index.column() == NumberOfSensors)
             return item.sensorKeys().size();
         break;
-    // Handle BackgroundRole for highlighting
-    case Qt::BackgroundRole: {
-        QString currentSessionId = item.getVar(SessionKeys::SessionId);
-        if (currentSessionId == m_hoveredSessionId) {
-            return QBrush(Qt::yellow); // Highlight color
-        }
-        break;
-    }
     // Handle IsHoveredRole
     case CustomRoles::IsHoveredRole: {
         QString currentSessionId = item.getVar(SessionKeys::SessionId);

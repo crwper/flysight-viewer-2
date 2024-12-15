@@ -50,7 +50,6 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
         &PlotWidget::onXAxisRangeChanged
         );
 
-
     // Connect to hoveredSessionChanged signal
     connect(model, &SessionModel::hoveredSessionChanged, this, &PlotWidget::onHoveredSessionChanged);
 
