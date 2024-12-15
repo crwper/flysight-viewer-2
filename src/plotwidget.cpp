@@ -66,6 +66,9 @@ void PlotWidget::setupPlot()
 
     // Enable interactions if needed
     customPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectPlottables);
+
+    // Create a new layer for highlighted graphs
+    customPlot->addLayer("highlighted", customPlot->layer("main"), QCustomPlot::limAbove);
 }
 
 void PlotWidget::setupCrosshairs()
@@ -296,6 +299,9 @@ void PlotWidget::updatePlot()
                     graph->setLineStyle(QCPGraph::lsLine);
                     graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
 
+                    // Assign to default layer
+                    graph->setLayer("main");
+
                     // Add to the list of plotted graphs
                     m_plottedGraphs.append(graph);
 
@@ -412,18 +418,25 @@ void PlotWidget::onHoveredSessionChanged(const QString& sessionId)
         QString graphSessionId = m_graphToSessionMap.value(graph, QString());
 
         if(graphSessionId == sessionId || sessionId.isEmpty()){
-            // Highlight this graph
+            // Assign to highlighted layer
+            graph->setLayer("highlighted");
+
             if(m_graphDefaultPens.contains(graph)){
                 QPen highlightPen = m_graphDefaultPens.value(graph);
                 graph->setPen(highlightPen);
             }
         }
         else{
-            // Revert to default pen
+            // Assign back to main layer
+            graph->setLayer("main");
+
             if(m_graphDefaultPens.contains(graph)){
                 QPen highlightPen = m_graphDefaultPens.value(graph);
-                QColor color = highlightPen.color();
-                color.setAlpha(32);
+
+                int h, s, l;
+                highlightPen.color().getHsl(&h, &s, &l);
+                QColor color = QColor::fromHsl(h, s, (l + 255 * 15) / 16);
+
                 highlightPen.setColor(color);
                 graph->setPen(highlightPen);
             }

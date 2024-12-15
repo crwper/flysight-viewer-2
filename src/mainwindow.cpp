@@ -274,40 +274,40 @@ void MainWindow::setupPlotValues()
         {"GNSS", "Number of satellites", "", Qt::darkMagenta, "GNSS", "numSV"},
 
         // Category: IMU
-        {"IMU", "Acceleration X", "g", QColor::fromHsv(360 - group_a, 255, 255), "IMU", "ax"},
-        {"IMU", "Acceleration Y", "g", QColor::fromHsv(0, 255, 255), "IMU", "ay"},
-        {"IMU", "Acceleration Z", "g", QColor::fromHsv(group_a, 255, 255), "IMU", "az"},
-        {"IMU", "Total acceleration", "g", QColor::fromHsv(0, 255, 255), "IMU", "aTotal"},
+        {"IMU", "Acceleration X", "g", QColor::fromHsl(360 - group_a, 255, 128), "IMU", "ax"},
+        {"IMU", "Acceleration Y", "g", QColor::fromHsl(0, 255, 128), "IMU", "ay"},
+        {"IMU", "Acceleration Z", "g", QColor::fromHsl(group_a, 255, 128), "IMU", "az"},
+        {"IMU", "Total acceleration", "g", QColor::fromHsl(0, 255, 128), "IMU", "aTotal"},
 
-        {"IMU", "Rotation X", "deg/s", QColor::fromHsv(120 - group_a, 255, 255), "IMU", "wx"},
-        {"IMU", "Rotation Y", "deg/s", QColor::fromHsv(120, 255, 255), "IMU", "wy"},
-        {"IMU", "Rotation Z", "deg/s", QColor::fromHsv(120 + group_a, 255, 255), "IMU", "wz"},
-        {"IMU", "Total rotation", "deg/s", QColor::fromHsv(120, 255, 255), "IMU", "wTotal"},
+        {"IMU", "Rotation X", "deg/s", QColor::fromHsl(120 - group_a, 255, 128), "IMU", "wx"},
+        {"IMU", "Rotation Y", "deg/s", QColor::fromHsl(120, 255, 128), "IMU", "wy"},
+        {"IMU", "Rotation Z", "deg/s", QColor::fromHsl(120 + group_a, 255, 128), "IMU", "wz"},
+        {"IMU", "Total rotation", "deg/s", QColor::fromHsl(120, 255, 128), "IMU", "wTotal"},
 
-        {"IMU", "Temperature", "°C", QColor::fromHsv(45, 255, 255), "IMU", "temperature"},
+        {"IMU", "Temperature", "°C", QColor::fromHsl(45, 255, 128), "IMU", "temperature"},
 
         // Category: Magnetometer
-        {"Magnetometer", "Magnetic field X", "gauss", QColor::fromHsv(240 - group_a, 255, 255), "MAG", "x"},
-        {"Magnetometer", "Magnetic field Y", "gauss", QColor::fromHsv(240, 255, 255), "MAG", "y"},
-        {"Magnetometer", "Magnetic field Z", "gauss", QColor::fromHsv(240 + group_a, 255, 255), "MAG", "z"},
-        {"Magnetometer", "Total magnetic field", "gauss", QColor::fromHsv(240, 255, 255), "MAG", "total"},
+        {"Magnetometer", "Magnetic field X", "gauss", QColor::fromHsl(240 - group_a, 255, 128), "MAG", "x"},
+        {"Magnetometer", "Magnetic field Y", "gauss", QColor::fromHsl(240, 255, 128), "MAG", "y"},
+        {"Magnetometer", "Magnetic field Z", "gauss", QColor::fromHsl(240 + group_a, 255, 128), "MAG", "z"},
+        {"Magnetometer", "Total magnetic field", "gauss", QColor::fromHsl(240, 255, 128), "MAG", "total"},
 
-        {"Magnetometer", "Temperature", "°C", QColor::fromHsv(135, 255, 255), "MAG", "temperature"},
+        {"Magnetometer", "Temperature", "°C", QColor::fromHsl(135, 255, 128), "MAG", "temperature"},
 
         // Category: Barometer
-        {"Barometer", "Air pressure", "Pa", QColor::fromHsv(0, 0, 64), "BARO", "pressure"},
-        {"Barometer", "Temperature", "°C", QColor::fromHsv(225, 255, 255), "BARO", "temperature"},
+        {"Barometer", "Air pressure", "Pa", QColor::fromHsl(0, 0, 64), "BARO", "pressure"},
+        {"Barometer", "Temperature", "°C", QColor::fromHsl(225, 255, 128), "BARO", "temperature"},
 
         // Category: Humidity
-        {"Humidity", "Humidity", "%", QColor::fromHsv(0, 0, 128), "HUM", "humidity"},
-        {"Humidity", "Temperature", "°C", QColor::fromHsv(315, 255, 255), "HUM", "temperature"},
+        {"Humidity", "Humidity", "%", QColor::fromHsl(0, 0, 128), "HUM", "humidity"},
+        {"Humidity", "Temperature", "°C", QColor::fromHsl(315, 255, 128), "HUM", "temperature"},
 
         // Category: Battery
-        {"Battery", "Battery voltage", "V", QColor::fromHsv(30, 255, 255), "VBAT", "voltage"},
+        {"Battery", "Battery voltage", "V", QColor::fromHsl(30, 255, 128), "VBAT", "voltage"},
 
         // Category: GNSS time
-        {"GNSS time", "Time of week", "s", QColor::fromHsv(0, 0, 64), "TIME", "tow"},
-        {"GNSS time", "Week number", "", QColor::fromHsv(0, 0, 128), "TIME", "week"},
+        {"GNSS time", "Time of week", "s", QColor::fromHsl(0, 0, 64), "TIME", "tow"},
+        {"GNSS time", "Week number", "", QColor::fromHsl(0, 0, 128), "TIME", "week"},
 
         // Add more categories and plots as needed
     };
