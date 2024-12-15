@@ -88,7 +88,7 @@ private:
     void populatePlotModel(QStandardItemModel* plotModel, const QVector<PlotValue>& plotValues);
 
     // Helper function for importing files
-    void importFiles(const QStringList &fileNames, bool showProgress);
+    void importFiles(const QStringList &fileNames, bool showProgress, const QString &baseDir = QString());
 
     // Helper methods for calculated values
     void initializeCalculatedValues();

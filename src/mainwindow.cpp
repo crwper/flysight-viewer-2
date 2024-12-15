@@ -67,8 +67,11 @@ void MainWindow::on_action_Import_triggered()
         return;
     }
 
+    // Determine the base directory (the initial directory in the dialog)
+    QString baseDir = m_settings->value("folder").toString();
+
     // Call the helper function without showing progress
-    importFiles(fileNames, false);
+    importFiles(fileNames, false, baseDir);
 
     // Update last used folder
     QString lastUsedFolder = QFileInfo(fileNames.last()).absolutePath();
@@ -127,12 +130,13 @@ void MainWindow::on_actionImportFolder_triggered()
     }
 
     // Call the helper function with showing progress
-    importFiles(filesToImport, filesToImport.size() > 5);
+    importFiles(filesToImport, filesToImport.size() > 5, selectedDir);
 }
 
 void MainWindow::importFiles(
     const QStringList &fileNames,
-    bool showProgress
+    bool showProgress,
+    const QString &baseDir
     )
 {
     if (fileNames.isEmpty()) {
@@ -182,7 +186,21 @@ void MainWindow::importFiles(
                 // Failed import with an error message
                 QString errorMessage = importer.getLastError();
                 qWarning() << "Failed to import file:" << filePath << "Error:" << errorMessage;
-                failedImports.insert(filePath, errorMessage);
+
+                // Compute relative path if baseDir is provided
+                QString displayPath;
+                if (!baseDir.isEmpty()) {
+                    QDir dir(baseDir);
+                    displayPath = dir.relativeFilePath(filePath);
+                    // If the file is outside baseDir, fallback to absolute path or just the file name
+                    if (displayPath == filePath) {
+                        displayPath = QFileInfo(filePath).fileName(); // Alternatively, keep absolute path
+                    }
+                } else {
+                    displayPath = filePath; // No baseDir provided, use absolute path
+                }
+
+                failedImports.insert(displayPath, errorMessage);
             }
 
             ++current;
@@ -214,7 +232,21 @@ void MainWindow::importFiles(
                 // Failed import with an error message
                 QString errorMessage = importer.getLastError();
                 qWarning() << "Failed to import file:" << filePath << "Error:" << errorMessage;
-                failedImports.insert(filePath, errorMessage);
+
+                // Compute relative path if baseDir is provided
+                QString displayPath;
+                if (!baseDir.isEmpty()) {
+                    QDir dir(baseDir);
+                    displayPath = dir.relativeFilePath(filePath);
+                    // If the file is outside baseDir, fallback to absolute path or just the file name
+                    if (displayPath == filePath) {
+                        displayPath = QFileInfo(filePath).fileName(); // Alternatively, keep absolute path
+                    }
+                } else {
+                    displayPath = filePath; // No baseDir provided, use absolute path
+                }
+
+                failedImports.insert(displayPath, errorMessage);
             }
         }
     }
@@ -228,6 +260,14 @@ void MainWindow::importFiles(
     if (failedImports.size() > 5) {
         QString message = tr("Import has been completed.");
         message += tr("\nHowever, %1 files failed to import.").arg(failedImports.size());
+        // Optionally, list the first few failed files
+        QStringList failedList = failedImports.keys();
+        int displayCount = qMin(failedList.size(), 10); // Limit to first 10 for brevity
+        QString displayedFailedList = failedList.mid(0, displayCount).join("\n");
+        if (failedList.size() > displayCount) {
+            displayedFailedList += tr("\n...and %1 more.").arg(failedList.size() - displayCount);
+        }
+        message += tr("\nFailed Files:\n") + displayedFailedList;
         QMessageBox::warning(this, tr("Import Completed with Some Failures"), message);
     } else if (!failedImports.isEmpty()) {
         // List all failed imports
