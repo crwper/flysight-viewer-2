@@ -31,6 +31,12 @@
     <addaction name="actionImportFolder"/>
     <addaction name="action_Delete"/>
    </widget>
+   <widget class="QMenu" name="menuPlots">
+    <property name="title">
+     <string>&amp;Plots</string>
+    </property>
+   </widget>
+   <addaction name="menuPlots"/>
    <addaction name="menuTrack"/>
   </widget>
   <action name="action_Import">

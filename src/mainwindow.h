@@ -42,14 +42,35 @@ private slots:
 
 private:
     // Plot values
-    typedef struct {
+    struct PlotValue {
         QString category;          // Category name
         QString plotName;          // Display name of the plot
         QString plotUnits;         // Units for the y-axis
         QColor defaultColor;       // Default color for the plot
         QString sensorID;          // Sensor name (e.g., "GNSS")
         QString measurementID;     // Measurement name (e.g., "hMSL")
-    } PlotValue;
+    };
+
+    enum class PlotMenuItemType {
+        Regular,
+        Separator
+    };
+
+    struct PlotMenuItem {
+        QString menuText;
+        QKeySequence shortcut;
+        QString sensorID;
+        QString measurementID;
+        PlotMenuItemType type;
+
+        // Constructor for regular plot items
+        PlotMenuItem(const QString &text, const QKeySequence &key, const QString &sensor, const QString &measurement)
+            : menuText(text), shortcut(key), sensorID(sensor), measurementID(measurement), type(PlotMenuItemType::Regular) {}
+
+        // Constructor for separators
+        PlotMenuItem(PlotMenuItemType itemType)
+            : menuText(QString()), shortcut(QKeySequence()), sensorID(QString()), measurementID(QString()), type(itemType) {}
+    };
 
     QSettings *m_settings;
     Ui::MainWindow *ui;
@@ -71,6 +92,10 @@ private:
 
     // Helper methods for calculated values
     void initializeCalculatedValues();
+
+    // Helper methods for plot menu
+    void initializePlotsMenu();
+    void togglePlot(const QString &sensorID, const QString &measurementID);
 };
 
 } // namespace FlySight

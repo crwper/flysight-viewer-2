@@ -43,6 +43,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Setup plot values
     setupPlotValues();
+
+    // Initialize the Plots menu
+    initializePlotsMenu();
 }
 
 MainWindow::~MainWindow()
@@ -249,7 +252,7 @@ void MainWindow::on_action_Delete_triggered()
 void MainWindow::setupPlotValues()
 {
     // Create the dock widget
-    plotDock = new QDockWidget(tr("Plot Values"), this);
+    plotDock = new QDockWidget(tr("Plot Selection"), this);
     plotTreeView = new QTreeView(plotDock);
     plotDock->setWidget(plotTreeView);
     addDockWidget(Qt::LeftDockWidgetArea, plotDock);
@@ -264,7 +267,7 @@ void MainWindow::setupPlotValues()
 
     QVector<PlotValue> plotValues = {
         // Category: GNSS
-        {"GNSS", "Altitude", "m", Qt::black, "GNSS", "hMSL"},
+        {"GNSS", "Elevation", "m", Qt::black, "GNSS", "hMSL"},
         {"GNSS", "Horizontal speed", "m/s", Qt::red, "GNSS", "velH"},
         {"GNSS", "Vertical speed", "m/s", Qt::green, "GNSS", "velD"},
         {"GNSS", "Total speed", "m/s", Qt::blue, "GNSS", "vel"},
@@ -581,6 +584,120 @@ void MainWindow::initializeCalculatedValues()
             return compute_time(s, sens);
         });
     }
+}
+
+// mainwindow.cpp
+
+void MainWindow::initializePlotsMenu()
+{
+    // Access the 'Plots' menu from the UI
+    QMenu *plotsMenu = ui->menuPlots; // Ensure 'menuPlots' is the objectName set in Qt Designer
+
+    // Define the list of plots to include in the 'Plots' menu, including separators
+    QVector<PlotMenuItem> plotsMenuItems = {
+        // First Group: GNSS-related plots
+        PlotMenuItem("Elevation", QKeySequence(Qt::Key_E), "GNSS", "hMSL"),
+
+        // Separator
+        PlotMenuItem(PlotMenuItemType::Separator),
+
+        PlotMenuItem("Horizontal Speed", QKeySequence(Qt::Key_H), "GNSS", "velH"),
+        PlotMenuItem("Vertical Speed", QKeySequence(Qt::Key_V), "GNSS", "velD"),
+        PlotMenuItem("Total Speed", QKeySequence(Qt::Key_S), "GNSS", "vel"),
+
+        // Separator
+        PlotMenuItem(PlotMenuItemType::Separator),
+
+        PlotMenuItem("Horizontal Accuracy", QKeySequence(Qt::SHIFT | Qt::Key_H), "GNSS", "hAcc"),
+        PlotMenuItem("Vertical Accuracy", QKeySequence(Qt::SHIFT | Qt::Key_V), "GNSS", "vAcc"),
+        PlotMenuItem("Speed Accuracy", QKeySequence(Qt::SHIFT | Qt::Key_S), "GNSS", "sAcc"),
+
+        // Separator
+        PlotMenuItem(PlotMenuItemType::Separator),
+
+        PlotMenuItem("Number of Satellites", QKeySequence(Qt::SHIFT | Qt::Key_N), "GNSS", "numSV"),
+
+        // Add more groups and plots as needed
+    };
+
+    // Iterate over the list and create corresponding actions
+    for(const PlotMenuItem &item : plotsMenuItems){
+        if(item.type == PlotMenuItemType::Separator){
+            plotsMenu->addSeparator();
+            continue; // Move to the next item
+        }
+
+        QAction *action = new QAction(item.menuText, this);
+        action->setShortcut(item.shortcut);
+
+        // Combine sensorID and measurementID into a single string for data storage
+        QString actionData = item.sensorID + "|" + item.measurementID;
+        action->setData(actionData);
+
+        // Connect each action to a lambda that calls togglePlot with appropriate parameters
+        connect(action, &QAction::triggered, this, [this, action]() {
+            QString data = action->data().toString();
+            QStringList parts = data.split('|');
+            if(parts.size() == 2){
+                QString sensorID = parts.at(0);
+                QString measurementID = parts.at(1);
+                togglePlot(sensorID, measurementID);
+            }
+        });
+
+        // Add the action to the 'Plots' menu
+        plotsMenu->addAction(action);
+    }
+
+    // Add a separator before the "Show Plot Selection" action
+    plotsMenu->addSeparator();
+
+    // Create the "Show Plot Selection" action
+    QAction *showPlotSelectionAction = new QAction(tr("Show Plot Selection"), this);
+    showPlotSelectionAction->setCheckable(true);
+    showPlotSelectionAction->setChecked(plotDock->isVisible());
+
+    // Connect the action to toggle plotDock visibility
+    connect(showPlotSelectionAction, &QAction::triggered, this, [this](bool checked){
+        plotDock->setVisible(checked);
+    });
+
+
+    // Synchronize the action's check state with plotDock's visibility changes
+    connect(plotDock, &QDockWidget::visibilityChanged, showPlotSelectionAction, &QAction::setChecked);
+
+    // Add the "Show Plot Selection" action to the 'Plots' menu
+    plotsMenu->addAction(showPlotSelectionAction);
+}
+
+void MainWindow::togglePlot(const QString &sensorID, const QString &measurementID)
+{
+    // Iterate through the plotModel to find the matching plot
+    for(int row = 0; row < plotModel->rowCount(); ++row){
+        QStandardItem *categoryItem = plotModel->item(row);
+        for(int col = 0; col < categoryItem->rowCount(); ++col){
+            QStandardItem *plotItem = categoryItem->child(col);
+            if(plotItem->data(SensorIDRole).toString() == sensorID &&
+                plotItem->data(MeasurementIDRole).toString() == measurementID){
+                // Toggle the check state
+                Qt::CheckState currentState = plotItem->checkState();
+                Qt::CheckState newState = (currentState == Qt::Checked) ? Qt::Unchecked : Qt::Checked;
+                plotItem->setCheckState(newState);
+
+                // Ensure the plot selection view is visible
+                if(!plotDock->isVisible()){
+                    plotDock->show();
+                }
+
+                // Emit modelChanged to update the plots
+                emit model->modelChanged();
+
+                return;
+            }
+        }
+    }
+
+    qWarning() << "Plot not found for sensorID:" << sensorID << "measurementID:" << measurementID;
 }
 
 } // namespace FlySight
