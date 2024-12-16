@@ -1,9 +1,6 @@
 #include "sessionmodel.h"
 #include <QMessageBox>
 
-#define OVERWRITE_VARS true
-#define OVERWRITE_SENSORS true
-
 namespace FlySight {
 
 SessionModel::SessionModel(QObject *parent)
@@ -140,107 +137,15 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
     if (sessionIt != m_sessionData.end()) {
         SessionData &existingSession = *sessionIt;
 
-#if !OVERWRITE_VARS
-        QStringList existingKeys = existingSession.varKeys();
-        QStringList newKeys = newSession.varKeys();
-
-        bool varsMatch = false;
-        if (existingKeys.size() == newKeys.size()) {
-            varsMatch = true; // Assume match until proven otherwise
-
-            // Iterate over the new session's keys (excluding SessionKeys::Description)
-            for (const QString &key : newKeys) {
-                if (key == SessionKeys::Description) {
-                    continue;
-                }
-
-                // Check both existence and equality of values
-                bool existingHasKey = existingSession.hasVar(key);
-                bool newHasKey = newSession.hasVar(key);
-
-                // If either session doesn't have the key, or the values don't match, break
-                if (!existingHasKey || !newHasKey ||
-                    existingSession.getVar(key) != newSession.getVar(key)) {
-                    varsMatch = false;
-                    break;
-                }
-            }
-        }
-
-        if (!varsMatch) {
-            qWarning() << "Variable sets do not match for SESSION_ID:" << newSessionID;
-            // Assign a unique SESSION_ID by appending a suffix
-            int suffix = 1;
-            QString uniqueSessionID = newSessionID;
-            while (std::any_of(m_sessionData.begin(), m_sessionData.end(),
-                               [&uniqueSessionID](const SessionData &item) {
-                                   return item.getVar(SessionKeys::SessionId) == uniqueSessionID;
-                               })) {
-                uniqueSessionID = QString("%1_%2").arg(newSessionID).arg(suffix++);
-            }
-            SessionData uniqueSession = newSession;
-            uniqueSession.setVar(SessionKeys::SessionId, uniqueSessionID);
-
-            beginInsertRows(QModelIndex(), m_sessionData.size(), m_sessionData.size());
-            m_sessionData.append(uniqueSession);
-            endInsertRows();
-            emit modelChanged();
-
-            qDebug() << "Added new SessionData with unique SESSION_ID:" << uniqueSessionID;
-            return;
-        }
-#endif
-
-        // Retrieve sensor names from both sessions
+        // Retrieve var and sensor names from new session
+        QStringList newVarKeys = newSession.varKeys();
         QStringList newSensorKeys = newSession.sensorKeys();
 
-#if !OVERWRITE_SENSORS
-        // Check for overlapping sensors
-        bool noOverlap = true;
-        for (const QString &sensorKey : newSensorKeys) {
-            // Get the new session's measurements for this sensor
-            QStringList newMeasurementKeys = newSession.measurementKeys(sensorKey);
-
-            // Check if the existing session has this sensor
-            if (existingSession.hasSensor(sensorKey)) {
-                // Check each measurement to see if it already exists
-                for (const QString &measurementKey : newMeasurementKeys) {
-                    if (existingSession.hasMeasurement(sensorKey, measurementKey)) {
-                        // Overlapping sensor/measurement key found
-                        noOverlap = false;
-                        qWarning() << "Overlapping sensor/measurement key:" << sensorKey << "/" << measurementKey
-                                   << "for SESSION_ID:" << newSessionID;
-                        break;
-                    }
-                }
-            }
-
-            if (!noOverlap) break;
+        // Merge vars
+        for (const QString &varName : newVarKeys) {
+            const QString &value = newSession.getVar(varName);
+            existingSession.setVar(varName, value);
         }
-
-        if (!noOverlap) {
-            qWarning() << "Cannot merge SessionData due to overlapping sensor/measurement keys for SESSION_ID:" << newSessionID;
-            // Assign a unique SESSION_ID by appending a suffix
-            int suffix = 1;
-            QString uniqueSessionID = newSessionID;
-            while (std::any_of(m_sessionData.begin(), m_sessionData.end(),
-                               [&uniqueSessionID](const SessionData &item) {
-                                   return item.getVar(SessionKeys::SessionId) == uniqueSessionID;
-                               })) {
-                uniqueSessionID = QString("%1_%2").arg(newSessionID).arg(suffix++);
-            }
-            SessionData uniqueSession = newSession;
-            uniqueSession.setVar(SessionKeys::SessionId, uniqueSessionID);
-
-            beginInsertRows(QModelIndex(), m_sessionData.size(), m_sessionData.size());
-            m_sessionData.append(uniqueSession);
-            endInsertRows();
-            emit modelChanged();
-
-            qDebug() << "Added new SessionData with unique SESSION_ID:" << uniqueSessionID;
-            return;
-        }
-#endif
 
         // Merge sensors and measurements
         for (const QString &sensorName : newSensorKeys) {
