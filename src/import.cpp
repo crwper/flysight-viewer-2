@@ -205,8 +205,6 @@ void DataImporter::importDataRow(const QString& line, const QMap<QString, QVecto
         return;
     }
 
-    SessionData::SensorData& sensor = sessionData.m_sensors[key];
-
     QVector<QStringView> dataFields;
     for (; it != tokenizer.end(); ++it) {
         dataFields.append(*it);
@@ -217,31 +215,48 @@ void DataImporter::importDataRow(const QString& line, const QMap<QString, QVecto
         return;
     }
 
+    // Temporary storage for parsed values
+    QVector<double> tempValues(cols.size());
+
+    // Iterate through each field once
     for (int i = 0; i < cols.size(); ++i) {
         const QString& colName = cols[i];
         const QStringView& dataValueView = dataFields[i];
 
         if (dataValueView.isEmpty()) {
-            // Empty field
-            sensor[colName].append(0.0);
-        } else if (dataValueView.endsWith(u'Z')) {
+            // Empty field, skip the entire row
+            qWarning() << "Skipping row due to empty field:" << line;
+            return;
+        }
+        else if (dataValueView.endsWith(u'Z')) {
+            // Attempt to parse date
             QDateTime dt = QDateTime::fromString(dataValueView.toString(), Qt::ISODate);
-            if (dt.isValid()) {
-                sensor[colName].append(dt.toMSecsSinceEpoch() / 1000.0);
-            } else {
-                // Handle parsing error
-                sensor[colName].append(0.0);
+            if (!dt.isValid()) {
+                // Invalid date found, skip the entire row
+                qWarning() << "Skipping row due to invalid date:" << line;
+                return;
             }
-        } else {
+            // Convert to seconds since epoch
+            tempValues[i] = dt.toMSecsSinceEpoch() / 1000.0;
+        }
+        else {
+            // Attempt to parse as double
             bool ok;
             double val = dataValueView.toDouble(&ok);
-            if (ok) {
-                sensor[colName].append(val);
-            } else {
-                // Handle parsing error
-                sensor[colName].append(0.0);
+            if (!ok) {
+                // Invalid value found, skip the entire row
+                qWarning() << "Skipping row due to invalid value:" << line;
+                return;
             }
+            tempValues[i] = val;
         }
+    }
+
+    // All fields are valid, append to SessionData
+    SessionData::SensorData& sensor = sessionData.m_sensors[key];
+    for (int i = 0; i < cols.size(); ++i) {
+        const QString& colName = cols[i];
+        sensor[colName].append(tempValues[i]);
     }
 }
 
