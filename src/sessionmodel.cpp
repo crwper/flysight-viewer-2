@@ -1,6 +1,9 @@
 #include "sessionmodel.h"
 #include <QMessageBox>
 
+#define OVERWRITE_VARS true
+#define OVERWRITE_SENSORS true
+
 namespace FlySight {
 
 SessionModel::SessionModel(QObject *parent)
@@ -137,6 +140,7 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
     if (sessionIt != m_sessionData.end()) {
         SessionData &existingSession = *sessionIt;
 
+#if !OVERWRITE_VARS
         QStringList existingKeys = existingSession.varKeys();
         QStringList newKeys = newSession.varKeys();
 
@@ -185,10 +189,12 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
             qDebug() << "Added new SessionData with unique SESSION_ID:" << uniqueSessionID;
             return;
         }
+#endif
 
         // Retrieve sensor names from both sessions
         QStringList newSensorKeys = newSession.sensorKeys();
 
+#if !OVERWRITE_SENSORS
         // Check for overlapping sensors
         bool noOverlap = true;
         for (const QString &sensorKey : newSensorKeys) {
@@ -234,6 +240,7 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
             qDebug() << "Added new SessionData with unique SESSION_ID:" << uniqueSessionID;
             return;
         }
+#endif
 
         // Merge sensors and measurements
         for (const QString &sensorName : newSensorKeys) {
