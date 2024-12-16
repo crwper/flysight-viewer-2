@@ -78,9 +78,7 @@ void LogbookView::onHoveredSessionChanged(const QString& sessionId)
     int row = model->getSessionRow(sessionId);
     if(row != -1){
         QModelIndex index = model->index(row, SessionModel::Description); // Assuming Description is the first column
-        treeView->setCurrentIndex(index);
         treeView->selectionModel()->select(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
-        treeView->scrollTo(index, QAbstractItemView::EnsureVisible);
     }
 }
 
