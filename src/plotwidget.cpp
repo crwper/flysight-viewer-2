@@ -99,11 +99,6 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                 crosshairH->setVisible(false);
                 crosshairV->setVisible(false);
                 customPlot->replot();
-
-                // Clear hovered session
-                if (!model->hoveredSessionId().isEmpty()) {
-                    model->setHoveredSessionId(QString());
-                }
             }
             break;
 
@@ -130,31 +125,10 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                 crosshairH->setVisible(false);
                 crosshairV->setVisible(false);
                 customPlot->replot();
-
-                // Clear hovered session
-                if (!model->hoveredSessionId().isEmpty()) {
-                    model->setHoveredSessionId(QString());
-                }
             }
 
             if (isCursorOverPlot) {
                 updateCrosshairs(pos);
-
-                // Detect if a graph is under the cursor
-                QCPAbstractPlottable *plottable = customPlot->plottableAt(pos, false);
-                QCPGraph *graph = dynamic_cast<QCPGraph*>(plottable);
-
-                if (graph) {
-                    QString sessionId = m_graphToSessionMap.value(graph, QString());
-                    if (!sessionId.isEmpty() && model->hoveredSessionId() != sessionId) {
-                        model->setHoveredSessionId(sessionId);
-                    }
-                } else {
-                    // Not over any graph
-                    if (!model->hoveredSessionId().isEmpty()) {
-                        model->setHoveredSessionId(QString());
-                    }
-                }
             }
 
             break;

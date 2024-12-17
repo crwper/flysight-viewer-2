@@ -18,9 +18,6 @@ LogbookView::LogbookView(SessionModel *model, QWidget *parent)
     setLayout(layout);
 
     setupView();
-
-    // Connect to hoveredSessionChanged signal
-    connect(model, &SessionModel::hoveredSessionChanged, this, &LogbookView::onHoveredSessionChanged);
 }
 
 void LogbookView::setupView()
@@ -67,19 +64,5 @@ bool LogbookView::eventFilter(QObject *obj, QEvent *event)
     return QWidget::eventFilter(obj, event);
 }
 
-void LogbookView::onHoveredSessionChanged(const QString& sessionId)
-{
-    if(sessionId.isEmpty()){
-        // Clear selection if no session is hovered
-        treeView->selectionModel()->clearSelection();
-        return;
-    }
-
-    int row = model->getSessionRow(sessionId);
-    if(row != -1){
-        QModelIndex index = model->index(row, SessionModel::Description); // Assuming Description is the first column
-        treeView->selectionModel()->select(index, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
-    }
-}
 
 } // namespace FlySight
