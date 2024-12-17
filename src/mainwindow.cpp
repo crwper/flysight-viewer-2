@@ -560,13 +560,14 @@ void MainWindow::initializeCalculatedMeasurements()
     });
 
     // Helper lambda to compute _time for non-GNSS sensors
-    auto compute_time = [](SessionData &session, const QString &sensorID) -> std::optional<QVector<double>> {
-        // If GNSS, just return the GNSS time (already UTC)
-        if (sensorID == "GNSS") {
-            return session.getMeasurement("GNSS", "time");
+    auto compute_time = [](SessionData &session, const QString &sensorKey) -> std::optional<QVector<double>> {
+        // Check that sensor is allowed
+        const QStringList allowedSensors = { "BARO", "HUM", "MAG", "IMU", "TIME", "VBAT" };
+        if (!allowedSensors.contains(sensorKey)) {
+            return std::nullopt;
         }
 
-        // For non-GNSS sensors, we need TIME sensor data and a linear fit
+        // We need TIME sensor data and a linear fit
         bool haveFit = session.hasAttribute(SessionKeys::TimeFitA) && session.hasAttribute(SessionKeys::TimeFitB);
         double a = 0.0, b = 0.0;
         if (!haveFit) {
@@ -625,11 +626,11 @@ void MainWindow::initializeCalculatedMeasurements()
         }
 
         // Now convert the sensor's 'time' measurement using the linear fit
-        if (!session.hasMeasurement(sensorID, "time")) {
+        if (!session.hasMeasurement(sensorKey, "time")) {
             return std::nullopt;
         }
 
-        QVector<double> sensorSystemTime = session.getMeasurement(sensorID, "time");
+        QVector<double> sensorSystemTime = session.getMeasurement(sensorKey, "time");
         QVector<double> result(sensorSystemTime.size());
         for (int i = 0; i < sensorSystemTime.size(); ++i) {
             result[i] = a * sensorSystemTime[i] + b;
