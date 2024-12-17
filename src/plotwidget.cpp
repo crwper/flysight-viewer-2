@@ -273,7 +273,7 @@ void PlotWidget::updatePlot()
                     }
 
                     // Assume there is a "time" measurement for x-axis
-                    QVector<double> xData = const_cast<SessionData&>(session).getMeasurement(sensorID, SessionKeys::Time);
+                    QVector<double> xData = const_cast<SessionData&>(session).getMeasurement(sensorID, SessionKeys::TimeFromExit);
 
                     if(xData.isEmpty()){
                         qWarning() << "No 'time' data available for session:" << session.getAttribute(SessionKeys::SessionId);

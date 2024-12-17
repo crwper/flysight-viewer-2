@@ -175,7 +175,7 @@ void MainWindow::importFiles(
 
                 // Collect min and max time from tempSessionData
                 for (const QString &sensorKey : tempSessionData.sensorKeys()) {
-                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, SessionKeys::Time);
+                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, SessionKeys::TimeFromExit);
                     if (!times.isEmpty()) {
                         double minTime = *std::min_element(times.begin(), times.end());
                         double maxTime = *std::max_element(times.begin(), times.end());
@@ -221,7 +221,7 @@ void MainWindow::importFiles(
 
                 // Collect min and max time from tempSessionData
                 for (const QString &sensorKey : tempSessionData.sensorKeys()) {
-                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, SessionKeys::Time);
+                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, SessionKeys::TimeFromExit);
                     if (!times.isEmpty()) {
                         double minTime = *std::min_element(times.begin(), times.end());
                         double maxTime = *std::max_element(times.begin(), times.end());
@@ -432,9 +432,9 @@ void MainWindow::initializeCalculatedAttributes()
             return std::nullopt;
         }
 
-        double threshold = -10.0; // Example threshold in m/s
+        double threshold = 20.0; // Example threshold in m/s
         for (int i = 0; i < vertSpeed.size(); ++i) {
-            if (vertSpeed[i] < threshold) {
+            if (vertSpeed[i] > threshold) {
                 return QString::number(time[i], 'f', 3);
             }
         }
@@ -648,6 +648,34 @@ void MainWindow::initializeCalculatedMeasurements()
     for (const QString &sens : sensors) {
         SessionData::registerCalculatedMeasurement(sens, SessionKeys::Time, [compute_time, sens](SessionData &s) {
             return compute_time(s, sens);
+        });
+    }
+
+    // Helper lambda to compute time from exit
+    auto compute_time_from_exit = [](SessionData &session, const QString &sensorKey) -> std::optional<QVector<double>> {
+        // Get raw time first to force calculation if needed
+        QVector<double> rawTime = session.getMeasurement(sensorKey, SessionKeys::Time);
+
+        // Then get exit time attribute
+        bool ok;
+        double exitTime = session.getAttribute(SessionKeys::ExitTime).toDouble(&ok);
+        if (!ok) {
+            return std::nullopt;
+        }
+
+        // Now calculate the difference
+        QVector<double> result(rawTime.size());
+        for (int i = 0; i < rawTime.size(); ++i) {
+            result[i] = rawTime[i] - exitTime;
+        }
+        return result;
+    };
+
+    // Register for all sensors
+    QStringList all_sensors = {"GNSS", "BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
+    for (const QString &sens : all_sensors) {
+        SessionData::registerCalculatedMeasurement(sens, SessionKeys::TimeFromExit, [compute_time_from_exit, sens](SessionData &s) {
+            return compute_time_from_exit(s, sens);
         });
     }
 }
