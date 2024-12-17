@@ -18,7 +18,7 @@ bool CalculatedValue<Key, Value>::hasCalculation(const Key &key) const
 }
 
 template<typename Key, typename Value>
-Value CalculatedValue<Key, Value>::getValue(SessionData &session, const Key &key) const
+std::optional<Value> CalculatedValue<Key, Value>::getValue(SessionData &session, const Key &key) const
 {
     // If the value is already computed and cached
     if (m_cache.contains(key)) {
@@ -28,22 +28,25 @@ Value CalculatedValue<Key, Value>::getValue(SessionData &session, const Key &key
     // Check for circular dependencies
     if (m_activeCalculations.contains(key)) {
         qWarning() << "Circular dependency detected for key:" << key;
-        return Value();
+        return std::nullopt;
     }
 
     // Check if a calculation function is registered
     if (!s_calculations.contains(key)) {
         qWarning() << "No calculation registered for key:" << key;
-        return Value();
+        return std::nullopt;
     }
 
     // Perform the calculation
     m_activeCalculations.insert(key);
-    Value result = s_calculations[key](session);
+    std::optional<Value> result = s_calculations[key](session);
     m_activeCalculations.remove(key);
 
-    // Cache the result
-    m_cache.insert(key, result);
+    if (result.has_value()) {
+        m_cache.insert(key, result.value());
+    } else {
+        qWarning() << "Calculation failed for key:" << key;
+    }
 
     return result;
 }
@@ -51,5 +54,6 @@ Value CalculatedValue<Key, Value>::getValue(SessionData &session, const Key &key
 // Explicit template instantiations
 using MeasurementKey = QPair<QString, QString>;
 template class CalculatedValue<MeasurementKey, QVector<double>>;
+template class CalculatedValue<QString, QString>;
 
 } // namespace FlySight

@@ -22,7 +22,12 @@ bool SessionData::hasVar(const QString &key) const {
 }
 
 QString SessionData::getVar(const QString &key) const {
-    return m_vars.value(key, QString());
+    if (hasVar(key)) {
+        return m_vars.value(key);
+    }
+
+    // If not directly stored, try to compute it from a calculated var
+    return computeVar(key);
 }
 
 void SessionData::setVar(const QString &key, const QString &value) {
@@ -33,8 +38,8 @@ QStringList SessionData::sensorKeys() const {
     return m_sensors.keys();
 }
 
-bool SessionData::hasSensor(const QString &key) const {
-    return m_sensors.contains(key);
+bool SessionData::hasSensor(const QString &sensorKey) const {
+    return m_sensors.contains(sensorKey);
 }
 
 QStringList SessionData::measurementKeys(const QString &sensorKey) const {
@@ -53,7 +58,7 @@ QVector<double> SessionData::getMeasurement(const QString &sensorKey, const QStr
         return m_sensors.value(sensorKey).value(measurementKey);
     }
 
-    // If not directly stored, try to compute it from a calculated value
+    // If not directly stored, try to compute it from a calculated measurement
     return computeMeasurement(sensorKey, measurementKey);
 }
 
@@ -61,21 +66,32 @@ void SessionData::setMeasurement(const QString &sensorKey, const QString &measur
     m_sensors[sensorKey].insert(measurementKey, data);
 }
 
-void SessionData::registerCalculatedValue(const QString &sensorID, const QString &measurementID, CalculationFunction func) {
-    MeasurementKey key(sensorID, measurementID);
+void SessionData::registerCalculatedVar(const QString &key, VarFunction func) {
+    CalculatedValue<QString, QString>::registerCalculation(key, func);
+}
+
+void SessionData::registerCalculatedMeasurement(const QString &sensorKey, const QString &measurementKey, MeasurementFunction func) {
+    MeasurementKey key(sensorKey, measurementKey);
     CalculatedValue<MeasurementKey, QVector<double>>::registerCalculation(key, func);
 }
 
-QVector<double> SessionData::computeMeasurement(const QString &sensorID, const QString &measurementID) const {
-    MeasurementKey key(sensorID, measurementID);
+QString SessionData::computeVar(const QString &key) const {
+    auto result = m_calculatedVars.getValue(*const_cast<SessionData*>(this), key);
+    if (!result.has_value()) {
+        // handle failure
+        return QString();
+    }
+    return result.value();
+}
 
-    if (!m_calculatedMeasurements.hasCalculation(key)) {
-        qWarning() << "Calculated value not registered for" << sensorID << "/" << measurementID;
+QVector<double> SessionData::computeMeasurement(const QString &sensorKey, const QString &measurementKey) const {
+    MeasurementKey k(sensorKey, measurementKey);
+    auto result = m_calculatedMeasurements.getValue(*const_cast<SessionData*>(this), k);
+    if (!result.has_value()) {
+        // handle failure
         return QVector<double>();
     }
-
-    // Compute and return the calculated measurement
-    return m_calculatedMeasurements.getValue(*const_cast<SessionData*>(this), key);
+    return result.value();
 }
 
 } // namespace FlySight

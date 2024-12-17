@@ -16,7 +16,7 @@ template<typename Key, typename Value>
 class CalculatedValue
 {
 public:
-    using CalculationFunction = std::function<Value(SessionData&)>;
+    using CalculationFunction = std::function<std::optional<Value>(SessionData&)>;
 
     // Registers a calculation function for a given key.
     static void registerCalculation(const Key &key, CalculationFunction func);
@@ -25,7 +25,7 @@ public:
     bool hasCalculation(const Key &key) const;
 
     // Retrieves the value associated with the given key, computing it if necessary.
-    Value getValue(SessionData &session, const Key &key) const;
+    std::optional<Value> getValue(SessionData &session, const Key &key) const;
 
 private:
     mutable QMap<Key, Value> m_cache;

@@ -91,7 +91,8 @@ private:
     void importFiles(const QStringList &fileNames, bool showProgress, const QString &baseDir = QString());
 
     // Helper methods for calculated values
-    void initializeCalculatedValues();
+    void initializeCalculatedVars();
+    void initializeCalculatedMeasurements();
 
     // Helper methods for plot menu
     void initializePlotsMenu();

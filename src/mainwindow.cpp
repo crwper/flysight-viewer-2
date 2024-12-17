@@ -26,7 +26,8 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
 
     // Initialize calculated values
-    initializeCalculatedValues();
+    initializeCalculatedVars();
+    initializeCalculatedMeasurements();
 
     // Add logbook view
     QDockWidget *logbookDock = new QDockWidget(tr("Logbook"), this);
@@ -419,20 +420,44 @@ void MainWindow::populatePlotModel(
     }
 }
 
-void MainWindow::initializeCalculatedValues()
+void MainWindow::initializeCalculatedVars()
 {
-    SessionData::registerCalculatedValue("GNSS", "velH", [](SessionData& session) -> QVector<double> {
+    SessionData::registerCalculatedVar(SessionKeys::ExitTime, [](SessionData& session) -> std::optional<QString> {
+        // Find the first timestamp where vertical speed drops below a threshold
+        QVector<double> vertSpeed = session.getMeasurement("GNSS", "velD");
+        QVector<double> time = session.getMeasurement("GNSS", "_time");
+
+        if (vertSpeed.isEmpty() || time.isEmpty() || vertSpeed.size() != time.size()) {
+            qWarning() << "Insufficient data to calculate exit time.";
+            return std::nullopt;
+        }
+
+        double threshold = -10.0; // Example threshold in m/s
+        for (int i = 0; i < vertSpeed.size(); ++i) {
+            if (vertSpeed[i] < threshold) {
+                return QString::number(time[i], 'f', 3);
+            }
+        }
+
+        qWarning() << "Exit time could not be determined based on current data.";
+        return std::nullopt;
+    });
+}
+
+void MainWindow::initializeCalculatedMeasurements()
+{
+    SessionData::registerCalculatedMeasurement("GNSS", "velH", [](SessionData& session) -> std::optional<QVector<double>> {
         QVector<double> velN = session.getMeasurement("GNSS", "velN");
         QVector<double> velE = session.getMeasurement("GNSS", "velE");
 
         if (velN.isEmpty() || velE.isEmpty()) {
             qWarning() << "Cannot calculate total_speed due to missing velN or velE";
-            return QVector<double>();
+            return std::nullopt;
         }
 
         if (velN.size() != velE.size()) {
             qWarning() << "velN and velE size mismatch in session:" << session.getVar(SessionKeys::SessionId);
-            return QVector<double>();
+            return std::nullopt;
         }
 
         QVector<double> velH;
@@ -443,18 +468,18 @@ void MainWindow::initializeCalculatedValues()
         return velH;
     });
 
-    SessionData::registerCalculatedValue("GNSS", "vel", [](SessionData& session) -> QVector<double> {
+    SessionData::registerCalculatedMeasurement("GNSS", "vel", [](SessionData& session) -> std::optional<QVector<double>> {
         QVector<double> velH = session.getMeasurement("GNSS", "velH");
         QVector<double> velD = session.getMeasurement("GNSS", "velD");
 
         if (velH.isEmpty() || velD.isEmpty()) {
             qWarning() << "Cannot calculate total_speed due to missing velH or velD";
-            return QVector<double>();
+            return std::nullopt;
         }
 
         if (velH.size() != velD.size()) {
             qWarning() << "velH and velD size mismatch in session:" << session.getVar(SessionKeys::SessionId);
-            return QVector<double>();
+            return std::nullopt;
         }
 
         QVector<double> vel;
@@ -465,19 +490,19 @@ void MainWindow::initializeCalculatedValues()
         return vel;
     });
 
-    SessionData::registerCalculatedValue("IMU", "aTotal", [](SessionData& session) -> QVector<double> {
+    SessionData::registerCalculatedMeasurement("IMU", "aTotal", [](SessionData& session) -> std::optional<QVector<double>> {
         QVector<double> ax = session.getMeasurement("IMU", "ax");
         QVector<double> ay = session.getMeasurement("IMU", "ay");
         QVector<double> az = session.getMeasurement("IMU", "az");
 
         if (ax.isEmpty() || ay.isEmpty() || az.isEmpty()) {
             qWarning() << "Cannot calculate aTotal due to missing ax, ay, or az";
-            return QVector<double>();
+            return std::nullopt;
         }
 
         if ((ax.size() != ay.size()) || (ax.size() != az.size())) {
             qWarning() << "az, ay, or az size mismatch in session:" << session.getVar(SessionKeys::SessionId);
-            return QVector<double>();
+            return std::nullopt;
         }
 
         QVector<double> aTotal;
@@ -488,19 +513,19 @@ void MainWindow::initializeCalculatedValues()
         return aTotal;
     });
 
-    SessionData::registerCalculatedValue("IMU", "wTotal", [](SessionData& session) -> QVector<double> {
+    SessionData::registerCalculatedMeasurement("IMU", "wTotal", [](SessionData& session) -> std::optional<QVector<double>> {
         QVector<double> wx = session.getMeasurement("IMU", "wx");
         QVector<double> wy = session.getMeasurement("IMU", "wy");
         QVector<double> wz = session.getMeasurement("IMU", "wz");
 
         if (wx.isEmpty() || wy.isEmpty() || wz.isEmpty()) {
             qWarning() << "Cannot calculate wTotal due to missing wx, wy, or wz";
-            return QVector<double>();
+            return std::nullopt;
         }
 
         if ((wx.size() != wy.size()) || (wx.size() != wz.size())) {
             qWarning() << "wz, wy, or wz size mismatch in session:" << session.getVar(SessionKeys::SessionId);
-            return QVector<double>();
+            return std::nullopt;
         }
 
         QVector<double> wTotal;
@@ -511,19 +536,19 @@ void MainWindow::initializeCalculatedValues()
         return wTotal;
     });
 
-    SessionData::registerCalculatedValue("MAG", "total", [](SessionData& session) -> QVector<double> {
+    SessionData::registerCalculatedMeasurement("MAG", "total", [](SessionData& session) -> std::optional<QVector<double>> {
         QVector<double> x = session.getMeasurement("MAG", "x");
         QVector<double> y = session.getMeasurement("MAG", "y");
         QVector<double> z = session.getMeasurement("MAG", "z");
 
         if (x.isEmpty() || y.isEmpty() || z.isEmpty()) {
             qWarning() << "Cannot calculate total due to missing x, y, or z";
-            return QVector<double>();
+            return std::nullopt;
         }
 
         if ((x.size() != y.size()) || (x.size() != z.size())) {
             qWarning() << "x, y, or z size mismatch in session:" << session.getVar(SessionKeys::SessionId);
-            return QVector<double>();
+            return std::nullopt;
         }
 
         QVector<double> total;
@@ -535,7 +560,7 @@ void MainWindow::initializeCalculatedValues()
     });
 
     // Helper lambda to compute _time for non-GNSS sensors
-    auto compute_time = [](SessionData &session, const QString &sensorID) -> QVector<double> {
+    auto compute_time = [](SessionData &session, const QString &sensorID) -> std::optional<QVector<double>> {
         // If GNSS, just return the GNSS time (already UTC)
         if (sensorID == "GNSS") {
             return session.getMeasurement("GNSS", "time");
@@ -551,7 +576,7 @@ void MainWindow::initializeCalculatedValues()
                 !session.hasMeasurement("TIME", "tow") ||
                 !session.hasMeasurement("TIME", "week")) {
                 // TIME sensor not available or incomplete data
-                return {};
+                return std::nullopt;
             }
 
             QVector<double> systemTime = session.getMeasurement("TIME", "time");
@@ -561,7 +586,7 @@ void MainWindow::initializeCalculatedValues()
             int N = std::min({systemTime.size(), tow.size(), week.size()});
             if (N < 2) {
                 // Not enough points for a linear fit
-                return {};
+                return std::nullopt;
             }
 
             // Compute UTC time
@@ -584,7 +609,7 @@ void MainWindow::initializeCalculatedValues()
             double denom = (N * sumSS - sumS * sumS);
             if (denom == 0.0) {
                 // Degenerate fit
-                return {};
+                return std::nullopt;
             }
 
             a = (N * sumSU - sumS * sumU) / denom;
@@ -601,7 +626,7 @@ void MainWindow::initializeCalculatedValues()
 
         // Now convert the sensor's 'time' measurement using the linear fit
         if (!session.hasMeasurement(sensorID, "time")) {
-            return {};
+            return std::nullopt;
         }
 
         QVector<double> sensorSystemTime = session.getMeasurement(sensorID, "time");
@@ -613,14 +638,14 @@ void MainWindow::initializeCalculatedValues()
     };
 
     // Register for GNSS
-    SessionData::registerCalculatedValue("GNSS", SessionKeys::Time, [](SessionData &s) {
+    SessionData::registerCalculatedMeasurement("GNSS", SessionKeys::Time, [](SessionData &s) {
         return s.getMeasurement("GNSS", "time");
     });
 
     // Register for other sensors
     QStringList sensors = {"BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
     for (const QString &sens : sensors) {
-        SessionData::registerCalculatedValue(sens, SessionKeys::Time, [compute_time, sens](SessionData &s) {
+        SessionData::registerCalculatedMeasurement(sens, SessionKeys::Time, [compute_time, sens](SessionData &s) {
             return compute_time(s, sens);
         });
     }
