@@ -21,7 +21,6 @@ private:
     // Enums and type definitions
     enum class FS_FileType { FS1, FS2 };
     enum class FS_Section { HEADER, DATA };
-    using SensorData = SessionData::SensorData;
 
     // Last import error
     QString m_lastError;

@@ -97,7 +97,7 @@ void DataImporter::importFS1(QTextStream& in, SessionData& sessionData) {
     columnOrder[DefaultSensorId] = columns;
 
     // Initialize the data map in sensors
-    SessionData::SensorData& sensor = sessionData.m_sensors[DefaultSensorId];
+    QMap<QString, QVector<double>>& sensor = sessionData.m_sensors[DefaultSensorId];
     for (const QString& colName : columns) {
         sensor[colName]; // Initialize empty QVector<double> for each column
     }
@@ -253,7 +253,7 @@ void DataImporter::importDataRow(const QString& line, const QMap<QString, QVecto
     }
 
     // All fields are valid, append to SessionData
-    SessionData::SensorData& sensor = sessionData.m_sensors[key];
+    QMap<QString, QVector<double>>& sensor = sessionData.m_sensors[key];
     for (int i = 0; i < cols.size(); ++i) {
         const QString& colName = cols[i];
         sensor[colName].append(tempValues[i]);

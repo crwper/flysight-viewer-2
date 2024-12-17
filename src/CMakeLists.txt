@@ -30,6 +30,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         sessiondata.cpp sessiondata.h
         import.cpp import.h
         logbookview.h logbookview.cpp
+        calculatedvalue.h calculatedvalue.cpp
 
 
     )

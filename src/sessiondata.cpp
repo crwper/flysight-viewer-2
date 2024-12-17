@@ -1,14 +1,10 @@
 #include "sessiondata.h"
-
 #include <QDebug>
 #include <QDateTime>
 #include <QCryptographicHash>
 
-QMap<QString, QMap<QString, FlySight::SessionData::CalculationFunction>> FlySight::SessionData::s_calculations;
-
 namespace FlySight {
 
-// Accessors for visibility
 bool SessionData::isVisible() const {
     return m_vars.value(SessionKeys::Visible, "true") == "true";
 }
@@ -29,7 +25,7 @@ QString SessionData::getVar(const QString &key) const {
     return m_vars.value(key, QString());
 }
 
-void SessionData::setVar(const QString& key, const QString& value) {
+void SessionData::setVar(const QString &key, const QString &value) {
     m_vars.insert(key, value);
 }
 
@@ -57,65 +53,29 @@ QVector<double> SessionData::getMeasurement(const QString &sensorKey, const QStr
         return m_sensors.value(sensorKey).value(measurementKey);
     }
 
-    if (hasCalculatedValue(sensorKey, measurementKey)) {
-        return getCalculatedValue(sensorKey, measurementKey);
-    }
-
+    // If not directly stored, try to compute it from a calculated value
     return computeMeasurement(sensorKey, measurementKey);
 }
 
-void SessionData::setMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data) {
+void SessionData::setMeasurement(const QString &sensorKey, const QString &measurementKey, const QVector<double> &data) {
     m_sensors[sensorKey].insert(measurementKey, data);
 }
 
-bool SessionData::hasCalculatedValue(const QString &sensorKey, const QString &measurementKey) const {
-    auto calculatedValueIt = m_calculatedValues.find(sensorKey);
-    if (calculatedValueIt == m_calculatedValues.end()) return false;
-    return calculatedValueIt.value().contains(measurementKey);
-}
-
-QVector<double> SessionData::getCalculatedValue(const QString &sensorKey, const QString &measurementKey) const {
-    if (!hasCalculatedValue(sensorKey, measurementKey))
-        return QVector<double>();
-    return m_calculatedValues.value(sensorKey).value(measurementKey);
-}
-
-void SessionData::setCalculatedValue(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data) const {
-    m_calculatedValues[sensorKey].insert(measurementKey, data);
+void SessionData::registerCalculatedValue(const QString &sensorID, const QString &measurementID, CalculationFunction func) {
+    MeasurementKey key(sensorID, measurementID);
+    CalculatedValue<MeasurementKey, QVector<double>>::registerCalculation(key, func);
 }
 
 QVector<double> SessionData::computeMeasurement(const QString &sensorID, const QString &measurementID) const {
-    CalculationKey key{sensorID, measurementID};
+    MeasurementKey key(sensorID, measurementID);
 
-    if (m_activeCalculations.contains(key)) {
-        qWarning() << "Circular dependency detected while calculating" << sensorID << "/" << measurementID;
-        return QVector<double>();
-    }
-
-    if (!s_calculations.contains(sensorID) || !s_calculations[sensorID].contains(measurementID)) {
+    if (!m_calculatedMeasurements.hasCalculation(key)) {
         qWarning() << "Calculated value not registered for" << sensorID << "/" << measurementID;
         return QVector<double>();
     }
 
-    m_activeCalculations.insert(key);
-
-    CalculationFunction func = s_calculations[sensorID][measurementID];
-    QVector<double> calculatedData = func(const_cast<SessionData&>(*this));
-
-    m_activeCalculations.remove(key);
-
-    if (!calculatedData.isEmpty()) {
-        setCalculatedValue(sensorID, measurementID, calculatedData);
-        qDebug() << "Calculated and cached value for" << sensorID << "/" << measurementID;
-    } else {
-        qWarning() << "Calculated data is empty for" << sensorID << "/" << measurementID;
-    }
-
-    return calculatedData;
-}
-
-void SessionData::registerCalculatedValue(const QString &sensorID, const QString &measurementID, CalculationFunction func) {
-    s_calculations[sensorID][measurementID] = func;
+    // Compute and return the calculated measurement
+    return m_calculatedMeasurements.getValue(*const_cast<SessionData*>(this), key);
 }
 
 } // namespace FlySight
