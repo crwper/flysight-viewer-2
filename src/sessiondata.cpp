@@ -6,40 +6,40 @@
 namespace FlySight {
 
 bool SessionData::isVisible() const {
-    return m_vars.value(SessionKeys::Visible, "true") == "true";
+    return m_attributes.value(SessionKeys::Visible, "true") == "true";
 }
 
 void SessionData::setVisible(bool visible) {
-    m_vars.insert(SessionKeys::Visible, visible ? "true" : "false");
+    m_attributes.insert(SessionKeys::Visible, visible ? "true" : "false");
 }
 
-QStringList SessionData::varKeys() const {
-    return m_vars.keys();
+QStringList SessionData::attributeKeys() const {
+    return m_attributes.keys();
 }
 
-bool SessionData::hasVar(const QString &key) const {
-    return m_vars.contains(key);
+bool SessionData::hasAttribute(const QString &key) const {
+    return m_attributes.contains(key);
 }
 
-QString SessionData::getVar(const QString &key) const {
-    if (hasVar(key)) {
-        return m_vars.value(key);
+QString SessionData::getAttribute(const QString &key) const {
+    if (hasAttribute(key)) {
+        return m_attributes.value(key);
     }
 
-    // If not directly stored, try to compute it from a calculated var
-    return computeVar(key);
+    // If not directly stored, try to compute it from a calculated attribute
+    return computeAttribute(key);
 }
 
-void SessionData::setVar(const QString &key, const QString &value) {
-    m_vars.insert(key, value);
+void SessionData::setAttribute(const QString &key, const QString &value) {
+    m_attributes.insert(key, value);
 }
 
 QStringList SessionData::sensorKeys() const {
     return m_sensors.keys();
 }
 
-bool SessionData::hasSensor(const QString &sensorKey) const {
-    return m_sensors.contains(sensorKey);
+bool SessionData::hasSensor(const QString &key) const {
+    return m_sensors.contains(key);
 }
 
 QStringList SessionData::measurementKeys(const QString &sensorKey) const {
@@ -66,7 +66,7 @@ void SessionData::setMeasurement(const QString &sensorKey, const QString &measur
     m_sensors[sensorKey].insert(measurementKey, data);
 }
 
-void SessionData::registerCalculatedVar(const QString &key, VarFunction func) {
+void SessionData::registerCalculatedAttribute(const QString &key, AttributeFunction func) {
     CalculatedValue<QString, QString>::registerCalculation(key, func);
 }
 
@@ -75,8 +75,8 @@ void SessionData::registerCalculatedMeasurement(const QString &sensorKey, const 
     CalculatedValue<MeasurementKey, QVector<double>>::registerCalculation(key, func);
 }
 
-QString SessionData::computeVar(const QString &key) const {
-    auto result = m_calculatedVars.getValue(*const_cast<SessionData*>(this), key);
+QString SessionData::computeAttribute(const QString &key) const {
+    auto result = m_calculatedAttributes.getValue(*const_cast<SessionData*>(this), key);
     if (!result.has_value()) {
         // handle failure
         return QString();

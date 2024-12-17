@@ -268,7 +268,7 @@ void PlotWidget::updatePlot()
                     QVector<double> yData = const_cast<SessionData&>(session).getMeasurement(sensorID, measurementID);
 
                     if(yData.isEmpty()){
-                        qWarning() << "No data available for plot:" << plotName << "in session:" << session.getVar(SessionKeys::SessionId);
+                        qWarning() << "No data available for plot:" << plotName << "in session:" << session.getAttribute(SessionKeys::SessionId);
                         continue;
                     }
 
@@ -276,12 +276,12 @@ void PlotWidget::updatePlot()
                     QVector<double> xData = const_cast<SessionData&>(session).getMeasurement(sensorID, SessionKeys::Time);
 
                     if(xData.isEmpty()){
-                        qWarning() << "No 'time' data available for session:" << session.getVar(SessionKeys::SessionId);
+                        qWarning() << "No 'time' data available for session:" << session.getAttribute(SessionKeys::SessionId);
                         continue;
                     }
 
                     if(xData.size() != yData.size()){
-                        qWarning() << "Time and measurement data size mismatch for session:" << session.getVar(SessionKeys::SessionId);
+                        qWarning() << "Time and measurement data size mismatch for session:" << session.getAttribute(SessionKeys::SessionId);
                         continue;
                     }
 
@@ -305,13 +305,13 @@ void PlotWidget::updatePlot()
                     m_plottedGraphs.append(graph);
 
                     // Map graph to session ID
-                    QString sessionId = session.getVar(SessionKeys::SessionId);
+                    QString sessionId = session.getAttribute(SessionKeys::SessionId);
                     m_graphToSessionMap.insert(graph, sessionId);
 
                     // Store the default pen for later use
                     m_graphDefaultPens.insert(graph, graph->pen());
 
-                    qDebug() << "Plotted session:" << session.getVar(SessionKeys::SessionId) << "on plot:" << plotName;
+                    qDebug() << "Plotted session:" << session.getAttribute(SessionKeys::SessionId) << "on plot:" << plotName;
                 }
             }
         }

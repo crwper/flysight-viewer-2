@@ -26,7 +26,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
 
     // Initialize calculated values
-    initializeCalculatedVars();
+    initializeCalculatedAttributes();
     initializeCalculatedMeasurements();
 
     // Add logbook view
@@ -420,9 +420,9 @@ void MainWindow::populatePlotModel(
     }
 }
 
-void MainWindow::initializeCalculatedVars()
+void MainWindow::initializeCalculatedAttributes()
 {
-    SessionData::registerCalculatedVar(SessionKeys::ExitTime, [](SessionData& session) -> std::optional<QString> {
+    SessionData::registerCalculatedAttribute(SessionKeys::ExitTime, [](SessionData& session) -> std::optional<QString> {
         // Find the first timestamp where vertical speed drops below a threshold
         QVector<double> vertSpeed = session.getMeasurement("GNSS", "velD");
         QVector<double> time = session.getMeasurement("GNSS", "_time");
@@ -456,7 +456,7 @@ void MainWindow::initializeCalculatedMeasurements()
         }
 
         if (velN.size() != velE.size()) {
-            qWarning() << "velN and velE size mismatch in session:" << session.getVar(SessionKeys::SessionId);
+            qWarning() << "velN and velE size mismatch in session:" << session.getAttribute(SessionKeys::SessionId);
             return std::nullopt;
         }
 
@@ -478,7 +478,7 @@ void MainWindow::initializeCalculatedMeasurements()
         }
 
         if (velH.size() != velD.size()) {
-            qWarning() << "velH and velD size mismatch in session:" << session.getVar(SessionKeys::SessionId);
+            qWarning() << "velH and velD size mismatch in session:" << session.getAttribute(SessionKeys::SessionId);
             return std::nullopt;
         }
 
@@ -501,7 +501,7 @@ void MainWindow::initializeCalculatedMeasurements()
         }
 
         if ((ax.size() != ay.size()) || (ax.size() != az.size())) {
-            qWarning() << "az, ay, or az size mismatch in session:" << session.getVar(SessionKeys::SessionId);
+            qWarning() << "az, ay, or az size mismatch in session:" << session.getAttribute(SessionKeys::SessionId);
             return std::nullopt;
         }
 
@@ -524,7 +524,7 @@ void MainWindow::initializeCalculatedMeasurements()
         }
 
         if ((wx.size() != wy.size()) || (wx.size() != wz.size())) {
-            qWarning() << "wz, wy, or wz size mismatch in session:" << session.getVar(SessionKeys::SessionId);
+            qWarning() << "wz, wy, or wz size mismatch in session:" << session.getAttribute(SessionKeys::SessionId);
             return std::nullopt;
         }
 
@@ -547,7 +547,7 @@ void MainWindow::initializeCalculatedMeasurements()
         }
 
         if ((x.size() != y.size()) || (x.size() != z.size())) {
-            qWarning() << "x, y, or z size mismatch in session:" << session.getVar(SessionKeys::SessionId);
+            qWarning() << "x, y, or z size mismatch in session:" << session.getAttribute(SessionKeys::SessionId);
             return std::nullopt;
         }
 
@@ -567,7 +567,7 @@ void MainWindow::initializeCalculatedMeasurements()
         }
 
         // For non-GNSS sensors, we need TIME sensor data and a linear fit
-        bool haveFit = session.hasVar(SessionKeys::TimeFitA) && session.hasVar(SessionKeys::TimeFitB);
+        bool haveFit = session.hasAttribute(SessionKeys::TimeFitA) && session.hasAttribute(SessionKeys::TimeFitB);
         double a = 0.0, b = 0.0;
         if (!haveFit) {
             // Attempt to compute the fit
@@ -616,12 +616,12 @@ void MainWindow::initializeCalculatedMeasurements()
             b = (sumU - a * sumS) / N;
 
             // Store fit parameters
-            session.setVar(SessionKeys::TimeFitA, QString::number(a, 'g', 17));
-            session.setVar(SessionKeys::TimeFitB, QString::number(b, 'g', 17));
+            session.setAttribute(SessionKeys::TimeFitA, QString::number(a, 'g', 17));
+            session.setAttribute(SessionKeys::TimeFitB, QString::number(b, 'g', 17));
         } else {
             // Already computed fit
-            a = session.getVar(SessionKeys::TimeFitA).toDouble();
-            b = session.getVar(SessionKeys::TimeFitB).toDouble();
+            a = session.getAttribute(SessionKeys::TimeFitA).toDouble();
+            b = session.getAttribute(SessionKeys::TimeFitB).toDouble();
         }
 
         // Now convert the sensor's 'time' measurement using the linear fit

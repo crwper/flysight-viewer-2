@@ -31,7 +31,7 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const
     switch (role) {
     case Qt::DisplayRole:
         if (index.column() == Description)
-            return item.getVar(SessionKeys::Description);
+            return item.getAttribute(SessionKeys::Description);
         if (index.column() == NumberOfSensors)
             return item.sensorKeys().size();
         break;
@@ -43,13 +43,13 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const
         break;
     case Qt::EditRole:
         if (index.column() == Description)
-            return item.getVar(SessionKeys::Description);
+            return item.getAttribute(SessionKeys::Description);
         if (index.column() == NumberOfSensors)
             return item.sensorKeys().size();
         break;
     // Handle IsHoveredRole
     case CustomRoles::IsHoveredRole: {
-        QString currentSessionId = item.getVar(SessionKeys::SessionId);
+        QString currentSessionId = item.getAttribute(SessionKeys::SessionId);
         return (currentSessionId == m_hoveredSessionId) ? true : false;
     }
     default:
@@ -95,8 +95,8 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
     if (role == Qt::EditRole) {
         if (index.column() == Description) {
             QString newDescription = value.toString();
-            if (item.getVar(SessionKeys::Description) != newDescription) {
-                item.setVar(SessionKeys::Description, newDescription);
+            if (item.getAttribute(SessionKeys::Description) != newDescription) {
+                item.setAttribute(SessionKeys::Description, newDescription);
                 somethingChanged = true;
             }
         }
@@ -120,41 +120,41 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
 void SessionModel::mergeSessionData(const SessionData& newSession)
 {
     // Ensure SESSION_ID exists
-    if (!newSession.hasVar(SessionKeys::SessionId)) {
+    if (!newSession.hasAttribute(SessionKeys::SessionId)) {
         QMessageBox::critical(nullptr, tr("Import failed"), tr("No session ID found"));
         return;
     }
 
-    QString newSessionID = newSession.getVar(SessionKeys::SessionId);
+    QString newSessionID = newSession.getAttribute(SessionKeys::SessionId);
 
     // Check if SESSION_ID exists in m_sessionData
     auto sessionIt = std::find_if(
         m_sessionData.begin(), m_sessionData.end(),
         [&newSessionID](const SessionData &item) {
-            return item.getVar(SessionKeys::SessionId) == newSessionID;
+            return item.getAttribute(SessionKeys::SessionId) == newSessionID;
         });
 
     if (sessionIt != m_sessionData.end()) {
         SessionData &existingSession = *sessionIt;
 
-        // Retrieve var and sensor names from new session
-        QStringList newVarKeys = newSession.varKeys();
+        // Retrieve attribute and sensor names from new session
+        QStringList newAttributeKeys = newSession.attributeKeys();
         QStringList newSensorKeys = newSession.sensorKeys();
 
-        // Merge vars
-        for (const QString &varName : newVarKeys) {
-            const QString &value = newSession.getVar(varName);
-            existingSession.setVar(varName, value);
+        // Merge attributes
+        for (const QString &attributeKey : newAttributeKeys) {
+            const QString &value = newSession.getAttribute(attributeKey);
+            existingSession.setAttribute(attributeKey, value);
         }
 
         // Merge sensors and measurements
-        for (const QString &sensorName : newSensorKeys) {
-            QStringList newMeasurements = newSession.measurementKeys(sensorName);
+        for (const QString &sensorKey : newSensorKeys) {
+            QStringList newMeasurements = newSession.measurementKeys(sensorKey);
 
             // Simply set the measurements, regardless of whether the sensor exists.
             for (const QString &measurementKey : newMeasurements) {
-                QVector<double> data = newSession.getMeasurement(sensorName, measurementKey);
-                existingSession.setMeasurement(sensorName, measurementKey, data);
+                QVector<double> data = newSession.getMeasurement(sensorKey, measurementKey);
+                existingSession.setMeasurement(sensorKey, measurementKey, data);
             }
         }
 
@@ -190,7 +190,7 @@ QString SessionModel::hoveredSessionId() const
 int SessionModel::getSessionRow(const QString& sessionId) const
 {
     for(int row = 0; row < m_sessionData.size(); ++row){
-        if(m_sessionData[row].getVar(SessionKeys::SessionId) == sessionId){
+        if(m_sessionData[row].getAttribute(SessionKeys::SessionId) == sessionId){
             return row;
         }
     }

@@ -63,10 +63,10 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
     }
 
     // Set default description
-    sessionData.setVar(SessionKeys::Description, getDescription(fileName));
+    sessionData.setAttribute(SessionKeys::Description, getDescription(fileName));
 
     // After importing, attempt to extract DEVICE_ID based on file type
-    if (!sessionData.hasVar(SessionKeys::DeviceId)) {
+    if (!sessionData.hasAttribute(SessionKeys::DeviceId)) {
         switch (fileType) {
         case FS_FileType::FS1:
             extractDeviceId(fileName, sessionData, "Processor serial number");
@@ -78,11 +78,11 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
     }
 
     // After importing, check if SESSION_ID is set
-    if (!sessionData.hasVar(SessionKeys::SessionId)) {
+    if (!sessionData.hasAttribute(SessionKeys::SessionId)) {
         // Compute MD5 hash of fileData
         QByteArray md5Hash = QCryptographicHash::hash(fileData, QCryptographicHash::Md5);
         QString md5HashString = md5Hash.toHex();
-        sessionData.setVar(SessionKeys::SessionId, md5HashString);
+        sessionData.setAttribute(SessionKeys::SessionId, md5HashString);
     }
 
     return true;
@@ -153,10 +153,10 @@ DataImporter::FS_Section DataImporter::importHeaderRow(
             QStringView token0 = *it++;
             if (token0 == u"$VAR") {
                 if (it != tokenizer.end()) {
-                    QStringView varName = *it++;
+                    QStringView attributeName = *it++;
                     if (it != tokenizer.end()) {
-                        QStringView varValue = *it;
-                        sessionData.setVar(varName.toString(), varValue.toString());
+                        QStringView attributeValue = *it;
+                        sessionData.setAttribute(attributeName.toString(), attributeValue.toString());
                     }
                 }
             } else if (token0 == u"$COL") {
@@ -307,7 +307,7 @@ void DataImporter::extractDeviceId(const QString& fileName, SessionData& session
         QString value = line.mid(colonIndex + 1).trimmed();
 
         if (key == expectedKey) {
-            sessionData.setVar(SessionKeys::DeviceId, value);
+            sessionData.setAttribute(SessionKeys::DeviceId, value);
             return;
         }
     }
