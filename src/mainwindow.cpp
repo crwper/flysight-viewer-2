@@ -639,14 +639,21 @@ void MainWindow::initializeCalculatedMeasurements()
     };
 
     // Register for GNSS
-    SessionData::registerCalculatedMeasurement("GNSS", SessionKeys::Time, [](SessionData &s) {
-        return s.getMeasurement("GNSS", "time");
+    SessionData::registerCalculatedMeasurement("GNSS", SessionKeys::Time, [](SessionData& session) -> std::optional<QVector<double>> {
+        QVector<double> gnssTime = session.getMeasurement("GNSS", "time");
+
+        if (gnssTime.isEmpty()) {
+            qWarning() << "Cannot calculate GNSS time from epoch";
+            return std::nullopt;
+        }
+
+        return session.getMeasurement("GNSS", "time");
     });
 
     // Register for other sensors
     QStringList sensors = {"BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
     for (const QString &sens : sensors) {
-        SessionData::registerCalculatedMeasurement(sens, SessionKeys::Time, [compute_time, sens](SessionData &s) {
+        SessionData::registerCalculatedMeasurement(sens, SessionKeys::Time, [compute_time, sens](SessionData &s) -> std::optional<QVector<double>> {
             return compute_time(s, sens);
         });
     }
