@@ -437,7 +437,7 @@ void MainWindow::initializeCalculatedAttributes()
 
         const double vThreshold = 10.0; // Vertical speed threshold in m/s
         const double maxAccuracy = 1.0; // Maximum speed acccuracy in m/s
-        const double minAcceleration = 2.0; // Minimum vertical accleration in m/s^2
+        const double minAcceleration = 2.5; // Minimum vertical accleration in m/s^2
 
         for (int i = 1; i < velD.size(); ++i) {
             // Get interpolation coefficient
