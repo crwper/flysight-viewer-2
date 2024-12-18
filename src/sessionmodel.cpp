@@ -32,8 +32,8 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const
     case Qt::DisplayRole:
         if (index.column() == Description)
             return item.getAttribute(SessionKeys::Description);
-        if (index.column() == NumberOfSensors)
-            return item.sensorKeys().size();
+        if (index.column() == ExitTime)
+            return item.getAttribute(SessionKeys::ExitTime);
         break;
     case Qt::CheckStateRole:
         if (index.column() == Description) {
@@ -44,8 +44,8 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const
     case Qt::EditRole:
         if (index.column() == Description)
             return item.getAttribute(SessionKeys::Description);
-        if (index.column() == NumberOfSensors)
-            return item.sensorKeys().size();
+        if (index.column() == ExitTime)
+            return item.getAttribute(SessionKeys::ExitTime);
         break;
     // Handle IsHoveredRole
     case CustomRoles::IsHoveredRole: {
@@ -64,8 +64,8 @@ QVariant SessionModel::headerData(int section, Qt::Orientation orientation, int 
         switch (section) {
         case Description:
             return tr("Description");
-        case NumberOfSensors:
-            return tr("Number of Sensors");
+        case ExitTime:
+            return tr("Exit Time");
         default:
             return QVariant();
         }

@@ -13,7 +13,7 @@ class SessionModel : public QAbstractTableModel
 public:
     enum Columns {
         Description = 0,
-        NumberOfSensors,
+        ExitTime,
         ColumnCount
     };
 
