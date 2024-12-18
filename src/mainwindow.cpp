@@ -312,6 +312,7 @@ void MainWindow::setupPlotValues()
         {"GNSS", "Horizontal speed", "m/s", Qt::red, "GNSS", "velH"},
         {"GNSS", "Vertical speed", "m/s", Qt::green, "GNSS", "velD"},
         {"GNSS", "Total speed", "m/s", Qt::blue, "GNSS", "vel"},
+        {"GNSS", "Vertical acceleration", "m/s^2", Qt::green, "GNSS", "accD"},
         {"GNSS", "Horizontal accuracy", "m", Qt::darkRed, "GNSS", "hAcc"},
         {"GNSS", "Vertical accuracy", "m", Qt::darkGreen, "GNSS", "vAcc"},
         {"GNSS", "Speed accuracy", "m/s", Qt::darkBlue, "GNSS", "sAcc"},
@@ -424,19 +425,38 @@ void MainWindow::initializeCalculatedAttributes()
 {
     SessionData::registerCalculatedAttribute(SessionKeys::ExitTime, [](SessionData& session) -> std::optional<QString> {
         // Find the first timestamp where vertical speed drops below a threshold
-        QVector<double> vertSpeed = session.getMeasurement("GNSS", "velD");
+        QVector<double> velD = session.getMeasurement("GNSS", "velD");
+        QVector<double> sAcc = session.getMeasurement("GNSS", "sAcc");
+        QVector<double> accD = session.getMeasurement("GNSS", "accD");
         QVector<double> time = session.getMeasurement("GNSS", "_time");
 
-        if (vertSpeed.isEmpty() || time.isEmpty() || vertSpeed.size() != time.size()) {
+        if (velD.isEmpty() || time.isEmpty() || velD.size() != time.size()) {
             qWarning() << "Insufficient data to calculate exit time.";
             return std::nullopt;
         }
 
-        double threshold = 20.0; // Example threshold in m/s
-        for (int i = 0; i < vertSpeed.size(); ++i) {
-            if (vertSpeed[i] > threshold) {
-                return QString::number(time[i], 'f', 3);
-            }
+        const double vThreshold = 10.0; // Vertical speed threshold in m/s
+        const double maxAccuracy = 1.0; // Maximum speed acccuracy in m/s
+        const double minAcceleration = 2.0; // Minimum vertical accleration in m/s^2
+
+        for (int i = 1; i < velD.size(); ++i) {
+            // Get interpolation coefficient
+            const double a = (vThreshold - velD[i - 1]) / (velD[i] - velD[i - 1]);
+
+            // Check vertical speed
+            if (a < 0 || 1 < a) continue;
+
+            // Check accuracy
+            const double acc = sAcc[i - 1] + a * (sAcc[i] - sAcc[i - 1]);
+            if (acc > maxAccuracy) continue;
+
+            // Check acceleration
+            const double az = accD[i - 1] + a * (accD[i] - accD[i - 1]);
+            if (az < minAcceleration) continue;
+
+            // Determine exit
+            const double tExit = time[i - 1] + a * (time[i] - time[i - 1]) - vThreshold / az;
+            return QString::number(tExit, 'f', 3);
         }
 
         qWarning() << "Exit time could not be determined based on current data.";
@@ -685,6 +705,69 @@ void MainWindow::initializeCalculatedMeasurements()
             return compute_time_from_exit(s, sens);
         });
     }
+
+    SessionData::registerCalculatedMeasurement("GNSS", "accD", [](SessionData& session) -> std::optional<QVector<double>> {
+        QVector<double> velD = session.getMeasurement("GNSS", "velD");
+        QVector<double> time = session.getMeasurement("GNSS", "time");
+
+        if (velD.isEmpty()) {
+            qWarning() << "Cannot calculate accD due to missing velD";
+            return std::nullopt;
+        }
+
+        if (time.size() != velD.size()) {
+            qWarning() << "Cannot calculate accD because time and velD size mismatch.";
+            return std::nullopt;
+        }
+
+        // If there's fewer than two samples, we cannot compute acceleration.
+        if (velD.size() < 2) {
+            qWarning() << "Not enough data points to calculate accD.";
+            return std::nullopt;
+        }
+
+        QVector<double> accD;
+        accD.reserve(velD.size());
+
+        // For the first sample (i = 0), use forward difference:
+        // a[0] = (velD[1] - velD[0]) / (time[1] - time[0])
+        {
+            double dt = time[1] - time[0];
+            if (dt == 0.0) {
+                qWarning() << "Zero time difference encountered between indices 0 and 1.";
+                return std::nullopt;
+            }
+            double a = (velD[1] - velD[0]) / dt;
+            accD.append(a);
+        }
+
+        // For the interior points (1 <= i <= velD.size()-2), use centered difference:
+        // a[i] = (velD[i+1] - velD[i-1]) / (time[i+1] - time[i-1])
+        for (int i = 1; i < velD.size() - 1; ++i) {
+            double dt = time[i+1] - time[i-1];
+            if (dt == 0.0) {
+                qWarning() << "Zero time difference encountered for indices" << i-1 << "and" << i+1;
+                return std::nullopt;
+            }
+            double a = (velD[i+1] - velD[i-1]) / dt;
+            accD.append(a);
+        }
+
+        // For the last sample (i = velD.size()-1), use backward difference:
+        // a[last] = (velD[last] - velD[last-1]) / (time[last] - time[last-1])
+        {
+            int last = velD.size() - 1;
+            double dt = time[last] - time[last-1];
+            if (dt == 0.0) {
+                qWarning() << "Zero time difference encountered at the end indices:" << last-1 << "and" << last;
+                return std::nullopt;
+            }
+            double a = (velD[last] - velD[last-1]) / dt;
+            accD.append(a);
+        }
+
+        return accD;
+    });
 }
 
 // mainwindow.cpp
