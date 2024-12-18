@@ -27,11 +27,6 @@ void LogbookView::setupView()
     treeView->header()->setDefaultSectionSize(100);
     treeView->setMouseTracking(true); // Enable mouse tracking
 
-    // Ensure native hover highlighting is enabled
-    treeView->setSelectionMode(QAbstractItemView::SingleSelection);
-    treeView->setSelectionBehavior(QAbstractItemView::SelectRows);
-    treeView->setUniformRowHeights(true);
-
     // Install event filter to detect hover events on treeView
     treeView->viewport()->installEventFilter(this);
 }
