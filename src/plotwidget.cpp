@@ -60,7 +60,7 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
 void PlotWidget::setupPlot()
 {
     // Basic plot setup
-    customPlot->xAxis->setLabel("Time (s)");
+    customPlot->xAxis->setLabel("Time from exit (s)");
     customPlot->yAxis->setVisible(false);
 
     // Enable interactions if needed
