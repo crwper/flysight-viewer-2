@@ -25,11 +25,8 @@
    </property>
    <widget class="QMenu" name="menuTrack">
     <property name="title">
-     <string>&amp;Track</string>
+     <string>&amp;Tracks</string>
     </property>
-    <addaction name="action_Import"/>
-    <addaction name="actionImportFolder"/>
-    <addaction name="separator"/>
     <addaction name="action_ShowSelected"/>
     <addaction name="action_HideOthers"/>
     <addaction name="separator"/>
@@ -40,12 +37,20 @@
      <string>&amp;Plots</string>
     </property>
    </widget>
+   <widget class="QMenu" name="menu_File">
+    <property name="title">
+     <string>&amp;File</string>
+    </property>
+    <addaction name="action_Import"/>
+    <addaction name="actionImportFolder"/>
+   </widget>
+   <addaction name="menu_File"/>
    <addaction name="menuPlots"/>
    <addaction name="menuTrack"/>
   </widget>
   <action name="action_Import">
    <property name="text">
-    <string>&amp;Import...</string>
+    <string>Import &amp;Tracks...</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+T</string>
@@ -61,7 +66,7 @@
   </action>
   <action name="action_Delete">
    <property name="text">
-    <string>&amp;Delete</string>
+    <string>&amp;Delete Selected Tracks</string>
    </property>
    <property name="shortcut">
     <string>Del</string>
