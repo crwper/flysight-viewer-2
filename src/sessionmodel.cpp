@@ -14,7 +14,6 @@ struct SessionColumn {
 
 static const QVector<SessionColumn>& columns()
 {
-    // Function-local static: initialized on first call, not at global init time.
     static const QVector<SessionColumn> s_columns = {
         {
             "Description",
@@ -32,6 +31,42 @@ static const QVector<SessionColumn>& columns()
             true // editable
         },
         {
+            "Start Time",
+            [](const SessionData &s) -> QVariant {
+                bool ok = false;
+                double startTimeSec = s.getAttribute(SessionKeys::StartTime).toDouble(&ok);
+                if (!ok || startTimeSec <= 0) {
+                    return QVariant();
+                }
+                QDateTime dt = QDateTime::fromSecsSinceEpoch(static_cast<qint64>(startTimeSec), QTimeZone::systemTimeZone());
+                return dt.toString("yyyy-MM-dd HH:mm:ss");
+            },
+            nullptr, // not editable
+            false
+        },
+        {
+            "Duration",
+            [](const SessionData &s) -> QVariant {
+                bool ok = false;
+                double durationSec = s.getAttribute(SessionKeys::Duration).toDouble(&ok);
+                if (!ok || durationSec < 0) {
+                    return QVariant();
+                }
+
+                int totalSec = static_cast<int>(durationSec);
+                int minutes = totalSec / 60;
+                int seconds = totalSec % 60;
+
+                QString durationStr = QString("%1:%2")
+                                          .arg(minutes)
+                                          .arg(seconds, 2, 10, QChar('0'));
+
+                return durationStr;
+            },
+            nullptr, // not editable
+            false
+        },
+        {
             "Exit Time",
             [](const SessionData &s) -> QVariant {
                 bool ok = false;
@@ -39,17 +74,12 @@ static const QVector<SessionColumn>& columns()
                 if (!ok || exitTimeSeconds <= 0) {
                     return QVariant(); // No valid exit time
                 }
-
-                // Convert seconds since epoch to QDateTime
-                QDateTime dt = QDateTime::fromSecsSinceEpoch(static_cast<qint64>(exitTimeSeconds), QTimeZone::utc());
-
-                // Format the date/time as needed
-                return dt.toString("yyyy/MM/dd HH:mm:ss");
+                QDateTime dt = QDateTime::fromSecsSinceEpoch(static_cast<qint64>(exitTimeSeconds), QTimeZone::systemTimeZone());
+                return dt.toString("yyyy-MM-dd HH:mm:ss");
             },
-            nullptr, // not editable
+            nullptr,
             false
-        }
-        // Add more columns as needed
+        },
     };
     return s_columns;
 }

@@ -524,6 +524,38 @@ void MainWindow::initializeCalculatedAttributes()
         qWarning() << "Exit time could not be determined based on current data.";
         return std::nullopt;
     });
+
+    SessionData::registerCalculatedAttribute(SessionKeys::StartTime, [](SessionData &session) -> std::optional<QString> {
+        // Retrieve GNSS/time measurement
+        QVector<double> times = session.getMeasurement("GNSS", "time");
+        if (times.isEmpty()) {
+            qWarning() << "No GNSS/time data available to calculate start time.";
+            return std::nullopt;
+        }
+
+        double startTime = *std::min_element(times.begin(), times.end());
+        // Store as a string representing seconds since epoch
+        return QString::number(startTime, 'f', 3); // or 'g' for general format
+    });
+
+    SessionData::registerCalculatedAttribute(SessionKeys::Duration, [](SessionData &session) -> std::optional<QString> {
+        QVector<double> times = session.getMeasurement("GNSS", "time");
+        if (times.isEmpty()) {
+            qWarning() << "No GNSS/time data available to calculate duration.";
+            return std::nullopt;
+        }
+
+        double minTime = *std::min_element(times.begin(), times.end());
+        double maxTime = *std::max_element(times.begin(), times.end());
+        double durationSec = maxTime - minTime;
+        if (durationSec < 0) {
+            qWarning() << "Invalid GNSS/time data (max < min).";
+            return std::nullopt;
+        }
+
+        // Store duration in seconds as a string
+        return QString::number(durationSec, 'f', 3);
+    });
 }
 
 void MainWindow::initializeCalculatedMeasurements()
