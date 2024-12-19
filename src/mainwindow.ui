@@ -29,6 +29,10 @@
     </property>
     <addaction name="action_Import"/>
     <addaction name="actionImportFolder"/>
+    <addaction name="separator"/>
+    <addaction name="action_ShowSelected"/>
+    <addaction name="action_HideOthers"/>
+    <addaction name="separator"/>
     <addaction name="action_Delete"/>
    </widget>
    <widget class="QMenu" name="menuPlots">
@@ -61,6 +65,19 @@
    </property>
    <property name="shortcut">
     <string>Del</string>
+   </property>
+  </action>
+  <action name="action_ShowSelected">
+   <property name="text">
+    <string>Show Selected Tracks</string>
+   </property>
+  </action>
+  <action name="action_HideOthers">
+   <property name="text">
+    <string>Hide Others</string>
+   </property>
+   <property name="toolTip">
+    <string>Hide Others</string>
    </property>
   </action>
  </widget>

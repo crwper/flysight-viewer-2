@@ -5,6 +5,7 @@
 #include <QDebug>
 #include <QItemSelectionModel>
 #include <QHeaderView>
+#include <QMenu>
 
 namespace FlySight {
 
@@ -18,6 +19,13 @@ LogbookView::LogbookView(SessionModel *model, QWidget *parent)
     setLayout(layout);
 
     setupView();
+
+    treeView->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(treeView, &QTreeView::customContextMenuRequested, this, &LogbookView::onContextMenuRequested);
+}
+
+QList<QModelIndex> LogbookView::selectedRows() const {
+    return treeView->selectionModel()->selectedRows();
 }
 
 void LogbookView::setupView()
@@ -26,6 +34,15 @@ void LogbookView::setupView()
     treeView->setRootIsDecorated(false);
     treeView->header()->setDefaultSectionSize(100);
     treeView->setMouseTracking(true); // Enable mouse tracking
+
+    // Set selection mode to ExtendedSelection to allow multiple selections
+    treeView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+
+    // Set selection behavior to select entire rows
+    treeView->setSelectionBehavior(QAbstractItemView::SelectRows);
+
+    // Optimize performance for large models
+    treeView->setUniformRowHeights(true);
 
     // Install event filter to detect hover events on treeView
     treeView->viewport()->installEventFilter(this);
@@ -59,5 +76,19 @@ bool LogbookView::eventFilter(QObject *obj, QEvent *event)
     return QWidget::eventFilter(obj, event);
 }
 
+void LogbookView::onContextMenuRequested(const QPoint &pos)
+{
+    QMenu menu(this);
+
+    QAction *showSelectedAction = menu.addAction(tr("Show Selected Tracks"));
+    QAction *hideOthersAction = menu.addAction(tr("Hide Others"));
+
+    QAction *chosenAction = menu.exec(treeView->viewport()->mapToGlobal(pos));
+    if (chosenAction == showSelectedAction) {
+        emit showSelectedRequested();
+    } else if (chosenAction == hideOthersAction) {
+        emit hideOthersRequested();
+    }
+}
 
 } // namespace FlySight

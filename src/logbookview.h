@@ -13,6 +13,14 @@ class LogbookView : public QWidget
     Q_OBJECT
 public:
     LogbookView(SessionModel *model, QWidget *parent = nullptr);
+    QList<QModelIndex> selectedRows() const;
+
+signals:
+    void showSelectedRequested();
+    void hideOthersRequested();
+
+private slots:
+    void onContextMenuRequested(const QPoint &pos);
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;

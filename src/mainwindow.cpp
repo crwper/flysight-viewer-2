@@ -35,6 +35,9 @@ MainWindow::MainWindow(QWidget *parent)
     logbookDock->setWidget(logbookView);
     addDockWidget(Qt::RightDockWidgetArea, logbookDock);
 
+    connect(logbookView, &LogbookView::showSelectedRequested, this, &MainWindow::on_action_ShowSelected_triggered);
+    connect(logbookView, &LogbookView::hideOthersRequested, this, &MainWindow::on_action_HideOthers_triggered);
+
     // Add plot widget
     PlotWidget *plotWidget = new PlotWidget(model, plotModel, this);
     setCentralWidget(plotWidget);
@@ -288,6 +291,65 @@ void MainWindow::importFiles(
 void MainWindow::on_action_Delete_triggered()
 {
 
+}
+
+void MainWindow::on_action_ShowSelected_triggered()
+{
+    // Get all selected rows from the logbook view
+    QList<QModelIndex> selectedRows = logbookView->selectedRows();
+    if (selectedRows.isEmpty())
+        return;
+
+    // Block signals to prevent multiple dataChanged emissions
+    model->blockSignals(true);
+
+    // Set selected sessions as visible
+    for (const QModelIndex &idx : selectedRows) {
+        model->setData(model->index(idx.row(), SessionModel::Description), Qt::Checked, Qt::CheckStateRole);
+    }
+
+    // Unblock signals
+    model->blockSignals(false);
+
+    // Emit a single dataChanged for the entire range or the rows you altered
+    int totalRows = model->rowCount();
+    emit model->dataChanged(model->index(0, 0),
+                            model->index(totalRows - 1, SessionModel::ColumnCount - 1));
+
+    // Emit modelChanged() if your logic requires it
+    emit model->modelChanged();
+}
+
+void MainWindow::on_action_HideOthers_triggered()
+{
+    QList<QModelIndex> selectedRows = logbookView->selectedRows();
+    if (selectedRows.isEmpty())
+        return;
+
+    QSet<int> selectedRowsSet;
+    for (const QModelIndex &idx : selectedRows) {
+        selectedRowsSet.insert(idx.row());
+    }
+
+    // Block signals to prevent multiple dataChanged emissions
+    model->blockSignals(true);
+
+    int totalRows = model->rowCount();
+    for (int i = 0; i < totalRows; ++i) {
+        bool visible = selectedRowsSet.contains(i);
+        model->setData(model->index(i, SessionModel::Description),
+                       visible ? Qt::Checked : Qt::Unchecked, Qt::CheckStateRole);
+    }
+
+    // Unblock signals
+    model->blockSignals(false);
+
+    // Emit a single dataChanged for the entire range or the rows you altered
+    emit model->dataChanged(model->index(0, 0),
+                            model->index(totalRows - 1, SessionModel::ColumnCount - 1));
+
+    // Emit modelChanged() if your logic requires it
+    emit model->modelChanged();
 }
 
 void MainWindow::setupPlotValues()

@@ -38,6 +38,8 @@ signals:
 private slots:
     void on_action_Import_triggered();
     void on_actionImportFolder_triggered();
+    void on_action_ShowSelected_triggered();
+    void on_action_HideOthers_triggered();
     void on_action_Delete_triggered();
 
 private:
