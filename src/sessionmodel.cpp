@@ -1,5 +1,7 @@
 #include "sessionmodel.h"
 #include <QMessageBox>
+#include <QDateTime>
+#include <QTimeZone>
 
 namespace FlySight {
 
@@ -32,7 +34,17 @@ static const QVector<SessionColumn>& columns()
         {
             "Exit Time",
             [](const SessionData &s) -> QVariant {
-                return s.getAttribute(SessionKeys::ExitTime);
+                bool ok = false;
+                double exitTimeSeconds = s.getAttribute(SessionKeys::ExitTime).toDouble(&ok);
+                if (!ok || exitTimeSeconds <= 0) {
+                    return QVariant(); // No valid exit time
+                }
+
+                // Convert seconds since epoch to QDateTime
+                QDateTime dt = QDateTime::fromSecsSinceEpoch(static_cast<qint64>(exitTimeSeconds), QTimeZone::utc());
+
+                // Format the date/time as needed
+                return dt.toString("yyyy/MM/dd HH:mm:ss");
             },
             nullptr, // not editable
             false
