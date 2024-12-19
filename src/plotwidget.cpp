@@ -279,7 +279,7 @@ void PlotWidget::updatePlot()
                     m_plottedGraphs.append(graph);
 
                     // Map graph to session ID
-                    QString sessionId = session.getAttribute(SessionKeys::SessionId);
+                    QString sessionId = session.getAttribute(SessionKeys::SessionId).toString();
                     m_graphToSessionMap.insert(graph, sessionId);
 
                     // Store the default pen for later use

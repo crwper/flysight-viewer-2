@@ -485,7 +485,7 @@ void MainWindow::populatePlotModel(
 
 void MainWindow::initializeCalculatedAttributes()
 {
-    SessionData::registerCalculatedAttribute(SessionKeys::ExitTime, [](SessionData& session) -> std::optional<QString> {
+    SessionData::registerCalculatedAttribute(SessionKeys::ExitTime, [](SessionData& session) -> std::optional<QVariant> {
         // Find the first timestamp where vertical speed drops below a threshold
         QVector<double> velD = session.getMeasurement("GNSS", "velD");
         QVector<double> sAcc = session.getMeasurement("GNSS", "sAcc");
@@ -518,14 +518,14 @@ void MainWindow::initializeCalculatedAttributes()
 
             // Determine exit
             const double tExit = time[i - 1] + a * (time[i] - time[i - 1]) - vThreshold / az;
-            return QString::number(tExit, 'f', 3);
+            return QDateTime::fromSecsSinceEpoch((qint64)tExit, QTimeZone::utc());
         }
 
         qWarning() << "Exit time could not be determined based on current data.";
         return std::nullopt;
     });
 
-    SessionData::registerCalculatedAttribute(SessionKeys::StartTime, [](SessionData &session) -> std::optional<QString> {
+    SessionData::registerCalculatedAttribute(SessionKeys::StartTime, [](SessionData &session) -> std::optional<QVariant> {
         // Retrieve GNSS/time measurement
         QVector<double> times = session.getMeasurement("GNSS", "time");
         if (times.isEmpty()) {
@@ -534,11 +534,10 @@ void MainWindow::initializeCalculatedAttributes()
         }
 
         double startTime = *std::min_element(times.begin(), times.end());
-        // Store as a string representing seconds since epoch
-        return QString::number(startTime, 'f', 3); // or 'g' for general format
+        return QDateTime::fromSecsSinceEpoch((qint64)startTime, QTimeZone::utc());
     });
 
-    SessionData::registerCalculatedAttribute(SessionKeys::Duration, [](SessionData &session) -> std::optional<QString> {
+    SessionData::registerCalculatedAttribute(SessionKeys::Duration, [](SessionData &session) -> std::optional<QVariant> {
         QVector<double> times = session.getMeasurement("GNSS", "time");
         if (times.isEmpty()) {
             qWarning() << "No GNSS/time data available to calculate duration.";
@@ -553,8 +552,7 @@ void MainWindow::initializeCalculatedAttributes()
             return std::nullopt;
         }
 
-        // Store duration in seconds as a string
-        return QString::number(durationSec, 'f', 3);
+        return durationSec;
     });
 }
 
@@ -778,11 +776,18 @@ void MainWindow::initializeCalculatedMeasurements()
         QVector<double> rawTime = session.getMeasurement(sensorKey, SessionKeys::Time);
 
         // Then get exit time attribute
-        bool ok;
-        double exitTime = session.getAttribute(SessionKeys::ExitTime).toDouble(&ok);
-        if (!ok) {
+        QVariant var = session.getAttribute(SessionKeys::ExitTime);
+        if (!var.canConvert<QDateTime>()) {
             return std::nullopt;
         }
+
+        QDateTime dt = var.toDateTime();
+        if (!dt.isValid()) {
+            return std::nullopt;
+        }
+
+        // If you need the exit time as a double (seconds since epoch):
+        double exitTime = dt.toSecsSinceEpoch();
 
         // Now calculate the difference
         QVector<double> result(rawTime.size());

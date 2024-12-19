@@ -4,7 +4,8 @@
 #include <QMap>
 #include <QString>
 #include <QVector>
-#include <QSet>
+#include <QVariant>
+#include <optional>
 #include <functional>
 #include "calculatedvalue.h"
 
@@ -26,7 +27,7 @@ namespace SessionKeys {
 
 class SessionData {
 public:
-    using AttributeFunction = std::function<std::optional<QString>(SessionData&)>;
+    using AttributeFunction = std::function<std::optional<QVariant>(SessionData&)>;
     using MeasurementFunction = std::function<std::optional<QVector<double>>(SessionData&)>;
     using MeasurementKey = QPair<QString, QString>;
 
@@ -37,8 +38,8 @@ public:
 
     QStringList attributeKeys() const;
     bool hasAttribute(const QString &key) const;
-    QString getAttribute(const QString &key) const;
-    void setAttribute(const QString &key, const QString &value);
+    QVariant getAttribute(const QString &key) const;
+    void setAttribute(const QString &key, const QVariant &value);
 
     QStringList sensorKeys() const;
     bool hasSensor(const QString &key) const;
@@ -51,13 +52,13 @@ public:
     static void registerCalculatedMeasurement(const QString &sensorKey, const QString &measurementKey, MeasurementFunction func);
 
 private:
-    QMap<QString, QString> m_attributes;
+    QMap<QString, QVariant> m_attributes;
     QMap<QString, QMap<QString, QVector<double>>> m_sensors;
 
-    mutable CalculatedValue<QString, QString> m_calculatedAttributes;
+    mutable CalculatedValue<QString, QVariant> m_calculatedAttributes;
     mutable CalculatedValue<MeasurementKey, QVector<double>> m_calculatedMeasurements;
 
-    QString computeAttribute(const QString &key) const;
+    QVariant computeAttribute(const QString &key) const;
     QVector<double> computeMeasurement(const QString &sensorKey, const QString &measurementKey) const;
 
     friend class DataImporter;

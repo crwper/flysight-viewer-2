@@ -54,6 +54,6 @@ std::optional<Value> CalculatedValue<Key, Value>::getValue(SessionData &session,
 // Explicit template instantiations
 using MeasurementKey = QPair<QString, QString>;
 template class CalculatedValue<MeasurementKey, QVector<double>>;
-template class CalculatedValue<QString, QString>;
+template class CalculatedValue<QString, QVariant>;
 
 } // namespace FlySight

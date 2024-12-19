@@ -33,13 +33,12 @@ static const QVector<SessionColumn>& columns()
         {
             "Start Time",
             [](const SessionData &s) -> QVariant {
-                bool ok = false;
-                double startTimeSec = s.getAttribute(SessionKeys::StartTime).toDouble(&ok);
-                if (!ok || startTimeSec <= 0) {
+                QVariant var = s.getAttribute(SessionKeys::StartTime);
+                if (!var.canConvert<QDateTime>()) {
                     return QVariant();
                 }
-                QDateTime dt = QDateTime::fromSecsSinceEpoch(static_cast<qint64>(startTimeSec), QTimeZone::systemTimeZone());
-                return dt.toString("yyyy-MM-dd HH:mm:ss");
+                QDateTime dt = var.toDateTime();
+                return dt.toString("yyyy/MM/dd HH:mm:ss");
             },
             nullptr, // not editable
             false
@@ -47,21 +46,18 @@ static const QVector<SessionColumn>& columns()
         {
             "Duration",
             [](const SessionData &s) -> QVariant {
+                QVariant var = s.getAttribute(SessionKeys::Duration);
                 bool ok = false;
-                double durationSec = s.getAttribute(SessionKeys::Duration).toDouble(&ok);
-                if (!ok || durationSec < 0) {
-                    return QVariant();
-                }
+                double durationSec = var.toDouble(&ok);
+                if (!ok) return QVariant();
 
-                int totalSec = static_cast<int>(durationSec);
+                int totalSec = (int)durationSec;
                 int minutes = totalSec / 60;
                 int seconds = totalSec % 60;
 
-                QString durationStr = QString("%1:%2")
-                                          .arg(minutes)
-                                          .arg(seconds, 2, 10, QChar('0'));
-
-                return durationStr;
+                return QString("%1:%2")
+                    .arg(minutes)
+                    .arg(seconds, 2, 10, QChar('0'));
             },
             nullptr, // not editable
             false
@@ -69,15 +65,14 @@ static const QVector<SessionColumn>& columns()
         {
             "Exit Time",
             [](const SessionData &s) -> QVariant {
-                bool ok = false;
-                double exitTimeSeconds = s.getAttribute(SessionKeys::ExitTime).toDouble(&ok);
-                if (!ok || exitTimeSeconds <= 0) {
-                    return QVariant(); // No valid exit time
+                QVariant var = s.getAttribute(SessionKeys::ExitTime);
+                if (!var.canConvert<QDateTime>()) {
+                    return QVariant();
                 }
-                QDateTime dt = QDateTime::fromSecsSinceEpoch(static_cast<qint64>(exitTimeSeconds), QTimeZone::systemTimeZone());
-                return dt.toString("yyyy-MM-dd HH:mm:ss");
+                QDateTime dt = var.toDateTime();
+                return dt.toString("yyyy/MM/dd HH:mm:ss");
             },
-            nullptr,
+            nullptr, // not editable
             false
         },
     };
@@ -123,7 +118,7 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const {
 
     case CustomRoles::IsHoveredRole:
     {
-        QString currentSessionId = item.getAttribute(SessionKeys::SessionId);
+        QString currentSessionId = item.getAttribute(SessionKeys::SessionId).toString();
         return (currentSessionId == m_hoveredSessionId);
     }
     default:
@@ -195,7 +190,7 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
         return;
     }
 
-    QString newSessionID = newSession.getAttribute(SessionKeys::SessionId);
+    QString newSessionID = newSession.getAttribute(SessionKeys::SessionId).toString();
 
     // Check if SESSION_ID exists in m_sessionData
     auto sessionIt = std::find_if(
@@ -213,7 +208,7 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
 
         // Merge attributes
         for (const QString &attributeKey : newAttributeKeys) {
-            const QString &value = newSession.getAttribute(attributeKey);
+            const QVariant &value = newSession.getAttribute(attributeKey);
             existingSession.setAttribute(attributeKey, value);
         }
 

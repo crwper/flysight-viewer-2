@@ -21,7 +21,7 @@ bool SessionData::hasAttribute(const QString &key) const {
     return m_attributes.contains(key);
 }
 
-QString SessionData::getAttribute(const QString &key) const {
+QVariant SessionData::getAttribute(const QString &key) const {
     if (hasAttribute(key)) {
         return m_attributes.value(key);
     }
@@ -30,7 +30,7 @@ QString SessionData::getAttribute(const QString &key) const {
     return computeAttribute(key);
 }
 
-void SessionData::setAttribute(const QString &key, const QString &value) {
+void SessionData::setAttribute(const QString &key, const QVariant &value) {
     m_attributes.insert(key, value);
 }
 
@@ -67,7 +67,7 @@ void SessionData::setMeasurement(const QString &sensorKey, const QString &measur
 }
 
 void SessionData::registerCalculatedAttribute(const QString &key, AttributeFunction func) {
-    CalculatedValue<QString, QString>::registerCalculation(key, func);
+    CalculatedValue<QString, QVariant>::registerCalculation(key, func);
 }
 
 void SessionData::registerCalculatedMeasurement(const QString &sensorKey, const QString &measurementKey, MeasurementFunction func) {
@@ -75,11 +75,11 @@ void SessionData::registerCalculatedMeasurement(const QString &sensorKey, const 
     CalculatedValue<MeasurementKey, QVector<double>>::registerCalculation(key, func);
 }
 
-QString SessionData::computeAttribute(const QString &key) const {
+QVariant SessionData::computeAttribute(const QString &key) const {
     auto result = m_calculatedAttributes.getValue(*const_cast<SessionData*>(this), key);
     if (!result.has_value()) {
         // handle failure
-        return QString();
+        return QVariant();
     }
     return result.value();
 }

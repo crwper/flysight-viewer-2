@@ -56,7 +56,7 @@ bool LogbookView::eventFilter(QObject *obj, QEvent *event)
             QPoint pos = mouseEvent->pos();
             QModelIndex index = treeView->indexAt(pos);
             if (index.isValid()) {
-                QString sessionId = model->getAllSessions().at(index.row()).getAttribute(SessionKeys::SessionId);
+                QString sessionId = model->getAllSessions().at(index.row()).getAttribute(SessionKeys::SessionId).toString();
                 if (model->hoveredSessionId() != sessionId) {
                     model->setHoveredSessionId(sessionId);
                 }

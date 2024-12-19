@@ -7,6 +7,7 @@
 #include <QString>
 #include <functional>
 #include <QDebug>
+#include <QVariant>
 
 namespace FlySight {
 
