@@ -3,6 +3,45 @@
 
 namespace FlySight {
 
+struct SessionColumn {
+    QString name;                                 // Display name of the column
+    std::function<QVariant(const SessionData&)> getter;   // Gets the displayed value
+    std::function<bool(SessionData&, const QVariant&)> setter; // Updates the session data
+    bool editable;                                // Whether the column is editable
+};
+
+static const QVector<SessionColumn>& columns()
+{
+    // Function-local static: initialized on first call, not at global init time.
+    static const QVector<SessionColumn> s_columns = {
+        {
+            "Description",
+            [](const SessionData &s) -> QVariant {
+                return s.getAttribute(SessionKeys::Description);
+            },
+            [](SessionData &s, const QVariant &value) -> bool {
+                QString newDescription = value.toString();
+                if (s.getAttribute(SessionKeys::Description) != newDescription) {
+                    s.setAttribute(SessionKeys::Description, newDescription);
+                    return true;
+                }
+                return false;
+            },
+            true // editable
+        },
+        {
+            "Exit Time",
+            [](const SessionData &s) -> QVariant {
+                return s.getAttribute(SessionKeys::ExitTime);
+            },
+            nullptr, // not editable
+            false
+        }
+        // Add more columns as needed
+    };
+    return s_columns;
+}
+
 SessionModel::SessionModel(QObject *parent)
     : QAbstractTableModel(parent)
 {
@@ -15,105 +54,94 @@ int SessionModel::rowCount(const QModelIndex &parent) const
     return m_sessionData.size();
 }
 
-int SessionModel::columnCount(const QModelIndex &parent) const
-{
+int SessionModel::columnCount(const QModelIndex &parent) const {
     Q_UNUSED(parent);
-    return ColumnCount;
+    return columns().size();
 }
 
-QVariant SessionModel::data(const QModelIndex &index, int role) const
-{
-    if (!index.isValid() || index.row() >= m_sessionData.size() || index.column() >= ColumnCount)
+QVariant SessionModel::data(const QModelIndex &index, int role) const {
+    if (!index.isValid() || index.row() >= m_sessionData.size() || index.column() >= columns().size())
         return QVariant();
 
     const SessionData &item = m_sessionData.at(index.row());
+    const SessionColumn &col = columns()[index.column()];
 
     switch (role) {
     case Qt::DisplayRole:
-        if (index.column() == Description)
-            return item.getAttribute(SessionKeys::Description);
-        if (index.column() == ExitTime)
-            return item.getAttribute(SessionKeys::ExitTime);
-        break;
+    case Qt::EditRole:
+        return col.getter(item);
+
     case Qt::CheckStateRole:
-        if (index.column() == Description) {
+        // Handle checkbox only for the first column
+        if (index.column() == 0) {
             bool visible = item.isVisible();
             return visible ? Qt::Checked : Qt::Unchecked;
         }
         break;
-    case Qt::EditRole:
-        if (index.column() == Description)
-            return item.getAttribute(SessionKeys::Description);
-        if (index.column() == ExitTime)
-            return item.getAttribute(SessionKeys::ExitTime);
-        break;
-    // Handle IsHoveredRole
-    case CustomRoles::IsHoveredRole: {
+
+    case CustomRoles::IsHoveredRole:
+    {
         QString currentSessionId = item.getAttribute(SessionKeys::SessionId);
-        return (currentSessionId == m_hoveredSessionId) ? true : false;
+        return (currentSessionId == m_hoveredSessionId);
     }
     default:
         break;
     }
+
     return QVariant();
 }
 
-QVariant SessionModel::headerData(int section, Qt::Orientation orientation, int role) const
-{
-    if (orientation == Qt::Horizontal && role == Qt::DisplayRole) {
-        switch (section) {
-        case Description:
-            return tr("Description");
-        case ExitTime:
-            return tr("Exit Time");
-        default:
-            return QVariant();
-        }
+QVariant SessionModel::headerData(int section, Qt::Orientation orientation, int role) const {
+    if (orientation == Qt::Horizontal && role == Qt::DisplayRole && section < columns().size()) {
+        return columns()[section].name;
     }
     return QVariant();
 }
 
-Qt::ItemFlags SessionModel::flags(const QModelIndex &index) const
-{
+Qt::ItemFlags SessionModel::flags(const QModelIndex &index) const {
     if (!index.isValid())
         return Qt::NoItemFlags;
 
+    const SessionColumn &col = columns()[index.column()];
+
     Qt::ItemFlags flags = Qt::ItemIsSelectable | Qt::ItemIsEnabled;
-    if (index.column() == Description)
-        flags |= Qt::ItemIsUserCheckable | Qt::ItemIsEditable;
+    if (index.column() == 0) {
+        // The first column has a checkbox
+        flags |= Qt::ItemIsUserCheckable;
+    }
+    if (col.editable) {
+        flags |= Qt::ItemIsEditable;
+    }
     return flags;
 }
 
-bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int role)
-{
-    if (!index.isValid() || index.row() >= m_sessionData.size() || index.column() >= ColumnCount)
+bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int role) {
+    if (!index.isValid() || index.row() >= m_sessionData.size() || index.column() >= columns().size())
         return false;
 
     SessionData &item = m_sessionData[index.row()];
+    const SessionColumn &col = columns()[index.column()];
+
     bool somethingChanged = false;
 
-    if (role == Qt::EditRole) {
-        if (index.column() == Description) {
-            QString newDescription = value.toString();
-            if (item.getAttribute(SessionKeys::Description) != newDescription) {
-                item.setAttribute(SessionKeys::Description, newDescription);
-                somethingChanged = true;
-            }
-        }
-    } else if (role == Qt::CheckStateRole && index.column() == Description) {
-        bool visible = item.isVisible();
+    if (role == Qt::CheckStateRole && index.column() == 0) {
+        // Update visibility based on the checkbox
         bool newVisible = (value.toInt() == Qt::Checked);
-        if (visible != newVisible) {
+        if (item.isVisible() != newVisible) {
             item.setVisible(newVisible);
             somethingChanged = true;
         }
+    } else if (role == Qt::EditRole && col.editable && col.setter) {
+        // If setter returns true, something changed
+        somethingChanged = col.setter(item, value);
     }
 
     if (somethingChanged) {
         emit dataChanged(index, index, {role});
-        emit modelChanged(); // Custom signal for external views
+        emit modelChanged();
         return true;
     }
+
     return false;
 }
 
