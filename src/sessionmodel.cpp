@@ -9,6 +9,7 @@ struct SessionColumn {
     QString name;                                 // Display name of the column
     std::function<QVariant(const SessionData&)> getter;   // Gets the displayed value
     std::function<bool(SessionData&, const QVariant&)> setter; // Updates the session data
+    std::function<int(const SessionData&, const SessionData&)> comparator; // Compares two sessions
     bool editable;                                // Whether the column is editable
 };
 
@@ -28,6 +29,11 @@ static const QVector<SessionColumn>& columns()
                 }
                 return false;
             },
+            [](const SessionData &a, const SessionData &b) -> int {
+                QString va = a.getAttribute(SessionKeys::Description).toString();
+                QString vb = b.getAttribute(SessionKeys::Description).toString();
+                return QString::compare(va, vb, Qt::CaseInsensitive);
+            },
             true // editable
         },
         {
@@ -41,6 +47,15 @@ static const QVector<SessionColumn>& columns()
                 return dt.toString("yyyy/MM/dd HH:mm:ss");
             },
             nullptr, // not editable
+            [](const SessionData &a, const SessionData &b) -> int {
+                QVariant varA = a.getAttribute(SessionKeys::StartTime);
+                if (!varA.canConvert<QDateTime>()) return -1;
+                QDateTime dtA = varA.toDateTime();
+                QVariant varB = b.getAttribute(SessionKeys::StartTime);
+                if (!varB.canConvert<QDateTime>()) return 1;
+                QDateTime dtB = varB.toDateTime();
+                return (dtA < dtB) ? -1 : 1;
+            },
             false
         },
         {
@@ -60,6 +75,14 @@ static const QVector<SessionColumn>& columns()
                     .arg(seconds, 2, 10, QChar('0'));
             },
             nullptr, // not editable
+            [](const SessionData &a, const SessionData &b) -> int {
+                bool ok;
+                double va = a.getAttribute(SessionKeys::Duration).toDouble(&ok);
+                if (!ok) return -1;
+                double vb = b.getAttribute(SessionKeys::Duration).toDouble(&ok);
+                if (!ok) return -1;
+                return (va < vb) ? -1 : 1;
+            },
             false
         },
         {
@@ -73,6 +96,15 @@ static const QVector<SessionColumn>& columns()
                 return dt.toString("yyyy/MM/dd HH:mm:ss");
             },
             nullptr, // not editable
+            [](const SessionData &a, const SessionData &b) -> int {
+                QVariant varA = a.getAttribute(SessionKeys::ExitTime);
+                if (!varA.canConvert<QDateTime>()) return -1;
+                QDateTime dtA = varA.toDateTime();
+                QVariant varB = b.getAttribute(SessionKeys::ExitTime);
+                if (!varB.canConvert<QDateTime>()) return 1;
+                QDateTime dtB = varB.toDateTime();
+                return (dtA < dtB) ? -1 : 1;
+            },
             false
         },
     };
@@ -293,6 +325,29 @@ void SessionModel::setHoveredSessionId(const QString& sessionId)
             emit dataChanged(topLeft, bottomRight, {Qt::BackgroundRole, CustomRoles::IsHoveredRole});
         }
     }
+}
+
+void SessionModel::sort(int column, Qt::SortOrder order)
+{
+    if (column < 0 || column >= columns().size())
+        return;
+
+    auto getter = columns()[column].getter;
+    auto cmp = columns()[column].comparator; // Our custom comparator
+
+    std::sort(m_sessionData.begin(), m_sessionData.end(), [getter, cmp, order](const SessionData &a, const SessionData &b) {
+        int result = cmp(a, b);
+        if (order == Qt::AscendingOrder) {
+            // ascending: a < b if result < 0
+            return result < 0;
+        } else {
+            // descending: a < b if a > b in ascending terms, so result > 0
+            return result > 0;
+        }
+    });
+
+    beginResetModel();
+    endResetModel();
 }
 
 } // namespace FlySight

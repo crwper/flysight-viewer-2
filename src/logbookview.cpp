@@ -46,6 +46,9 @@ void LogbookView::setupView()
 
     // Install event filter to detect hover events on treeView
     treeView->viewport()->installEventFilter(this);
+
+    // Enable sorting on the view
+    treeView->setSortingEnabled(true);
 }
 
 bool LogbookView::eventFilter(QObject *obj, QEvent *event)

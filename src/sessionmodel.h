@@ -17,6 +17,10 @@ public:
         ColumnCount
     };
 
+    enum CustomRoles {
+        IsHoveredRole = Qt::UserRole + 100
+    };
+
     SessionModel(QObject *parent = nullptr);
 
     // Data management
@@ -40,9 +44,8 @@ public:
 
     int getSessionRow(const QString& sessionId) const;
 
-    enum CustomRoles {
-        IsHoveredRole = Qt::UserRole + 100
-    };
+    // Enable sorting
+    void sort(int column, Qt::SortOrder order = Qt::AscendingOrder) override;
 
 signals:
     void modelChanged();
