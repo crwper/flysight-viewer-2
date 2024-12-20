@@ -88,6 +88,16 @@ static const QVector<SessionColumn>& columns()
             true
         },
         {
+            "Device Name",
+            [](const SessionData &s) { return getStringAttribute(s, SessionKeys::DeviceId); },
+            nullptr,
+            [](const SessionData &a, const SessionData &b) {
+                return compareStrings(a.getAttribute(SessionKeys::DeviceId),
+                                      b.getAttribute(SessionKeys::DeviceId));
+            },
+            true
+        },
+        {
             "Start Time",
             [](const SessionData &s) { return getFormattedDateTime(s, SessionKeys::StartTime); },
             nullptr,
@@ -267,7 +277,7 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
 
         // Update views
         const int row = sessionIt - m_sessionData.begin();
-        emit dataChanged(index(row, 0), index(row, ColumnCount));
+        emit dataChanged(index(row, 0), index(row, columnCount()));
         emit modelChanged();
 
         // Log successful merge
@@ -321,7 +331,7 @@ void SessionModel::setHoveredSessionId(const QString& sessionId)
         int oldRow = getSessionRow(oldSessionId);
         if (oldRow != -1) {
             QModelIndex topLeft = this->index(oldRow, 0);
-            QModelIndex bottomRight = this->index(oldRow, ColumnCount - 1);
+            QModelIndex bottomRight = this->index(oldRow, columnCount() - 1);
             emit dataChanged(topLeft, bottomRight, {Qt::BackgroundRole, CustomRoles::IsHoveredRole});
         }
     }
@@ -331,7 +341,7 @@ void SessionModel::setHoveredSessionId(const QString& sessionId)
         int newRow = getSessionRow(sessionId);
         if (newRow != -1) {
             QModelIndex topLeft = this->index(newRow, 0);
-            QModelIndex bottomRight = this->index(newRow, ColumnCount - 1);
+            QModelIndex bottomRight = this->index(newRow, columnCount() - 1);
             emit dataChanged(topLeft, bottomRight, {Qt::BackgroundRole, CustomRoles::IsHoveredRole});
         }
     }

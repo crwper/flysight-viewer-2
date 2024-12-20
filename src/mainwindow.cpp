@@ -324,7 +324,7 @@ void MainWindow::on_action_HideOthers_triggered()
 
     // Emit a single dataChanged for the entire range or the rows you altered
     emit model->dataChanged(model->index(0, 0),
-                            model->index(totalRows - 1, SessionModel::ColumnCount - 1));
+                            model->index(totalRows - 1, model->columnCount() - 1));
 
     // Emit modelChanged() if your logic requires it
     emit model->modelChanged();
@@ -987,7 +987,7 @@ void MainWindow::setSelectedTrackCheckState(Qt::CheckState state)
     // Emit a single dataChanged for the entire range or the rows you altered
     int totalRows = model->rowCount();
     emit model->dataChanged(model->index(0, 0),
-                            model->index(totalRows - 1, SessionModel::ColumnCount - 1));
+                            model->index(totalRows - 1, model->columnCount() - 1));
 
     // Emit modelChanged() if your logic requires it
     emit model->modelChanged();

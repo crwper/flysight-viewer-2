@@ -12,9 +12,7 @@ class SessionModel : public QAbstractTableModel
     Q_OBJECT
 public:
     enum Columns {
-        Description = 0,
-        ExitTime,
-        ColumnCount
+        Description = 0
     };
 
     enum CustomRoles {
