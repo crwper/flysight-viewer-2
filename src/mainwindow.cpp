@@ -288,36 +288,14 @@ void MainWindow::importFiles(
     }
 }
 
-void MainWindow::on_action_Delete_triggered()
-{
-
-}
-
 void MainWindow::on_action_ShowSelected_triggered()
 {
-    // Get all selected rows from the logbook view
-    QList<QModelIndex> selectedRows = logbookView->selectedRows();
-    if (selectedRows.isEmpty())
-        return;
+    setSelectedTrackCheckState(Qt::Checked);
+}
 
-    // Block signals to prevent multiple dataChanged emissions
-    model->blockSignals(true);
-
-    // Set selected sessions as visible
-    for (const QModelIndex &idx : selectedRows) {
-        model->setData(model->index(idx.row(), SessionModel::Description), Qt::Checked, Qt::CheckStateRole);
-    }
-
-    // Unblock signals
-    model->blockSignals(false);
-
-    // Emit a single dataChanged for the entire range or the rows you altered
-    int totalRows = model->rowCount();
-    emit model->dataChanged(model->index(0, 0),
-                            model->index(totalRows - 1, SessionModel::ColumnCount - 1));
-
-    // Emit modelChanged() if your logic requires it
-    emit model->modelChanged();
+void MainWindow::on_action_HideSelected_triggered()
+{
+    setSelectedTrackCheckState(Qt::Unchecked);
 }
 
 void MainWindow::on_action_HideOthers_triggered()
@@ -350,6 +328,11 @@ void MainWindow::on_action_HideOthers_triggered()
 
     // Emit modelChanged() if your logic requires it
     emit model->modelChanged();
+}
+
+void MainWindow::on_action_Delete_triggered()
+{
+
 }
 
 void MainWindow::setupPlotValues()
@@ -981,6 +964,33 @@ void MainWindow::togglePlot(const QString &sensorID, const QString &measurementI
     }
 
     qWarning() << "Plot not found for sensorID:" << sensorID << "measurementID:" << measurementID;
+}
+
+void MainWindow::setSelectedTrackCheckState(Qt::CheckState state)
+{
+    // Get all selected rows from the logbook view
+    QList<QModelIndex> selectedRows = logbookView->selectedRows();
+    if (selectedRows.isEmpty())
+        return;
+
+    // Block signals to prevent multiple dataChanged emissions
+    model->blockSignals(true);
+
+    // Set check state for selected sessions
+    for (const QModelIndex &idx : selectedRows) {
+        model->setData(model->index(idx.row(), SessionModel::Description), state, Qt::CheckStateRole);
+    }
+
+    // Unblock signals
+    model->blockSignals(false);
+
+    // Emit a single dataChanged for the entire range or the rows you altered
+    int totalRows = model->rowCount();
+    emit model->dataChanged(model->index(0, 0),
+                            model->index(totalRows - 1, SessionModel::ColumnCount - 1));
+
+    // Emit modelChanged() if your logic requires it
+    emit model->modelChanged();
 }
 
 } // namespace FlySight

@@ -39,6 +39,7 @@ private slots:
     void on_action_Import_triggered();
     void on_actionImportFolder_triggered();
     void on_action_ShowSelected_triggered();
+    void on_action_HideSelected_triggered();
     void on_action_HideOthers_triggered();
     void on_action_Delete_triggered();
 
@@ -99,6 +100,9 @@ private:
     // Helper methods for plot menu
     void initializePlotsMenu();
     void togglePlot(const QString &sensorID, const QString &measurementID);
+
+    // Helper functions for tracks
+    void setSelectedTrackCheckState(Qt::CheckState state);
 };
 
 } // namespace FlySight

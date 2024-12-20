@@ -13,97 +13,107 @@ struct SessionColumn {
     bool editable;                                // Whether the column is editable
 };
 
+inline int compareStrings(const QVariant &a, const QVariant &b) {
+    QString sa = a.toString();
+    QString sb = b.toString();
+    return QString::compare(sa, sb, Qt::CaseInsensitive);
+}
+
+inline int compareDateTimes(const QVariant &a, const QVariant &b) {
+    if (!a.canConvert<QDateTime>() && !b.canConvert<QDateTime>())
+        return 0; // Both invalid, consider them equal
+    if (!a.canConvert<QDateTime>())
+        return -1;
+    if (!b.canConvert<QDateTime>())
+        return 1;
+    QDateTime da = a.toDateTime();
+    QDateTime db = b.toDateTime();
+    return da < db ? -1 : (da == db ? 0 : 1);
+}
+
+inline int compareDoubles(const QVariant &a, const QVariant &b) {
+    bool okA = false, okB = false;
+    double da = a.toDouble(&okA);
+    double db = b.toDouble(&okB);
+    if (!okA && !okB) return 0;
+    if (!okA) return -1;
+    if (!okB) return 1;
+    return (da < db) ? -1 : (da == db ? 0 : 1);
+}
+
+auto getStringAttribute = [](const SessionData &s, const char *key) -> QVariant {
+    return s.getAttribute(key);
+};
+
+auto getFormattedDateTime = [](const SessionData &s, const char *key) -> QVariant {
+    QVariant var = s.getAttribute(key);
+    if (!var.canConvert<QDateTime>()) {
+        return QVariant();
+    }
+    QDateTime dt = var.toDateTime();
+    return dt.toString("yyyy/MM/dd HH:mm:ss");
+};
+
+auto getFormattedDuration = [](const SessionData &s, const char *key) -> QVariant {
+    bool ok = false;
+    double durationSec = s.getAttribute(key).toDouble(&ok);
+    if (!ok) return QVariant();
+    int totalSec = static_cast<int>(durationSec);
+    int minutes = totalSec / 60;
+    int seconds = totalSec % 60;
+    return QString("%1:%2").arg(minutes).arg(seconds, 2, 10, QChar('0'));
+};
+
+auto setStringAttribute = [](SessionData &s, const char *key, const QVariant &value) -> bool {
+    QString newVal = value.toString();
+    QString oldVal = s.getAttribute(key).toString();
+    if (oldVal != newVal) {
+        s.setAttribute(key, newVal);
+        return true;
+    }
+    return false;
+};
+
 static const QVector<SessionColumn>& columns()
 {
     static const QVector<SessionColumn> s_columns = {
         {
             "Description",
-            [](const SessionData &s) -> QVariant {
-                return s.getAttribute(SessionKeys::Description);
+            [](const SessionData &s) { return getStringAttribute(s, SessionKeys::Description); },
+            [](SessionData &s, const QVariant &value) { return setStringAttribute(s, SessionKeys::Description, value); },
+            [](const SessionData &a, const SessionData &b) {
+                return compareStrings(a.getAttribute(SessionKeys::Description),
+                                      b.getAttribute(SessionKeys::Description));
             },
-            [](SessionData &s, const QVariant &value) -> bool {
-                QString newDescription = value.toString();
-                if (s.getAttribute(SessionKeys::Description) != newDescription) {
-                    s.setAttribute(SessionKeys::Description, newDescription);
-                    return true;
-                }
-                return false;
-            },
-            [](const SessionData &a, const SessionData &b) -> int {
-                QString va = a.getAttribute(SessionKeys::Description).toString();
-                QString vb = b.getAttribute(SessionKeys::Description).toString();
-                return QString::compare(va, vb, Qt::CaseInsensitive);
-            },
-            true // editable
+            true
         },
         {
             "Start Time",
-            [](const SessionData &s) -> QVariant {
-                QVariant var = s.getAttribute(SessionKeys::StartTime);
-                if (!var.canConvert<QDateTime>()) {
-                    return QVariant();
-                }
-                QDateTime dt = var.toDateTime();
-                return dt.toString("yyyy/MM/dd HH:mm:ss");
-            },
-            nullptr, // not editable
-            [](const SessionData &a, const SessionData &b) -> int {
-                QVariant varA = a.getAttribute(SessionKeys::StartTime);
-                if (!varA.canConvert<QDateTime>()) return -1;
-                QDateTime dtA = varA.toDateTime();
-                QVariant varB = b.getAttribute(SessionKeys::StartTime);
-                if (!varB.canConvert<QDateTime>()) return 1;
-                QDateTime dtB = varB.toDateTime();
-                return (dtA < dtB) ? -1 : 1;
+            [](const SessionData &s) { return getFormattedDateTime(s, SessionKeys::StartTime); },
+            nullptr,
+            [](const SessionData &a, const SessionData &b) {
+                return compareDateTimes(a.getAttribute(SessionKeys::StartTime),
+                                        b.getAttribute(SessionKeys::StartTime));
             },
             false
         },
         {
             "Duration",
-            [](const SessionData &s) -> QVariant {
-                QVariant var = s.getAttribute(SessionKeys::Duration);
-                bool ok = false;
-                double durationSec = var.toDouble(&ok);
-                if (!ok) return QVariant();
-
-                int totalSec = (int)durationSec;
-                int minutes = totalSec / 60;
-                int seconds = totalSec % 60;
-
-                return QString("%1:%2")
-                    .arg(minutes)
-                    .arg(seconds, 2, 10, QChar('0'));
-            },
-            nullptr, // not editable
-            [](const SessionData &a, const SessionData &b) -> int {
-                bool ok;
-                double va = a.getAttribute(SessionKeys::Duration).toDouble(&ok);
-                if (!ok) return -1;
-                double vb = b.getAttribute(SessionKeys::Duration).toDouble(&ok);
-                if (!ok) return -1;
-                return (va < vb) ? -1 : 1;
+            [](const SessionData &s) { return getFormattedDuration(s, SessionKeys::Duration); },
+            nullptr,
+            [](const SessionData &a, const SessionData &b) {
+                return compareDoubles(a.getAttribute(SessionKeys::Duration),
+                                      b.getAttribute(SessionKeys::Duration));
             },
             false
         },
         {
             "Exit Time",
-            [](const SessionData &s) -> QVariant {
-                QVariant var = s.getAttribute(SessionKeys::ExitTime);
-                if (!var.canConvert<QDateTime>()) {
-                    return QVariant();
-                }
-                QDateTime dt = var.toDateTime();
-                return dt.toString("yyyy/MM/dd HH:mm:ss");
-            },
-            nullptr, // not editable
-            [](const SessionData &a, const SessionData &b) -> int {
-                QVariant varA = a.getAttribute(SessionKeys::ExitTime);
-                if (!varA.canConvert<QDateTime>()) return -1;
-                QDateTime dtA = varA.toDateTime();
-                QVariant varB = b.getAttribute(SessionKeys::ExitTime);
-                if (!varB.canConvert<QDateTime>()) return 1;
-                QDateTime dtB = varB.toDateTime();
-                return (dtA < dtB) ? -1 : 1;
+            [](const SessionData &s) { return getFormattedDateTime(s, SessionKeys::ExitTime); },
+            nullptr,
+            [](const SessionData &a, const SessionData &b) {
+                return compareDateTimes(a.getAttribute(SessionKeys::ExitTime),
+                                        b.getAttribute(SessionKeys::ExitTime));
             },
             false
         },
