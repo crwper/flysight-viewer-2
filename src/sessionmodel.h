@@ -33,6 +33,7 @@ public:
     Qt::ItemFlags flags(const QModelIndex &index) const override;
 
     void mergeSessionData(const SessionData& newSession);
+    bool removeSessions(const QList<QString> &sessionIds);
 
     const QVector<SessionData>& getAllSessions() const;
 

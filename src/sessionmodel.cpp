@@ -292,6 +292,44 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
         qDebug() << "Added new SessionData with SESSION_ID:" << newSessionID;
     }
 }
+bool SessionModel::removeSessions(const QList<QString> &sessionIds)
+{
+    if (sessionIds.isEmpty())
+        return false;
+
+    bool anyRemoved = false;
+
+    // Iterate over the list of SESSION_IDs to remove
+    for (const QString &sessionId : sessionIds) {
+        // Find the session in m_sessionData
+        auto it = std::find_if(
+            m_sessionData.begin(),
+            m_sessionData.end(),
+            [&sessionId](const SessionData &item) {
+                return item.getAttribute(SessionKeys::SessionId).toString() == sessionId;
+            });
+
+        if (it != m_sessionData.end()) {
+            int row = it - m_sessionData.begin();
+
+            beginRemoveRows(QModelIndex(), row, row);
+            m_sessionData.erase(it);
+            endRemoveRows();
+
+            anyRemoved = true;
+
+            qDebug() << "Removed session with SESSION_ID:" << sessionId;
+        } else {
+            qWarning() << "SessionModel::removeSessions: SESSION_ID not found:" << sessionId;
+        }
+    }
+
+    if (anyRemoved) {
+        emit modelChanged();
+    }
+
+    return anyRemoved;
+}
 
 const QVector<SessionData>& SessionModel::getAllSessions() const
 {

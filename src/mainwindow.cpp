@@ -332,7 +332,56 @@ void MainWindow::on_action_HideOthers_triggered()
 
 void MainWindow::on_action_Delete_triggered()
 {
+    // Get selected rows from the logbook view
+    QList<QModelIndex> selectedRows = logbookView->selectedRows();
 
+    if (selectedRows.isEmpty()) {
+        QMessageBox::information(this, tr("Delete Tracks"), tr("No tracks selected for deletion."));
+        return;
+    }
+
+    // Collect SESSION_IDs of the selected sessions
+    QList<QString> sessionIdsToRemove;
+    for (const QModelIndex &index : selectedRows) {
+        if (!index.isValid())
+            continue;
+
+        // Assuming the SESSION_ID is stored as an attribute in SessionData
+        // You might need to adjust this based on your actual implementation
+        const SessionData &session = model->getAllSessions().at(index.row());
+        QString sessionId = session.getAttribute(SessionKeys::SessionId).toString();
+        sessionIdsToRemove.append(sessionId);
+    }
+
+    // Confirm deletion with the user
+    QMessageBox::StandardButton reply;
+    reply = QMessageBox::question(
+        this,
+        tr("Delete Tracks"),
+        tr("Are you sure you want to delete the selected %1 track(s)?").arg(sessionIdsToRemove.size()),
+        QMessageBox::Yes | QMessageBox::No
+        );
+
+    if (reply != QMessageBox::Yes) {
+        return; // User canceled the deletion
+    }
+
+    // Proceed to remove the sessions from the model
+    bool success = model->removeSessions(sessionIdsToRemove);
+
+    if (success) {
+        QMessageBox::information(
+            this,
+            tr("Delete Tracks"),
+            tr("Selected track(s) have been successfully deleted.")
+            );
+    } else {
+        QMessageBox::warning(
+            this,
+            tr("Delete Tracks"),
+            tr("Failed to delete the selected track(s).")
+            );
+    }
 }
 
 void MainWindow::setupPlotValues()
