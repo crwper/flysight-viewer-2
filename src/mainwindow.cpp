@@ -39,7 +39,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(logbookView, &LogbookView::hideOthersRequested, this, &MainWindow::on_action_HideOthers_triggered);
 
     // Add plot widget
-    PlotWidget *plotWidget = new PlotWidget(model, plotModel, this);
+    plotWidget = new PlotWidget(model, plotModel, this);
     setCentralWidget(plotWidget);
 
     // Connect the newTimeRange signal to PlotWidget's setXAxisRange slot
@@ -50,6 +50,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Initialize the Plots menu
     initializePlotsMenu();
+
+    // Setup plot tools
+    setupPlotTools();
 }
 
 MainWindow::~MainWindow()
@@ -82,7 +85,7 @@ void MainWindow::on_action_Import_triggered()
     m_settings->setValue("folder", lastUsedFolder);
 }
 
-void MainWindow::on_actionImportFolder_triggered()
+void MainWindow::on_action_ImportFolder_triggered()
 {
     // Open the file dialog
     QFileDialog dialog(this, tr("Select Folder to Import"));
@@ -286,6 +289,24 @@ void MainWindow::importFiles(
         message += tr("\nAll files have been imported successfully.");
         QMessageBox::information(this, tr("Import Completed"), message);
     }
+}
+
+void MainWindow::on_action_Pan_triggered()
+{
+    plotWidget->setCurrentTool(PlotWidget::Tool::Pan);
+    qDebug() << "Switched to Pan tool";
+}
+
+void MainWindow::on_action_Zoom_triggered()
+{
+    plotWidget->setCurrentTool(PlotWidget::Tool::Zoom);
+    qDebug() << "Switched to Zoom tool";
+}
+
+void MainWindow::on_action_Select_triggered()
+{
+    plotWidget->setCurrentTool(PlotWidget::Tool::Select);
+    qDebug() << "Switched to Select tool";
 }
 
 void MainWindow::on_action_ShowSelected_triggered()
@@ -1040,6 +1061,21 @@ void MainWindow::setSelectedTrackCheckState(Qt::CheckState state)
 
     // Emit modelChanged() if your logic requires it
     emit model->modelChanged();
+}
+
+void MainWindow::setupPlotTools()
+{
+    // Set up the tool action group
+    toolActionGroup = new QActionGroup(this);
+    toolActionGroup->setExclusive(true);
+
+    // Add tool actions to the group
+    toolActionGroup->addAction(ui->action_Pan);
+    toolActionGroup->addAction(ui->action_Zoom);
+    toolActionGroup->addAction(ui->action_Select);
+
+    // Set Pan as the default checked tool
+    ui->action_Pan->setChecked(true);
 }
 
 } // namespace FlySight

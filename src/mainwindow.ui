@@ -25,7 +25,7 @@
    </property>
    <widget class="QMenu" name="menuTrack">
     <property name="title">
-     <string>&amp;Tracks</string>
+     <string>T&amp;racks</string>
     </property>
     <addaction name="action_ShowSelected"/>
     <addaction name="action_HideSelected"/>
@@ -43,10 +43,19 @@
      <string>&amp;File</string>
     </property>
     <addaction name="action_Import"/>
-    <addaction name="actionImportFolder"/>
+    <addaction name="action_ImportFolder"/>
+   </widget>
+   <widget class="QMenu" name="menu_Tools">
+    <property name="title">
+     <string>&amp;Tools</string>
+    </property>
+    <addaction name="action_Pan"/>
+    <addaction name="action_Zoom"/>
+    <addaction name="action_Select"/>
    </widget>
    <addaction name="menu_File"/>
    <addaction name="menuPlots"/>
+   <addaction name="menu_Tools"/>
    <addaction name="menuTrack"/>
   </widget>
   <action name="action_Import">
@@ -57,7 +66,7 @@
     <string>Ctrl+T</string>
    </property>
   </action>
-  <action name="actionImportFolder">
+  <action name="action_ImportFolder">
    <property name="text">
     <string>Import &amp;Folder...</string>
    </property>
@@ -89,6 +98,39 @@
   <action name="action_HideSelected">
    <property name="text">
     <string>Hide Selected Tracks</string>
+   </property>
+  </action>
+  <action name="action_Pan">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Pan</string>
+   </property>
+   <property name="shortcut">
+    <string>P</string>
+   </property>
+  </action>
+  <action name="action_Zoom">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Zoom</string>
+   </property>
+   <property name="shortcut">
+    <string>Z</string>
+   </property>
+  </action>
+  <action name="action_Select">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Selec&amp;t</string>
+   </property>
+   <property name="shortcut">
+    <string>T</string>
    </property>
   </action>
  </widget>

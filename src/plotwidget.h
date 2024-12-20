@@ -13,7 +13,15 @@ class PlotWidget : public QWidget
 {
     Q_OBJECT
 public:
+    enum class Tool {
+        Pan,
+        Zoom,
+        Select
+    };
+
     PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidget *parent = nullptr);
+
+    void setCurrentTool(Tool tool);
 
 public slots:
     void updatePlot();
@@ -57,6 +65,9 @@ private:
 
     // Mapping from graph to its default pen
     QMap<QCPGraph*, QPen> m_graphDefaultPens;
+
+    // Plot tools
+    Tool currentTool;
 
     void setupPlot();
     void setupCrosshairs();

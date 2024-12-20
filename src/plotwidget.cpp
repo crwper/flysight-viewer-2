@@ -55,6 +55,9 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
 
     // Initial plot
     updatePlot();
+
+    // Initialize tool
+    setCurrentTool(Tool::Pan);
 }
 
 void PlotWidget::setupPlot()
@@ -418,6 +421,24 @@ void PlotWidget::onHoveredSessionChanged(const QString& sessionId)
 
     // Replot to apply the changes
     customPlot->replot();
+}
+
+void PlotWidget::setCurrentTool(Tool tool)
+{
+    currentTool = tool;
+    switch (currentTool) {
+    case Tool::Pan:
+        customPlot->setInteractions(QCP::iRangeDrag);
+        break;
+    case Tool::Zoom:
+        customPlot->setInteractions(QCP::iRangeZoom);
+        // Enable custom zoom handling
+        break;
+    case Tool::Select:
+        customPlot->setInteractions(QCP::iNone);
+        // Enable custom selection handling
+        break;
+    }
 }
 
 } // namespace FlySight

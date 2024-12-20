@@ -7,6 +7,8 @@
 #include <QTreeView>
 #include "sessionmodel.h"
 #include "logbookview.h"
+#include "plotwidget.h"
+#include "qcustomplot/qcustomplot.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -37,7 +39,10 @@ signals:
 
 private slots:
     void on_action_Import_triggered();
-    void on_actionImportFolder_triggered();
+    void on_action_ImportFolder_triggered();
+    void on_action_Pan_triggered();
+    void on_action_Zoom_triggered();
+    void on_action_Select_triggered();
     void on_action_ShowSelected_triggered();
     void on_action_HideSelected_triggered();
     void on_action_HideOthers_triggered();
@@ -85,6 +90,10 @@ private:
     QTreeView *plotTreeView;
     QStandardItemModel *plotModel;
     LogbookView *logbookView;
+    PlotWidget *plotWidget;
+
+    // Pointer to QActionGroup for tools
+    QActionGroup *toolActionGroup;
 
     // Helper functions for plot values
     void setupPlotValues();
@@ -103,6 +112,9 @@ private:
 
     // Helper functions for tracks
     void setSelectedTrackCheckState(Qt::CheckState state);
+
+    // Plot tools
+    void setupPlotTools();
 };
 
 } // namespace FlySight
