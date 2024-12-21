@@ -17,7 +17,9 @@ public:
 
 signals:
     void showSelectedRequested();
+    void hideSelectedRequested();
     void hideOthersRequested();
+    void deleteRequested();
 
 public slots:
     void selectSessions(const QList<QString> &sessionIds);

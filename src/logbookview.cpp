@@ -84,13 +84,20 @@ void LogbookView::onContextMenuRequested(const QPoint &pos)
     QMenu menu(this);
 
     QAction *showSelectedAction = menu.addAction(tr("Show Selected Tracks"));
+    QAction *hideSelectedAction = menu.addAction(tr("Hide Selected Tracks"));
     QAction *hideOthersAction = menu.addAction(tr("Hide Others"));
+    menu.addSeparator();
+    QAction *deleteAction= menu.addAction(tr("Delete Selected Tracks"));
 
     QAction *chosenAction = menu.exec(treeView->viewport()->mapToGlobal(pos));
     if (chosenAction == showSelectedAction) {
         emit showSelectedRequested();
+    } else if (chosenAction == hideSelectedAction) {
+        emit hideSelectedRequested();
     } else if (chosenAction == hideOthersAction) {
         emit hideOthersRequested();
+    } else if (chosenAction == deleteAction) {
+        emit deleteRequested();
     }
 }
 

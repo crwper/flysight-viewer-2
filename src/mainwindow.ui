@@ -127,7 +127,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>Selec&amp;t</string>
+    <string>Select &amp;Tracks</string>
    </property>
    <property name="shortcut">
     <string>T</string>

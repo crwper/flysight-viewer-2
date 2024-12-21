@@ -36,7 +36,9 @@ MainWindow::MainWindow(QWidget *parent)
     addDockWidget(Qt::RightDockWidgetArea, logbookDock);
 
     connect(logbookView, &LogbookView::showSelectedRequested, this, &MainWindow::on_action_ShowSelected_triggered);
+    connect(logbookView, &LogbookView::hideSelectedRequested, this, &MainWindow::on_action_HideSelected_triggered);
     connect(logbookView, &LogbookView::hideOthersRequested, this, &MainWindow::on_action_HideOthers_triggered);
+    connect(logbookView, &LogbookView::deleteRequested, this, &MainWindow::on_action_Delete_triggered);
 
     // Add plot widget
     plotWidget = new PlotWidget(model, plotModel, this);
