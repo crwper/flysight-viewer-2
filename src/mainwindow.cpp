@@ -53,6 +53,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Setup plot tools
     setupPlotTools();
+
+    // Plot selection
+    connect(plotWidget, &PlotWidget::sessionsSelected, logbookView, &LogbookView::selectSessions);
 }
 
 MainWindow::~MainWindow()

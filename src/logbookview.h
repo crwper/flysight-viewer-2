@@ -19,6 +19,9 @@ signals:
     void showSelectedRequested();
     void hideOthersRequested();
 
+public slots:
+    void selectSessions(const QList<QString> &sessionIds);
+
 private slots:
     void onContextMenuRequested(const QPoint &pos);
 

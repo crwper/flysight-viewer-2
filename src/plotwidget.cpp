@@ -16,6 +16,7 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
     , model(model)
     , plotModel(plotModel)
     , isCursorOverPlot(false)
+    , m_selecting(false)
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(customPlot);
@@ -26,6 +27,9 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
 
     // Setup crosshairs
     setupCrosshairs();
+
+    // Setup selection rectangle
+    setupSelectionRectangle();
 
     // Install event filter on customPlot to handle mouse events
     customPlot->installEventFilter(this);
@@ -88,6 +92,15 @@ void PlotWidget::setupCrosshairs()
     customPlot->replot();
 }
 
+// Setup the selection rectangle
+void PlotWidget::setupSelectionRectangle()
+{
+    m_selectionRect = new QCPItemRect(customPlot);
+    m_selectionRect->setVisible(false);
+    m_selectionRect->setPen(QPen(Qt::blue, 1, Qt::DashLine));
+    m_selectionRect->setBrush(QColor(100, 100, 255, 50)); // semi-transparent
+}
+
 bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 {
     if (obj == customPlot) {
@@ -130,10 +143,44 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                 customPlot->replot();
             }
 
+            // Update crosshairs if over plot
             if (isCursorOverPlot) {
                 updateCrosshairs(pos);
+
+                // If we are currently selecting, update the selection rect
+                if (currentTool == Tool::Select && m_selecting) {
+                    updateSelectionRect(pos);
+                }
             }
 
+            break;
+        }
+
+        // Handle mouse press and release for selection
+        case QEvent::MouseButtonPress: {
+            if (currentTool == Tool::Select) {
+                QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+                if (mouseEvent->button() == Qt::LeftButton && isCursorOverPlot) {
+                    // Start selecting
+                    m_selecting = true;
+                    m_selectionStartPixel = mouseEvent->pos();
+                    m_selectionRect->setVisible(true);
+                    updateSelectionRect(m_selectionStartPixel); // Initialize rectangle at a single point
+                }
+            }
+            break;
+        }
+
+        case QEvent::MouseButtonRelease: {
+            if (currentTool == Tool::Select && m_selecting) {
+                QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+                if (mouseEvent->button() == Qt::LeftButton) {
+                    // End selecting
+                    m_selecting = false;
+                    // Finalize selection
+                    finalizeSelectionRect(mouseEvent->pos());
+                }
+            }
             break;
         }
 
@@ -172,6 +219,218 @@ void PlotWidget::updateCrosshairs(const QPoint &pos)
 
     // Update plot without triggering a full replot
     customPlot->replot(QCustomPlot::rpQueuedReplot);
+}
+
+// Update the selection rectangle as the mouse moves
+void PlotWidget::updateSelectionRect(const QPoint &currentPos)
+{
+    QPointF startCoord = pixelToPlotCoords(m_selectionStartPixel);
+    QPointF currentCoord = pixelToPlotCoords(currentPos);
+
+    // Update the rectangle corners
+    m_selectionRect->topLeft->setCoords(qMin(startCoord.x(), currentCoord.x()), qMax(startCoord.y(), currentCoord.y()));
+    m_selectionRect->bottomRight->setCoords(qMax(startCoord.x(), currentCoord.x()), qMin(startCoord.y(), currentCoord.y()));
+
+    customPlot->replot(QCustomPlot::rpQueuedReplot);
+}
+
+// Finalize the selection and determine which sessions are selected
+void PlotWidget::finalizeSelectionRect(const QPoint &endPos)
+{
+    // Get the final coordinates of the selection
+    QPointF startCoord = pixelToPlotCoords(m_selectionStartPixel);
+    QPointF endCoord = pixelToPlotCoords(endPos);
+
+    double xMin = qMin(startCoord.x(), endCoord.x());
+    double xMax = qMax(startCoord.x(), endCoord.x());
+    double yMin = qMin(startCoord.y(), endCoord.y());
+    double yMax = qMax(startCoord.y(), endCoord.y());
+
+    // Hide the rectangle after selection is done
+    m_selectionRect->setVisible(false);
+    customPlot->replot();
+
+    // Find sessions that intersect this region
+    QList<QString> selectedSessions = sessionsInRect(xMin, xMax, yMin, yMax);
+
+    // Emit signal with selected sessions
+    emit sessionsSelected(selectedSessions);
+}
+
+// Helper to convert pixels to plot coordinates
+QPointF PlotWidget::pixelToPlotCoords(const QPoint &pixel) const
+{
+    double x = customPlot->xAxis->pixelToCoord(pixel.x());
+    double y = customPlot->yAxis->pixelToCoord(pixel.y());
+    return QPointF(x, y);
+}
+
+// Determine which sessions have points in the specified rectangular region
+QList<QString> PlotWidget::sessionsInRect(double xMin_main, double xMax_main, double yMin_main, double yMax_main) const
+{
+    QList<QString> resultSessions;
+    QSet<QString> foundSessionIds;
+
+    // Convert the Y boundaries from main axis to pixels (since we know the rectangle in main axes coords)
+    double yMin_pixel = customPlot->yAxis->coordToPixel(yMin_main);
+    double yMax_pixel = customPlot->yAxis->coordToPixel(yMax_main);
+
+    for (auto graph : m_plottedGraphs) {
+        QString sessionId = m_graphToSessionMap.value(graph, QString());
+        if (sessionId.isEmpty())
+            continue;
+
+        // If this session is already found, skip checking
+        if (foundSessionIds.contains(sessionId))
+            continue;
+
+        // Convert the main-axis rectangle to this graph's Y-axis coordinates
+        QCPAxis *graphYAxis = graph->valueAxis();
+        double yMin_graph = graphYAxis->pixelToCoord(yMin_pixel);
+        double yMax_graph = graphYAxis->pixelToCoord(yMax_pixel);
+
+        // Retrieve data
+        QSharedPointer<QCPGraphDataContainer> dataContainer = graph->data();
+        if (dataContainer->size() == 0)
+            continue; // No data to check
+
+        // If only one point, just check if it's inside the rectangle
+        if (dataContainer->size() == 1) {
+            auto it = dataContainer->constBegin();
+            double x = it->key;
+            double y = it->value;
+            if (x >= xMin_main && x <= xMax_main && y >= yMin_graph && y <= yMax_graph) {
+                foundSessionIds.insert(sessionId);
+            }
+            continue;
+        }
+
+        // Multiple points: check line segments
+        bool intersected = false;
+        auto it = dataContainer->constBegin();
+        auto prev = it;
+        ++it;
+        for (; it != dataContainer->constEnd(); ++it) {
+            double x1 = prev->key;
+            double y1 = prev->value;
+            double x2 = it->key;
+            double y2 = it->value;
+
+            // Check if the line segment (x1,y1)-(x2,y2) intersects with the rectangle (xMin_main,xMax_main,yMin_graph,yMax_graph)
+            if (lineSegmentIntersectsRect(x1, y1, x2, y2,
+                                          xMin_main, xMax_main,
+                                          yMin_graph, yMax_graph)) {
+                foundSessionIds.insert(sessionId);
+                intersected = true;
+                break;
+            }
+
+            prev = it;
+        }
+
+        // If already found intersection, no need to continue
+        if (intersected)
+            continue;
+    }
+
+    resultSessions = foundSessionIds.values();
+    return resultSessions;
+}
+
+bool PlotWidget::lineSegmentIntersectsRect(
+    double x1, double y1, double x2, double y2,
+    double xMin, double xMax, double yMin, double yMax
+    ) const
+{
+    // Check if either endpoint is inside the rectangle
+    if (pointInRect(x1, y1, xMin, xMax, yMin, yMax) || pointInRect(x2, y2, xMin, xMax, yMin, yMax))
+        return true;
+
+    // Check intersection with rectangle edges
+    // Rectangle edges:
+    // Left edge:   x = xMin, y in [yMin, yMax]
+    // Right edge:  x = xMax, y in [yMin, yMax]
+    // Bottom edge: y = yMin, x in [xMin, xMax]
+    // Top edge:    y = yMax, x in [xMin, xMax]
+
+    // Check intersection with left and right edges (vertical lines)
+    if (intersectSegmentWithVerticalLine(x1, y1, x2, y2, xMin, yMin, yMax)) return true;
+    if (intersectSegmentWithVerticalLine(x1, y1, x2, y2, xMax, yMin, yMax)) return true;
+
+    // Check intersection with top and bottom edges (horizontal lines)
+    if (intersectSegmentWithHorizontalLine(x1, y1, x2, y2, yMin, xMin, xMax)) return true;
+    if (intersectSegmentWithHorizontalLine(x1, y1, x2, y2, yMax, xMin, xMax)) return true;
+
+    return false;
+}
+
+// Check if a point is inside the rectangle
+bool PlotWidget::pointInRect(
+    double x, double y,
+    double xMin, double xMax,
+    double yMin, double yMax
+    ) const {
+    return (x >= xMin && x <= xMax && y >= yMin && y <= yMax);
+}
+
+// Check intersection with a vertical line: x = lineX, and y in [yMin, yMax]
+bool PlotWidget::intersectSegmentWithVerticalLine(
+    double x1, double y1, double x2, double y2,
+    double lineX, double yMin, double yMax
+    ) const
+{
+    // If segment is vertical and x1 != lineX or if lineX not between min and max x of segment, might skip
+    if ((x1 < lineX && x2 < lineX) || (x1 > lineX && x2 > lineX))
+        return false; // Entire segment is on one side of lineX
+
+    double dx = (x2 - x1);
+    if (dx == 0.0) {
+        // Vertical segment
+        if (x1 == lineX) {
+            // They overlap in the vertical direction if the vertical ranges intersect
+            double ymin_seg = qMin(y1, y2);
+            double ymax_seg = qMax(y1, y2);
+            return !(ymax_seg < yMin || ymin_seg > yMax);
+        }
+        return false;
+    }
+
+    double t = (lineX - x1) / dx;
+    if (t < 0.0 || t > 1.0)
+        return false;
+
+    double yInt = y1 + t * (y2 - y1);
+    return (yInt >= yMin && yInt <= yMax);
+}
+
+// Check intersection with a horizontal line: y = lineY, and x in [xMin, xMax]
+bool PlotWidget::intersectSegmentWithHorizontalLine(
+    double x1, double y1, double x2, double y2,
+    double lineY, double xMin, double xMax
+    ) const
+{
+    // If entire segment above or below lineY
+    if ((y1 < lineY && y2 < lineY) || (y1 > lineY && y2 > lineY))
+        return false;
+
+    double dy = (y2 - y1);
+    if (dy == 0.0) {
+        // Horizontal segment
+        if (y1 == lineY) {
+            // Check horizontal overlap
+            double xmin_seg = qMin(x1, x2);
+            double xmax_seg = qMax(x1, x2);
+            return !(xmax_seg < xMin || xmin_seg > xMax);
+        }
+        return false;
+    }
+
+    double t = (lineY - y1) / dy;
+    if (t < 0.0 || t > 1.0)
+        return false;
+
+    double xInt = x1 + t * (x2 - x1);
+    return (xInt >= xMin && xInt <= xMax);
 }
 
 void PlotWidget::updatePlot()
@@ -314,6 +573,7 @@ void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
         // Iterate through all graphs and find those assigned to this yAxis
         for(int i = 0; i < customPlot->graphCount(); ++i){
             QCPGraph* graph = customPlot->graph(i);
+            if(graph->valueAxis() != yAxis) continue;
 
             if(graph->valueAxis() != yAxis){
                 continue;

@@ -94,4 +94,43 @@ void LogbookView::onContextMenuRequested(const QPoint &pos)
     }
 }
 
+void LogbookView::selectSessions(const QList<QString> &sessionIds)
+{
+    QItemSelection selection;
+
+    // Iterate over the session IDs and find corresponding rows
+    for (const QString &sessionId : sessionIds) {
+        int row = model->getSessionRow(sessionId);
+        if (row >= 0) {
+            // Select the entire row by selecting from column 0 to the last column
+            QModelIndex topLeft = model->index(row, 0);
+            QModelIndex bottomRight = model->index(row, model->columnCount() - 1);
+            selection.select(topLeft, bottomRight);
+        } else {
+            qWarning() << "LogbookView::selectSessions: SESSION_ID not found -" << sessionId;
+        }
+    }
+
+    // Apply the selection
+    QItemSelectionModel *selectionModel = treeView->selectionModel();
+    if (!selectionModel) {
+        qWarning() << "LogbookView::selectSessions: No selection model available.";
+        return;
+    }
+
+    // Clear existing selection and select the new sessions
+    selectionModel->clearSelection();
+    selectionModel->select(selection, QItemSelectionModel::Select | QItemSelectionModel::Rows);
+
+    // Optionally, scroll to the first selected session
+    if (!sessionIds.isEmpty()) {
+        QString firstSessionId = sessionIds.first();
+        int firstRow = model->getSessionRow(firstSessionId);
+        if (firstRow >= 0) {
+            QModelIndex firstIndex = model->index(firstRow, 0);
+            treeView->scrollTo(firstIndex, QAbstractItemView::PositionAtCenter);
+        }
+    }
+}
+
 } // namespace FlySight
