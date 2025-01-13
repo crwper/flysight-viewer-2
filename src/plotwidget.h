@@ -2,6 +2,9 @@
 #define PLOTWIDGET_H
 
 #include <QWidget>
+#include <QMap>
+#include <QPointer>
+#include <QSet>
 #include "qcustomplot/qcustomplot.h"
 #include "sessionmodel.h"
 
@@ -68,13 +71,19 @@ private:
     Tool currentTool;
 
     // Selection tool-related members
-    bool m_selecting;                     // True if currently dragging to select
-    QCPItemRect *m_selectionRect;         // Rectangular selection area
-    QPoint m_selectionStartPixel;         // Pixel coordinates where selection started
+    bool m_selecting;
+    QCPItemRect *m_selectionRect;
+    QPoint m_selectionStartPixel;
+
+    // Zoom tool-related
+    bool m_zooming;
+    QCPItemRect *m_zoomRect;
+    QPoint m_zoomStartPixel;
 
     void setupPlot();
     void setupCrosshairs();
     void setupSelectionRectangle();
+    void setupZoomRectangle();
 
     bool isCursorOverPlotArea(const QPoint &pos) const;
     void updateCrosshairs(const QPoint &pos);
