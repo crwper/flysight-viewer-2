@@ -87,7 +87,6 @@ private:
     QPoint m_zoomStartPixel;
 
     void setupPlot();
-    void setupCrosshairs();
     void setupSelectionRectangle();
     void setupZoomRectangle();
 
@@ -97,8 +96,10 @@ private:
     bool handleMouseReleaseEvent(QMouseEvent *event);
     bool handleLeaveEvent(QEvent *event);
 
-    bool isCursorOverPlotArea(const QPoint &pos) const;
+    void setupCrosshairs();
+    void enableCrosshairs(bool enable);
     void updateCrosshairs(const QPoint &pos);
+    bool isCursorOverPlotArea(const QPoint &pos) const;
 
     // Selection-related helper functions
     void updateSelectionRect(const QPoint &currentPos);

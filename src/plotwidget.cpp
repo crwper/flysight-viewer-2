@@ -86,21 +86,6 @@ void PlotWidget::setupPlot()
     customPlot->addLayer("highlighted", customPlot->layer("main"), QCustomPlot::limAbove);
 }
 
-void PlotWidget::setupCrosshairs()
-{
-    // Initialize horizontal crosshair
-    crosshairH = new QCPItemLine(customPlot);
-    crosshairH->setPen(QPen(Qt::gray, 1));
-    crosshairH->setVisible(false); // Hidden by default
-
-    // Initialize vertical crosshair
-    crosshairV = new QCPItemLine(customPlot);
-    crosshairV->setPen(QPen(Qt::gray, 1));
-    crosshairV->setVisible(false); // Hidden by default
-
-    customPlot->replot();
-}
-
 // Setup the selection rectangle
 void PlotWidget::setupSelectionRectangle()
 {
@@ -217,19 +202,13 @@ bool PlotWidget::handleMouseMoveEvent(QMouseEvent *mouseEvent)
     if (currentlyOverPlot && !isCursorOverPlot)
     {
         isCursorOverPlot = true;
-        customPlot->setCursor(transparentCursor);
-        crosshairH->setVisible(true);
-        crosshairV->setVisible(true);
-        customPlot->replot();
+        enableCrosshairs(true);
     }
     // 3) If we just left the plot area
     else if (!currentlyOverPlot && isCursorOverPlot)
     {
         isCursorOverPlot = false;
-        customPlot->setCursor(originalCursor);
-        crosshairH->setVisible(false);
-        crosshairV->setVisible(false);
-        customPlot->replot();
+        enableCrosshairs(false);
     }
 
     // 4) If cursor is within plot, update crosshairs
@@ -309,7 +288,7 @@ bool PlotWidget::handleMouseReleaseEvent(QMouseEvent *mouseEvent)
         }
     }
 
-    // If no special logic was triggered, return false => let QCP handle it
+    // If we get here, we didn’t handle the press event; let QCP handle it
     return false;
 }
 
@@ -321,15 +300,60 @@ bool PlotWidget::handleLeaveEvent(QEvent *event)
     if (isCursorOverPlot)
     {
         isCursorOverPlot = false;
-        customPlot->setCursor(originalCursor);
-        crosshairH->setVisible(false);
-        crosshairV->setVisible(false);
-        customPlot->replot();
+        enableCrosshairs(false);
     }
 
-    // Return false => we didn't "consume" this event,
-    // so continue normal event processing if needed.
+    // If we get here, we didn’t handle the press event; let QCP handle it
     return false;
+}
+
+void PlotWidget::setupCrosshairs()
+{
+    // Create horizontal crosshair
+    crosshairH = new QCPItemLine(customPlot);
+    crosshairH->setPen(QPen(Qt::gray, 1));
+    crosshairH->setVisible(false);
+
+    // Create vertical crosshair
+    crosshairV = new QCPItemLine(customPlot);
+    crosshairV->setPen(QPen(Qt::gray, 1));
+    crosshairV->setVisible(false);
+
+    // Optionally do an initial replot
+    customPlot->replot();
+}
+
+void PlotWidget::enableCrosshairs(bool enable)
+{
+    crosshairH->setVisible(enable);
+    crosshairV->setVisible(enable);
+
+    if (enable) {
+        customPlot->setCursor(transparentCursor);
+    } else {
+        customPlot->setCursor(originalCursor);
+    }
+
+    // If you want an immediate update:
+    customPlot->replot(QCustomPlot::rpQueuedReplot);
+}
+
+void PlotWidget::updateCrosshairs(const QPoint &pos)
+{
+    // Convert pixel position to plot coordinates
+    double x = customPlot->xAxis->pixelToCoord(pos.x());
+    double y = customPlot->yAxis->pixelToCoord(pos.y());
+
+    // Move horizontal crosshair
+    crosshairH->start->setCoords(customPlot->xAxis->range().lower, y);
+    crosshairH->end->setCoords(customPlot->xAxis->range().upper,  y);
+
+    // Move vertical crosshair
+    crosshairV->start->setCoords(x, customPlot->yAxis->range().lower);
+    crosshairV->end->setCoords(x, customPlot->yAxis->range().upper);
+
+    // Redraw
+    customPlot->replot(QCustomPlot::rpQueuedReplot);
 }
 
 bool PlotWidget::isCursorOverPlotArea(const QPoint &pos) const
@@ -342,23 +366,6 @@ bool PlotWidget::isCursorOverPlotArea(const QPoint &pos) const
 
     // Check if the position is within the axis rect
     return plotAreaRect.contains(pos);
-}
-
-void PlotWidget::updateCrosshairs(const QPoint &pos)
-{
-    // Convert pixel position to plot coordinates
-    double x = customPlot->xAxis->pixelToCoord(pos.x());
-    double y = customPlot->yAxis->pixelToCoord(pos.y());
-
-    // Set the positions of the crosshairs
-    crosshairH->start->setCoords(customPlot->xAxis->range().lower, y);
-    crosshairH->end->setCoords(customPlot->xAxis->range().upper, y);
-
-    crosshairV->start->setCoords(x, customPlot->yAxis->range().lower);
-    crosshairV->end->setCoords(x, customPlot->yAxis->range().upper);
-
-    // Update plot without triggering a full replot
-    customPlot->replot(QCustomPlot::rpQueuedReplot);
 }
 
 // Update the selection rectangle as the mouse moves
