@@ -714,6 +714,11 @@ void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
         }
     }
 
+    if (isCursorOverPlot) {
+        QPoint cursorPos = customPlot->mapFromGlobal(QCursor::pos());
+        updateCrosshairs(cursorPos);
+    }
+
     customPlot->replot();
 
     m_updatingYAxis = false;
