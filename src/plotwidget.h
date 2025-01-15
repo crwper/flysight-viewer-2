@@ -91,6 +91,12 @@ private:
     void setupSelectionRectangle();
     void setupZoomRectangle();
 
+    bool handleWheelEvent(QWheelEvent *event);
+    bool handleMousePressEvent(QMouseEvent *mouseEvent);
+    bool handleMouseMoveEvent(QMouseEvent *event);
+    bool handleMouseReleaseEvent(QMouseEvent *event);
+    bool handleLeaveEvent(QEvent *event);
+
     bool isCursorOverPlotArea(const QPoint &pos) const;
     void updateCrosshairs(const QPoint &pos);
 

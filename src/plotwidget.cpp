@@ -120,172 +120,216 @@ void PlotWidget::setupZoomRectangle()
 
 bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 {
-    if (obj == customPlot)
+    if (obj != customPlot)
+        return QWidget::eventFilter(obj, event);
+
+    switch (event->type())
     {
-        switch (event->type())
+    case QEvent::Wheel:
+        return handleWheelEvent(static_cast<QWheelEvent*>(event));
+    case QEvent::MouseButtonPress:
+        return handleMousePressEvent(static_cast<QMouseEvent*>(event));
+    case QEvent::MouseMove:
+        return handleMouseMoveEvent(static_cast<QMouseEvent*>(event));
+    case QEvent::MouseButtonRelease:
+        return handleMouseReleaseEvent(static_cast<QMouseEvent*>(event));
+    case QEvent::Leave:
+        return handleLeaveEvent(event);
+    default:
+        return QWidget::eventFilter(obj, event);
+    }
+}
+
+bool PlotWidget::handleWheelEvent(QWheelEvent *event)
+{
+    // Always let QCP handle wheel for zoom.
+    return false;
+}
+
+bool PlotWidget::handleMousePressEvent(QMouseEvent *mouseEvent)
+{
+    // Let QCP handle middle-button presses for dragging
+    if (mouseEvent->button() == Qt::MiddleButton)
+        return false; // We haven't "consumed" the event; QCP can use it.
+
+    // Handle left-button presses according to the current tool
+    if (mouseEvent->button() == Qt::LeftButton)
+    {
+        switch (currentTool)
         {
-        case QEvent::Wheel:
-        {
-            // Always let QCP handle wheel for zoom.
+        case Tool::Pan:
+            // For panning, we just let QCustomPlot handle it.
+            // (Returning false lets QCP's built-in dragging logic run.)
             return false;
-        }
 
-        case QEvent::MouseButtonPress:
-        {
-            QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
-            // Middle button => always let QCP handle range drag:
-            if (mouseEvent->button() == Qt::MiddleButton)
-                return false;
-
-            if (mouseEvent->button() == Qt::LeftButton)
+        case Tool::Zoom:
+            if (isCursorOverPlotArea(mouseEvent->pos()))
             {
-                if (currentTool == Tool::Pan)
-                {
-                    // Manually do a "fake" drag if we want left-button to pan.
-                    // But simpler: just let QCP do a left-drag if iRangeDrag is on.
-                    // So we return false => QCP sees left button press.
-                    return false;
-                }
-                else if (currentTool == Tool::Zoom)
-                {
-                    if (isCursorOverPlotArea(mouseEvent->pos()))
-                    {
-                        m_zooming = true;
-                        m_zoomStartPixel = mouseEvent->pos();
-                        m_zoomRect->setVisible(true);
-                        // Initialize rect
-                        QPointF startCoord = pixelToPlotCoords(m_zoomStartPixel);
-                        double x = startCoord.x();
-                        double y = customPlot->yAxis->range().lower;
-                        double y2 = customPlot->yAxis->range().upper;
-                        // We'll only highlight horizontally for time zoom
-                        m_zoomRect->topLeft->setCoords(x, y2);
-                        m_zoomRect->bottomRight->setCoords(x, y);
-                        customPlot->replot(QCustomPlot::rpQueuedReplot);
-                    }
-                    return true;
-                }
-                else if (currentTool == Tool::Select)
-                {
-                    if (isCursorOverPlotArea(mouseEvent->pos()))
-                    {
-                        m_selecting = true;
-                        m_selectionStartPixel = mouseEvent->pos();
-                        m_selectionRect->setVisible(true);
-                        updateSelectionRect(m_selectionStartPixel);
-                    }
-                    return true;
-                }
-            }
-            break;
-        }
-
-        case QEvent::MouseMove:
-        {
-            QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
-            QPoint pos = mouseEvent->pos();
-
-            bool currentlyOverPlot = isCursorOverPlotArea(pos);
-            if (currentlyOverPlot && !isCursorOverPlot)
-            {
-                isCursorOverPlot = true;
-                customPlot->setCursor(transparentCursor);
-                crosshairH->setVisible(true);
-                crosshairV->setVisible(true);
-                customPlot->replot();
-            }
-            else if (!currentlyOverPlot && isCursorOverPlot)
-            {
-                isCursorOverPlot = false;
-                customPlot->setCursor(originalCursor);
-                crosshairH->setVisible(false);
-                crosshairV->setVisible(false);
-                customPlot->replot();
-            }
-
-            if (isCursorOverPlot)
-                updateCrosshairs(pos);
-
-            // Zoom dragging
-            if (m_zooming && currentTool == Tool::Zoom)
-            {
-                QPointF startCoord = pixelToPlotCoords(m_zoomStartPixel);
-                QPointF currentCoord = pixelToPlotCoords(pos);
-                double xLeft = qMin(startCoord.x(), currentCoord.x());
-                double xRight = qMax(startCoord.x(), currentCoord.x());
-                double yLow = customPlot->yAxis->range().lower;
-                double yHigh = customPlot->yAxis->range().upper;
-
+                m_zooming = true;
+                m_zoomStartPixel = mouseEvent->pos();
                 m_zoomRect->setVisible(true);
-                m_zoomRect->topLeft->setCoords(xLeft, yHigh);
-                m_zoomRect->bottomRight->setCoords(xRight, yLow);
-                customPlot->replot(QCustomPlot::rpQueuedReplot);
-            }
 
-            // Selecting
-            if (m_selecting && currentTool == Tool::Select)
-            {
-                updateSelectionRect(pos);
+                // Optionally initialize the rectangle’s coordinates now:
+                QPointF startCoord = pixelToPlotCoords(m_zoomStartPixel);
+                double x = startCoord.x();
+                double yLower = customPlot->yAxis->range().lower;
+                double yUpper = customPlot->yAxis->range().upper;
+
+                // We only zoom horizontally, so top and bottom lines
+                // stretch across the entire y-range.
+                m_zoomRect->topLeft->setCoords(x, yUpper);
+                m_zoomRect->bottomRight->setCoords(x, yLower);
+
+                // We handled the event ourselves—stop further processing.
+                return true;
             }
+            // If the click is not in the plot area, do nothing special.
             return false;
-        }
 
-        case QEvent::MouseButtonRelease:
-        {
-            QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
-
-            // Middle => let QCP handle
-            if (mouseEvent->button() == Qt::MiddleButton)
-                return false;
-
-            if (mouseEvent->button() == Qt::LeftButton)
+        case Tool::Select:
+            if (isCursorOverPlotArea(mouseEvent->pos()))
             {
-                if (currentTool == Tool::Zoom && m_zooming)
-                {
-                    m_zooming = false;
-                    m_zoomRect->setVisible(false);
-                    customPlot->replot();
+                m_selecting = true;
+                m_selectionStartPixel = mouseEvent->pos();
+                m_selectionRect->setVisible(true);
 
-                    QPointF startCoord = pixelToPlotCoords(m_zoomStartPixel);
-                    QPointF endCoord   = pixelToPlotCoords(mouseEvent->pos());
-                    double xMin = qMin(startCoord.x(), endCoord.x());
-                    double xMax = qMax(startCoord.x(), endCoord.x());
-                    if (qAbs(xMax - xMin) > 1e-9) // do actual zoom
-                    {
-                        customPlot->xAxis->setRange(xMin, xMax);
-                        customPlot->replot();
-                    }
-                    return true;
-                }
-                else if (currentTool == Tool::Select && m_selecting)
-                {
-                    m_selecting = false;
-                    finalizeSelectionRect(mouseEvent->pos());
-                    return true;
-                }
+                // Initialize the rectangle’s position
+                updateSelectionRect(m_selectionStartPixel);
+
+                // We handled the event ourselves—stop further processing.
+                return true;
             }
-            break;
-        }
-
-        case QEvent::Leave:
-        {
-            if (isCursorOverPlot)
-            {
-                isCursorOverPlot = false;
-                customPlot->setCursor(originalCursor);
-                crosshairH->setVisible(false);
-                crosshairV->setVisible(false);
-                customPlot->replot();
-            }
-            break;
-        }
-
-        default:
-            break;
+            // If the click is not in the plot area, do nothing special.
+            return false;
         }
     }
-    // Standard event processing
-    return QWidget::eventFilter(obj, event);
+
+    // If we get here, we didn’t handle the press event; let QCP handle it
+    return false;
+}
+
+bool PlotWidget::handleMouseMoveEvent(QMouseEvent *mouseEvent)
+{
+    // 1) Determine if we are over the plot area
+    bool currentlyOverPlot = isCursorOverPlotArea(mouseEvent->pos());
+
+    // 2) If we just entered the plot area
+    if (currentlyOverPlot && !isCursorOverPlot)
+    {
+        isCursorOverPlot = true;
+        customPlot->setCursor(transparentCursor);
+        crosshairH->setVisible(true);
+        crosshairV->setVisible(true);
+        customPlot->replot();
+    }
+    // 3) If we just left the plot area
+    else if (!currentlyOverPlot && isCursorOverPlot)
+    {
+        isCursorOverPlot = false;
+        customPlot->setCursor(originalCursor);
+        crosshairH->setVisible(false);
+        crosshairV->setVisible(false);
+        customPlot->replot();
+    }
+
+    // 4) If cursor is within plot, update crosshairs
+    if (isCursorOverPlot)
+        updateCrosshairs(mouseEvent->pos());
+
+    // 5) If we're in the middle of a zoom-drag (and the active tool is Zoom)
+    if (m_zooming && currentTool == Tool::Zoom)
+    {
+        QPointF startCoord   = pixelToPlotCoords(m_zoomStartPixel);
+        QPointF currentCoord = pixelToPlotCoords(mouseEvent->pos());
+
+        double xLeft  = qMin(startCoord.x(), currentCoord.x());
+        double xRight = qMax(startCoord.x(), currentCoord.x());
+
+        double yLow   = customPlot->yAxis->range().lower;
+        double yHigh  = customPlot->yAxis->range().upper;
+
+        // Update the visible zoom rect
+        m_zoomRect->setVisible(true);
+        m_zoomRect->topLeft->setCoords(xLeft,  yHigh);
+        m_zoomRect->bottomRight->setCoords(xRight, yLow);
+
+        // Use a queued replot for smooth dragging
+        customPlot->replot(QCustomPlot::rpQueuedReplot);
+    }
+
+    // 6) If we're in the middle of a selection-drag (and the active tool is Select)
+    if (m_selecting && currentTool == Tool::Select)
+    {
+        updateSelectionRect(mouseEvent->pos());
+    }
+
+    // If we get here, we didn’t handle the press event; let QCP handle it
+    return false;
+}
+
+bool PlotWidget::handleMouseReleaseEvent(QMouseEvent *mouseEvent)
+{
+    // If the user released the middle button, we let QCustomPlot handle it.
+    if (mouseEvent->button() == Qt::MiddleButton)
+        return false;
+
+    if (mouseEvent->button() == Qt::LeftButton)
+    {
+        // Zoom tool: finalize the zoom if we were zooming
+        if (currentTool == Tool::Zoom && m_zooming)
+        {
+            m_zooming = false;
+            m_zoomRect->setVisible(false);
+            customPlot->replot();
+
+            // Compute the new X-axis range
+            QPointF startCoord = pixelToPlotCoords(m_zoomStartPixel);
+            QPointF endCoord   = pixelToPlotCoords(mouseEvent->pos());
+            double xMin = qMin(startCoord.x(), endCoord.x());
+            double xMax = qMax(startCoord.x(), endCoord.x());
+
+            // If there's a real horizontal span, apply that range to the plot
+            if (qAbs(xMax - xMin) > 1e-9)
+            {
+                customPlot->xAxis->setRange(xMin, xMax);
+                customPlot->replot();
+            }
+
+            // We handled this event ourselves—no further processing by QCP
+            return true;
+        }
+
+        // Select tool: finalize the selection if we were selecting
+        if (currentTool == Tool::Select && m_selecting)
+        {
+            m_selecting = false;
+            finalizeSelectionRect(mouseEvent->pos());
+            // Also fully handled by us; no QCP handling needed
+            return true;
+        }
+    }
+
+    // If no special logic was triggered, return false => let QCP handle it
+    return false;
+}
+
+bool PlotWidget::handleLeaveEvent(QEvent *event)
+{
+    Q_UNUSED(event);
+
+    // If we were tracking the cursor inside the plot, disable crosshairs, restore cursor
+    if (isCursorOverPlot)
+    {
+        isCursorOverPlot = false;
+        customPlot->setCursor(originalCursor);
+        crosshairH->setVisible(false);
+        crosshairV->setVisible(false);
+        customPlot->replot();
+    }
+
+    // Return false => we didn't "consume" this event,
+    // so continue normal event processing if needed.
+    return false;
 }
 
 bool PlotWidget::isCursorOverPlotArea(const QPoint &pos) const
