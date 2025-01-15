@@ -371,8 +371,13 @@ QList<QString> PlotWidget::sessionsInRect(double xMin_main, double xMax_main, do
     double yMin_pixel = customPlot->yAxis->coordToPixel(yMin_main);
     double yMax_pixel = customPlot->yAxis->coordToPixel(yMax_main);
 
-    for (auto graph : m_plottedGraphs) {
-        QString sessionId = m_graphToSessionMap.value(graph, QString());
+    // Iterate through each (graph, info) pair in the map
+    for (auto infoIt = m_graphInfoMap.cbegin(); infoIt != m_graphInfoMap.cend(); ++infoIt)
+    {
+        QCPGraph* graph = infoIt.key();
+        const GraphInfo& info = infoIt.value();
+
+        QString sessionId = info.sessionId;
         if (sessionId.isEmpty())
             continue;
 
@@ -533,9 +538,7 @@ void PlotWidget::updatePlot()
 {
     // Clear existing plots and graphs
     customPlot->clearPlottables();
-    m_plottedGraphs.clear();
-    m_graphToSessionMap.clear();
-    m_graphDefaultPens.clear();
+    m_graphInfoMap.clear();
 
     // Remove existing custom y-axes
     QList<QCPAxis*> axesToRemove = m_plotValueAxes.values();
@@ -633,15 +636,15 @@ void PlotWidget::updatePlot()
                     // Assign to default layer
                     graph->setLayer("main");
 
-                    // Add to the list of plotted graphs
-                    m_plottedGraphs.append(graph);
+                    // Build the GraphInfo struct
+                    GraphInfo info;
+                    info.sessionId = session.getAttribute(SessionKeys::SessionId).toString();
+                    info.sensorId = sensorID;
+                    info.measurementId = measurementID;
+                    info.defaultPen = graph->pen();
 
-                    // Map graph to session ID
-                    QString sessionId = session.getAttribute(SessionKeys::SessionId).toString();
-                    m_graphToSessionMap.insert(graph, sessionId);
-
-                    // Store the default pen for later use
-                    m_graphDefaultPens.insert(graph, graph->pen());
+                    // Store in the single map
+                    m_graphInfoMap.insert(graph, info);
 
                     qDebug() << "Plotted session:" << session.getAttribute(SessionKeys::SessionId) << "on plot:" << plotName;
                 }
@@ -745,33 +748,35 @@ void PlotWidget::setXAxisRange(double min, double max)
 
 void PlotWidget::onHoveredSessionChanged(const QString& sessionId)
 {
-    // Iterate through all plotted graphs
-    for(auto graph : m_plottedGraphs){
-        QString graphSessionId = m_graphToSessionMap.value(graph, QString());
+    // Iterate through each (graph, info) pair in the map
+    for (auto it = m_graphInfoMap.cbegin(); it != m_graphInfoMap.cend(); ++it)
+    {
+        QCPGraph* graph = it.key();
+        const GraphInfo& info = it.value();
 
-        if(graphSessionId == sessionId || sessionId.isEmpty()){
+        if (sessionId.isEmpty() || info.sessionId == sessionId)
+        {
             // Assign to highlighted layer
             graph->setLayer("highlighted");
 
-            if(m_graphDefaultPens.contains(graph)){
-                QPen highlightPen = m_graphDefaultPens.value(graph);
-                graph->setPen(highlightPen);
-            }
+            // Restore the default pen
+            graph->setPen(info.defaultPen);
         }
-        else{
+        else
+        {
             // Assign back to main layer
             graph->setLayer("main");
 
-            if(m_graphDefaultPens.contains(graph)){
-                QPen highlightPen = m_graphDefaultPens.value(graph);
+            // Modify the default pen color
+            QPen pen = info.defaultPen;
+            int h, s, l;
+            pen.color().getHsl(&h, &s, &l);
 
-                int h, s, l;
-                highlightPen.color().getHsl(&h, &s, &l);
-                QColor color = QColor::fromHsl(h, s, (l + 255 * 15) / 16);
+            // Transform to lighten the color
+            QColor lighterColor = QColor::fromHsl(h, s, (l + 255 * 15) / 16);
+            pen.setColor(lighterColor);
 
-                highlightPen.setColor(color);
-                graph->setPen(highlightPen);
-            }
+            graph->setPen(pen);
         }
     }
 

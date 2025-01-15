@@ -46,15 +46,21 @@ private slots:
     void onHoveredSessionChanged(const QString& sessionId);
 
 private:
+    struct GraphInfo
+    {
+        QString sessionId;
+        QString sensorId;
+        QString measurementId;
+        QPen defaultPen;
+    };
+
     QCustomPlot *customPlot;
     SessionModel *model;
     QStandardItemModel *plotModel;
 
     // Keep track of plotted graphs and their sessions
-    QList<QCPGraph*> m_plottedGraphs;
+    QMap<QCPGraph*, GraphInfo> m_graphInfoMap;
     QMap<QString, QCPAxis*> m_plotValueAxes;
-    QMap<QCPGraph*, QString> m_graphToSessionMap;
-    QMap<QCPGraph*, QPen> m_graphDefaultPens;
 
     bool m_updatingYAxis = false;
 
