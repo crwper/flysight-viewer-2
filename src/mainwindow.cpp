@@ -575,7 +575,7 @@ void MainWindow::initializeCalculatedAttributes()
         }
 
         qWarning() << "Exit time could not be determined based on current data.";
-        return std::nullopt;
+        return QDateTime::fromSecsSinceEpoch((qint64)time.back(), QTimeZone::utc());
     });
 
     SessionData::registerCalculatedAttribute(SessionKeys::StartTime, [](SessionData &session) -> std::optional<QVariant> {

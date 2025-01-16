@@ -96,26 +96,27 @@ void PlotWidget::handleSessionsSelected(const QList<QString> &sessionIds)
 // Slots
 void PlotWidget::updatePlot()
 {
-    // clear existing graphs and axes
+    // Clear existing graphs and axes
     customPlot->clearPlottables();
     m_graphInfoMap.clear();
 
-    QList<QCPAxis*> axesToRemove = m_plotValueAxes.values();
+    QList<QCPAxis *> axesToRemove = m_plotValueAxes.values();
     m_plotValueAxes.clear();
     for (auto axis : axesToRemove) {
         customPlot->axisRect()->removeAxis(axis);
     }
 
-    // retrieve all session data
-    const QVector<SessionData>& sessions = model->getAllSessions();
+    // Retrieve all session data
+    const QVector<SessionData> &sessions = model->getAllSessions();
+    QString hoveredSessionId = model->hoveredSessionId(); // Retrieve hovered session ID
 
-    // iterate over the plot model to add graphs for checked items
+    // Iterate over the plot model to add graphs for checked items
     for (int row = 0; row < plotModel->rowCount(); ++row) {
-        QStandardItem* categoryItem = plotModel->item(row);
+        QStandardItem *categoryItem = plotModel->item(row);
         for (int col = 0; col < categoryItem->rowCount(); ++col) {
-            QStandardItem* plotItem = categoryItem->child(col);
+            QStandardItem *plotItem = categoryItem->child(col);
             if (plotItem->checkState() == Qt::Checked) {
-                // retrieve metadata for the graph
+                // Retrieve metadata for the graph
                 QColor color = plotItem->data(MainWindow::DefaultColorRole).value<QColor>();
                 QString sensorID = plotItem->data(MainWindow::SensorIDRole).toString();
                 QString measurementID = plotItem->data(MainWindow::MeasurementIDRole).toString();
@@ -124,7 +125,7 @@ void PlotWidget::updatePlot()
 
                 QString plotValueID = sensorID + "/" + measurementID;
 
-                // create a new y-axis if one doesn't exist for this plot value
+                // Create a new y-axis if one doesn't exist for this plot value
                 if (!m_plotValueAxes.contains(plotValueID)) {
                     QCPAxis *newYAxis = customPlot->axisRect()->addAxis(QCPAxis::atLeft);
                     if (!plotUnits.isEmpty()) {
@@ -140,38 +141,38 @@ void PlotWidget::updatePlot()
                     m_plotValueAxes.insert(plotValueID, newYAxis);
                 }
 
-                QCPAxis* assignedYAxis = m_plotValueAxes.value(plotValueID);
+                QCPAxis *assignedYAxis = m_plotValueAxes.value(plotValueID);
 
-                // add graphs for each visible session
-                for (const auto& session : sessions) {
+                // Add graphs for each visible session
+                for (const auto &session : sessions) {
                     if (!session.isVisible()) {
                         continue;
                     }
 
-                    QVector<double> yData = const_cast<SessionData&>(session).getMeasurement(sensorID, measurementID);
+                    QVector<double> yData = const_cast<SessionData &>(session).getMeasurement(sensorID, measurementID);
                     if (yData.isEmpty()) {
                         qWarning() << "No data available for plot:" << plotName << "in session:" << session.getAttribute(SessionKeys::SessionId);
                         continue;
                     }
 
-                    QVector<double> xData = const_cast<SessionData&>(session).getMeasurement(sensorID, SessionKeys::TimeFromExit);
+                    QVector<double> xData = const_cast<SessionData &>(session).getMeasurement(sensorID, SessionKeys::TimeFromExit);
                     if (xData.isEmpty() || xData.size() != yData.size()) {
                         qWarning() << "Time and measurement data size mismatch for session:" << session.getAttribute(SessionKeys::SessionId);
                         continue;
                     }
 
-                    QCPGraph *graph = customPlot->addGraph(customPlot->xAxis, assignedYAxis);
-                    graph->setPen(QPen(color));
-                    graph->setData(xData, yData);
-                    graph->setLineStyle(QCPGraph::lsLine);
-                    graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
-                    graph->setLayer("main");
-
                     GraphInfo info;
                     info.sessionId = session.getAttribute(SessionKeys::SessionId).toString();
                     info.sensorId = sensorID;
                     info.measurementId = measurementID;
-                    info.defaultPen = graph->pen();
+                    info.defaultPen = QPen(QColor(color));
+
+                    QCPGraph *graph = customPlot->addGraph(customPlot->xAxis, assignedYAxis);
+                    graph->setPen(determineGraphPen(info, hoveredSessionId));
+                    graph->setData(xData, yData);
+                    graph->setLineStyle(QCPGraph::lsLine);
+                    graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
+                    graph->setLayer(determineGraphLayer(info, hoveredSessionId));
 
                     m_graphInfoMap.insert(graph, info);
                 }
@@ -179,27 +180,8 @@ void PlotWidget::updatePlot()
         }
     }
 
-    // adjust y-axis ranges based on the updated x-axis range
+    // Adjust y-axis ranges based on the updated x-axis range
     onXAxisRangeChanged(customPlot->xAxis->range());
-}
-
-void PlotWidget::setupPlot()
-{
-    // configure basic plot settings
-    customPlot->xAxis->setLabel("Time from exit (s)");
-    customPlot->yAxis->setVisible(false);
-
-    // enable interactions for range dragging and zooming
-    customPlot->setInteraction(QCP::iRangeDrag, true);
-    customPlot->setInteraction(QCP::iRangeZoom, true);
-    customPlot->setInteraction(QCP::iSelectPlottables, true);
-
-    // restrict range interactions to horizontal only
-    customPlot->axisRect()->setRangeDrag(Qt::Horizontal);
-    customPlot->axisRect()->setRangeZoom(Qt::Horizontal);
-
-    // create a dedicated layer for highlighted graphs
-    customPlot->addLayer("highlighted", customPlot->layer("main"), QCustomPlot::limAbove);
 }
 
 void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
@@ -254,6 +236,20 @@ void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
     m_updatingYAxis = false;
 }
 
+void PlotWidget::onHoveredSessionChanged(const QString &sessionId)
+{
+    // update graph appearance based on the hovered session
+    for (auto it = m_graphInfoMap.cbegin(); it != m_graphInfoMap.cend(); ++it) {
+        QCPGraph *graph = it.key();
+        const GraphInfo &info = it.value();
+
+        graph->setLayer(determineGraphLayer(info, sessionId));
+        graph->setPen(determineGraphPen(info, sessionId));
+    }
+
+    customPlot->replot();
+}
+
 // Protected Methods
 bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 {
@@ -275,6 +271,41 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
     default:
         return QWidget::eventFilter(obj, event);
     }
+}
+
+// Initialization
+
+void PlotWidget::setupPlot()
+{
+    // configure basic plot settings
+    customPlot->xAxis->setLabel("Time from exit (s)");
+    customPlot->yAxis->setVisible(false);
+
+    // enable interactions for range dragging and zooming
+    customPlot->setInteraction(QCP::iRangeDrag, true);
+    customPlot->setInteraction(QCP::iRangeZoom, true);
+    customPlot->setInteraction(QCP::iSelectPlottables, true);
+
+    // restrict range interactions to horizontal only
+    customPlot->axisRect()->setRangeDrag(Qt::Horizontal);
+    customPlot->axisRect()->setRangeZoom(Qt::Horizontal);
+
+    // create a dedicated layer for highlighted graphs
+    customPlot->addLayer("highlighted", customPlot->layer("main"), QCustomPlot::limAbove);
+}
+
+void PlotWidget::setupCrosshairs()
+{
+    // create horizontal and vertical crosshairs
+    crosshairH = new QCPItemLine(customPlot);
+    crosshairH->setPen(QPen(Qt::gray, 1));
+    crosshairH->setVisible(false);
+
+    crosshairV = new QCPItemLine(customPlot);
+    crosshairV->setPen(QPen(Qt::gray, 1));
+    crosshairV->setVisible(false);
+
+    customPlot->replot();
 }
 
 // Crosshair Management
@@ -302,20 +333,6 @@ void PlotWidget::handleCrosshairLeave(QEvent *event)
         isCursorOverPlot = false;
         enableCrosshairs(false);
     }
-}
-
-void PlotWidget::setupCrosshairs()
-{
-    // create horizontal and vertical crosshairs
-    crosshairH = new QCPItemLine(customPlot);
-    crosshairH->setPen(QPen(Qt::gray, 1));
-    crosshairH->setVisible(false);
-
-    crosshairV = new QCPItemLine(customPlot);
-    crosshairV->setPen(QPen(Qt::gray, 1));
-    crosshairV->setVisible(false);
-
-    customPlot->replot();
 }
 
 void PlotWidget::enableCrosshairs(bool enable)
@@ -372,27 +389,24 @@ double PlotWidget::interpolateY(const QCPGraph* graph, double x)
     return y1 + (y2 - y1) * (x - x1) / (x2 - x1);
 }
 
-void PlotWidget::onHoveredSessionChanged(const QString& sessionId)
+QPen PlotWidget::determineGraphPen(const GraphInfo &info, const QString &hoveredSessionId) const
 {
-    // update graph appearance based on the hovered session
-    for (auto it = m_graphInfoMap.cbegin(); it != m_graphInfoMap.cend(); ++it) {
-        QCPGraph* graph = it.key();
-        const GraphInfo& info = it.value();
-
-        if (sessionId.isEmpty() || info.sessionId == sessionId) {
-            graph->setLayer("highlighted");
-            graph->setPen(info.defaultPen);
-        } else {
-            graph->setLayer("main");
-            QPen pen = info.defaultPen;
-            int h, s, l;
-            pen.color().getHsl(&h, &s, &l);
-            pen.setColor(QColor::fromHsl(h, s, (l + 255 * 15) / 16));
-            graph->setPen(pen);
-        }
+    if (hoveredSessionId.isEmpty() || info.sessionId == hoveredSessionId) {
+        // Highlight the graph
+        return info.defaultPen;
+    } else {
+        // Dim the graph
+        QPen pen = info.defaultPen;
+        int h, s, l;
+        pen.color().getHsl(&h, &s, &l);
+        pen.setColor(QColor::fromHsl(h, s, (l + 255 * 15) / 16)); // Dimmed color
+        return pen;
     }
+}
 
-    customPlot->replot();
+QString PlotWidget::determineGraphLayer(const GraphInfo &info, const QString &hoveredSessionId) const
+{
+    return (hoveredSessionId.isEmpty() || info.sessionId == hoveredSessionId) ? "highlighted" : "main";
 }
 
 } // namespace FlySight

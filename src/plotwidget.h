@@ -74,6 +74,8 @@ private:
 
     // Utility Methods
     static double interpolateY(const QCPGraph* graph, double x);
+    QPen determineGraphPen(const GraphInfo &info, const QString &hoveredSessionId) const;
+    QString determineGraphLayer(const GraphInfo &info, const QString &hoveredSessionId) const;
 
     // Member Variables
     QCustomPlot *customPlot;
