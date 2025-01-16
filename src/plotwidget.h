@@ -19,54 +19,63 @@ class PlotWidget : public QWidget
 {
     Q_OBJECT
 public:
+    // Enums and Structs
     enum class Tool {
         Pan,
         Zoom,
         Select
     };
 
-    struct GraphInfo
-    {
+    struct GraphInfo {
         QString sessionId;
         QString sensorId;
         QString measurementId;
         QPen defaultPen;
     };
 
-    struct PlotContext
-    {
+    struct PlotContext {
         PlotWidget *widget = nullptr;
         QCustomPlot* plot = nullptr;
         QMap<QCPGraph*, GraphInfo>* graphMap = nullptr;
     };
 
+    // Constructor
     PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidget *parent = nullptr);
 
+    // Public Methods
     void setCurrentTool(Tool tool);
     void setXAxisRange(double min, double max);
-
     void handleSessionsSelected(const QList<QString> &sessionIds);
 
 signals:
-    // Emitted when a rectangular selection is made in select mode.
-    // Contains the SESSION_IDs of the sessions that intersect with the selection area.
     void sessionsSelected(const QList<QString> &sessionIds);
 
 public slots:
-    // Called when the model or plot model changes, update the plot accordingly
     void updatePlot();
-
-    // Called when the x-axis range changes, auto-adjusts y-axes
     void onXAxisRangeChanged(const QCPRange &newRange);
 
 protected:
-    // Event filter to capture mouse events on the plot widget
     bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
     void onHoveredSessionChanged(const QString& sessionId);
 
 private:
+    // Initialization
+    void setupPlot();
+    void setupCrosshairs();
+
+    // Crosshair Management
+    void handleCrosshairMouseMove(QMouseEvent *mouseEvent);
+    void handleCrosshairLeave(QEvent *event);
+    void enableCrosshairs(bool enable);
+    void updateCrosshairs(const QPoint &pos);
+    bool isCursorOverPlotArea(const QPoint &pos) const;
+
+    // Utility Methods
+    static double interpolateY(const QCPGraph* graph, double x);
+
+    // Member Variables
     QCustomPlot *customPlot;
     SessionModel *model;
     QStandardItemModel *plotModel;
@@ -77,32 +86,21 @@ private:
     std::unique_ptr<ZoomTool> m_zoomTool;
     std::unique_ptr<SelectTool> m_selectTool;
 
-    // Keep track of plotted graphs and their sessions
+    // Plot Management
     QMap<QCPGraph*, GraphInfo> m_graphInfoMap;
     QMap<QString, QCPAxis*> m_plotValueAxes;
 
-    bool m_updatingYAxis = false;
-
-    // Crosshair items
+    // Crosshairs
     QCPItemLine *crosshairH;
     QCPItemLine *crosshairV;
 
-    // Cursor handling
+    // Cursor Management
     QCursor transparentCursor;
     QCursor originalCursor;
     bool isCursorOverPlot;
 
-    void setupPlot();
-
-    void handleCrosshairMouseMove(QMouseEvent *mouseEvent);
-    void handleCrosshairLeave(QEvent *event);
-
-    void setupCrosshairs();
-    void enableCrosshairs(bool enable);
-    void updateCrosshairs(const QPoint &pos);
-    bool isCursorOverPlotArea(const QPoint &pos) const;
-
-    static double interpolateY(const QCPGraph* graph, double x);
+    // State Management
+    bool m_updatingYAxis = false;
 };
 
 } // namespace FlySight
