@@ -82,8 +82,8 @@ void MainWindow::on_action_Import_triggered()
     // Determine the base directory (the initial directory in the dialog)
     QString baseDir = m_settings->value("folder").toString();
 
-    // Call the helper function without showing progress
-    importFiles(fileNames, false, baseDir);
+    // Call the helper function
+    importFiles(fileNames, fileNames.size() > 5, baseDir);
 
     // Update last used folder
     QString lastUsedFolder = QFileInfo(fileNames.last()).absolutePath();
@@ -141,7 +141,7 @@ void MainWindow::on_action_ImportFolder_triggered()
         return;
     }
 
-    // Call the helper function with showing progress
+    // Call the helper function
     importFiles(filesToImport, filesToImport.size() > 5, selectedDir);
 }
 
@@ -288,11 +288,6 @@ void MainWindow::importFiles(
         message += tr("\nHowever, some files failed to import:");
         message += "\n" + failedList.join("\n");
         QMessageBox::warning(this, tr("Import Completed with Some Failures"), message);
-    } else if (showProgress) {
-        // All imports successful
-        QString message = tr("Import has been completed.");
-        message += tr("\nAll files have been imported successfully.");
-        QMessageBox::information(this, tr("Import Completed"), message);
     }
 }
 
