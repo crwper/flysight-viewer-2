@@ -10,6 +10,11 @@
 
 namespace FlySight {
 
+class PlotTool;
+class PanTool;
+class ZoomTool;
+class SelectTool;
+
 class PlotWidget : public QWidget
 {
     Q_OBJECT
@@ -20,10 +25,27 @@ public:
         Select
     };
 
+    struct GraphInfo
+    {
+        QString sessionId;
+        QString sensorId;
+        QString measurementId;
+        QPen defaultPen;
+    };
+
+    struct PlotContext
+    {
+        PlotWidget *widget = nullptr;
+        QCustomPlot* plot = nullptr;
+        QMap<QCPGraph*, GraphInfo>* graphMap = nullptr;
+    };
+
     PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidget *parent = nullptr);
 
     void setCurrentTool(Tool tool);
     void setXAxisRange(double min, double max);
+
+    void handleSessionsSelected(const QList<QString> &sessionIds);
 
 signals:
     // Emitted when a rectangular selection is made in select mode.
@@ -42,21 +64,18 @@ protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
-    // Highlight graphs if the model signals a hovered session change
     void onHoveredSessionChanged(const QString& sessionId);
 
 private:
-    struct GraphInfo
-    {
-        QString sessionId;
-        QString sensorId;
-        QString measurementId;
-        QPen defaultPen;
-    };
-
     QCustomPlot *customPlot;
     SessionModel *model;
     QStandardItemModel *plotModel;
+
+    // Tools
+    PlotTool* m_currentTool = nullptr;
+    std::unique_ptr<PanTool> m_panTool;
+    std::unique_ptr<ZoomTool> m_zoomTool;
+    std::unique_ptr<SelectTool> m_selectTool;
 
     // Keep track of plotted graphs and their sessions
     QMap<QCPGraph*, GraphInfo> m_graphInfoMap;
@@ -73,47 +92,15 @@ private:
     QCursor originalCursor;
     bool isCursorOverPlot;
 
-    // Current tool mode
-    Tool currentTool;
-
-    // Selection tool-related members
-    bool m_selecting;
-    QCPItemRect *m_selectionRect;
-    QPoint m_selectionStartPixel;
-
-    // Zoom tool-related
-    bool m_zooming;
-    QCPItemRect *m_zoomRect;
-    QPoint m_zoomStartPixel;
-
     void setupPlot();
-    void setupSelectionRectangle();
-    void setupZoomRectangle();
 
-    bool handleWheelEvent(QWheelEvent *event);
-    bool handleMousePressEvent(QMouseEvent *mouseEvent);
-    bool handleMouseMoveEvent(QMouseEvent *event);
-    bool handleMouseReleaseEvent(QMouseEvent *event);
-    bool handleLeaveEvent(QEvent *event);
+    void handleCrosshairMouseMove(QMouseEvent *mouseEvent);
+    void handleCrosshairLeave(QEvent *event);
 
     void setupCrosshairs();
     void enableCrosshairs(bool enable);
     void updateCrosshairs(const QPoint &pos);
     bool isCursorOverPlotArea(const QPoint &pos) const;
-
-    // Selection-related helper functions
-    void updateSelectionRect(const QPoint &currentPos);
-    void finalizeSelectionRect(const QPoint &endPos);
-    QPointF pixelToPlotCoords(const QPoint &pixel) const;
-
-    QList<QString> sessionsInRect(double xMin, double xMax, double yMin, double yMax) const;
-    bool lineSegmentIntersectsRect(double x1, double y1, double x2, double y2,
-                                   double xMin, double xMax, double yMin, double yMax) const;
-    bool pointInRect(double x, double y, double xMin, double xMax, double yMin, double yMax) const;
-    bool intersectSegmentWithVerticalLine(double x1, double y1, double x2, double y2,
-                                          double lineX, double yMin, double yMax) const;
-    bool intersectSegmentWithHorizontalLine(double x1, double y1, double x2, double y2,
-                                            double lineY, double xMin, double xMax) const;
 
     static double interpolateY(const QCPGraph* graph, double x);
 };

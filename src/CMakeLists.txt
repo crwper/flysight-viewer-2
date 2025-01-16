@@ -31,6 +31,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         import.cpp import.h
         logbookview.h logbookview.cpp
         calculatedvalue.h calculatedvalue.cpp
+        plottool/pantool.h plottool/plottool.h plottool/selecttool.cpp plottool/selecttool.h plottool/zoomtool.h
 
 
     )

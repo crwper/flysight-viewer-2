@@ -8,6 +8,11 @@
 #include <QPainter>
 #include <QDebug>
 
+#include "plottool/plottool.h"
+#include "plottool/pantool.h"
+#include "plottool/zoomtool.h"
+#include "plottool/selecttool.h"
+
 namespace FlySight {
 
 PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidget *parent)
@@ -16,8 +21,6 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
     , model(model)
     , plotModel(plotModel)
     , isCursorOverPlot(false)
-    , m_selecting(false)
-    , m_zooming(false)
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(customPlot);
@@ -29,11 +32,19 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
     // Setup crosshairs
     setupCrosshairs();
 
-    // Setup selection rectangle
-    setupSelectionRectangle();
+    // Construct plot context
+    PlotContext ctx;
+    ctx.widget = this;
+    ctx.plot = customPlot;
+    ctx.graphMap = &m_graphInfoMap;
 
-    // Setup zoom rectangle
-    setupZoomRectangle();
+    // Construct each tool
+    m_panTool = std::make_unique<PanTool>(ctx);
+    m_zoomTool = std::make_unique<ZoomTool>(ctx);
+    m_selectTool = std::make_unique<SelectTool>(ctx);
+
+    // Set default
+    m_currentTool = m_panTool.get();
 
     // Install event filter on customPlot to handle mouse events
     customPlot->installEventFilter(this);
@@ -63,9 +74,6 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
 
     // Initial plot
     updatePlot();
-
-    // Initialize tool
-    setCurrentTool(Tool::Pan);
 }
 
 void PlotWidget::setupPlot()
@@ -86,114 +94,70 @@ void PlotWidget::setupPlot()
     customPlot->addLayer("highlighted", customPlot->layer("main"), QCustomPlot::limAbove);
 }
 
-// Setup the selection rectangle
-void PlotWidget::setupSelectionRectangle()
-{
-    m_selectionRect = new QCPItemRect(customPlot);
-    m_selectionRect->setVisible(false);
-    m_selectionRect->setPen(QPen(Qt::blue, 1, Qt::DashLine));
-    m_selectionRect->setBrush(QColor(100, 100, 255, 50)); // semi-transparent
-}
-
-void PlotWidget::setupZoomRectangle()
-{
-    m_zoomRect = new QCPItemRect(customPlot);
-    m_zoomRect->setVisible(false);
-    m_zoomRect->setPen(QPen(Qt::green, 1, Qt::DashLine));
-    m_zoomRect->setBrush(QColor(0, 255, 0, 50));
-}
-
 bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 {
-    if (obj != customPlot)
+    if (obj != customPlot || !m_currentTool)
         return QWidget::eventFilter(obj, event);
 
     switch (event->type())
     {
-    case QEvent::Wheel:
-        return handleWheelEvent(static_cast<QWheelEvent*>(event));
-    case QEvent::MouseButtonPress:
-        return handleMousePressEvent(static_cast<QMouseEvent*>(event));
     case QEvent::MouseMove:
-        return handleMouseMoveEvent(static_cast<QMouseEvent*>(event));
+    {
+        QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+
+        // 1) Update crosshairs (in the PlotWidget)
+        handleCrosshairMouseMove(mouseEvent);
+
+        // 2) Let the current tool also handle mouse move
+        //    (e.g. zoom rectangle, selection rectangle, or panning)
+        bool toolConsumed = m_currentTool->mouseMoveEvent(mouseEvent);
+
+        // Return whether the tool says "I fully consumed this"
+        // or we might always return false if we want QCustomPlot
+        // to see the event as well.
+        return toolConsumed;
+    }
+
+    case QEvent::MouseButtonPress:
+    {
+        QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+
+        // Just delegate to tool (crosshair typically doesn't change on press,
+        // but if you did want logic for crosshairs on press, you could put it here too).
+        bool toolConsumed = m_currentTool->mousePressEvent(mouseEvent);
+        return toolConsumed;
+    }
+
     case QEvent::MouseButtonRelease:
-        return handleMouseReleaseEvent(static_cast<QMouseEvent*>(event));
+    {
+        QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+
+        // Likewise, let the tool finalize whatever it's doing
+        bool toolConsumed = m_currentTool->mouseReleaseEvent(mouseEvent);
+        return toolConsumed;
+    }
+
     case QEvent::Leave:
-        return handleLeaveEvent(event);
+    {
+        // We want to hide crosshairs and reset state if the user moves the mouse off the plot
+        handleCrosshairLeave(event);
+
+        // The tool might want to know about it (rare, but you could call m_currentTool->leaveEvent)
+        // or just do nothing if you prefer.
+        m_currentTool->leaveEvent(event);
+
+        // Usually returning false here so QCP can also handle it
+        // (though QCP might not do much for Leave).
+        return false;
+    }
+
     default:
+        // For all other events, fallback
         return QWidget::eventFilter(obj, event);
     }
 }
 
-bool PlotWidget::handleWheelEvent(QWheelEvent *event)
-{
-    // Always let QCP handle wheel for zoom.
-    return false;
-}
-
-bool PlotWidget::handleMousePressEvent(QMouseEvent *mouseEvent)
-{
-    // Let QCP handle middle-button presses for dragging
-    if (mouseEvent->button() == Qt::MiddleButton)
-        return false; // We haven't "consumed" the event; QCP can use it.
-
-    // Handle left-button presses according to the current tool
-    if (mouseEvent->button() == Qt::LeftButton)
-    {
-        switch (currentTool)
-        {
-        case Tool::Pan:
-            // For panning, we just let QCustomPlot handle it.
-            // (Returning false lets QCP's built-in dragging logic run.)
-            return false;
-
-        case Tool::Zoom:
-            if (isCursorOverPlotArea(mouseEvent->pos()))
-            {
-                m_zooming = true;
-                m_zoomStartPixel = mouseEvent->pos();
-                m_zoomRect->setVisible(true);
-
-                // Optionally initialize the rectangle’s coordinates now:
-                QPointF startCoord = pixelToPlotCoords(m_zoomStartPixel);
-                double x = startCoord.x();
-                double yLower = customPlot->yAxis->range().lower;
-                double yUpper = customPlot->yAxis->range().upper;
-
-                // We only zoom horizontally, so top and bottom lines
-                // stretch across the entire y-range.
-                m_zoomRect->topLeft->setCoords(x, yUpper);
-                m_zoomRect->bottomRight->setCoords(x, yLower);
-
-                // We handled the event ourselves—stop further processing.
-                return true;
-            }
-            // If the click is not in the plot area, do nothing special.
-            return false;
-
-        case Tool::Select:
-            if (isCursorOverPlotArea(mouseEvent->pos()))
-            {
-                m_selecting = true;
-                m_selectionStartPixel = mouseEvent->pos();
-                m_selectionRect->setVisible(true);
-
-                // Initialize the rectangle’s position
-                updateSelectionRect(m_selectionStartPixel);
-
-                // We handled the event ourselves—stop further processing.
-                return true;
-            }
-            // If the click is not in the plot area, do nothing special.
-            return false;
-        }
-    }
-
-    // If we get here, we didn’t handle the press event; let QCP handle it
-    return false;
-}
-
-bool PlotWidget::handleMouseMoveEvent(QMouseEvent *mouseEvent)
+void PlotWidget::handleCrosshairMouseMove(QMouseEvent *mouseEvent)
 {
     // 1) Determine if we are over the plot area
     bool currentlyOverPlot = isCursorOverPlotArea(mouseEvent->pos());
@@ -214,85 +178,9 @@ bool PlotWidget::handleMouseMoveEvent(QMouseEvent *mouseEvent)
     // 4) If cursor is within plot, update crosshairs
     if (isCursorOverPlot)
         updateCrosshairs(mouseEvent->pos());
-
-    // 5) If we're in the middle of a zoom-drag (and the active tool is Zoom)
-    if (m_zooming && currentTool == Tool::Zoom)
-    {
-        QPointF startCoord   = pixelToPlotCoords(m_zoomStartPixel);
-        QPointF currentCoord = pixelToPlotCoords(mouseEvent->pos());
-
-        double xLeft  = qMin(startCoord.x(), currentCoord.x());
-        double xRight = qMax(startCoord.x(), currentCoord.x());
-
-        double yLow   = customPlot->yAxis->range().lower;
-        double yHigh  = customPlot->yAxis->range().upper;
-
-        // Update the visible zoom rect
-        m_zoomRect->setVisible(true);
-        m_zoomRect->topLeft->setCoords(xLeft,  yHigh);
-        m_zoomRect->bottomRight->setCoords(xRight, yLow);
-
-        // Use a queued replot for smooth dragging
-        customPlot->replot(QCustomPlot::rpQueuedReplot);
-    }
-
-    // 6) If we're in the middle of a selection-drag (and the active tool is Select)
-    if (m_selecting && currentTool == Tool::Select)
-    {
-        updateSelectionRect(mouseEvent->pos());
-    }
-
-    // If we get here, we didn’t handle the press event; let QCP handle it
-    return false;
 }
 
-bool PlotWidget::handleMouseReleaseEvent(QMouseEvent *mouseEvent)
-{
-    // If the user released the middle button, we let QCustomPlot handle it.
-    if (mouseEvent->button() == Qt::MiddleButton)
-        return false;
-
-    if (mouseEvent->button() == Qt::LeftButton)
-    {
-        // Zoom tool: finalize the zoom if we were zooming
-        if (currentTool == Tool::Zoom && m_zooming)
-        {
-            m_zooming = false;
-            m_zoomRect->setVisible(false);
-            customPlot->replot();
-
-            // Compute the new X-axis range
-            QPointF startCoord = pixelToPlotCoords(m_zoomStartPixel);
-            QPointF endCoord   = pixelToPlotCoords(mouseEvent->pos());
-            double xMin = qMin(startCoord.x(), endCoord.x());
-            double xMax = qMax(startCoord.x(), endCoord.x());
-
-            // If there's a real horizontal span, apply that range to the plot
-            if (qAbs(xMax - xMin) > 1e-9)
-            {
-                customPlot->xAxis->setRange(xMin, xMax);
-                customPlot->replot();
-            }
-
-            // We handled this event ourselves—no further processing by QCP
-            return true;
-        }
-
-        // Select tool: finalize the selection if we were selecting
-        if (currentTool == Tool::Select && m_selecting)
-        {
-            m_selecting = false;
-            finalizeSelectionRect(mouseEvent->pos());
-            // Also fully handled by us; no QCP handling needed
-            return true;
-        }
-    }
-
-    // If we get here, we didn’t handle the press event; let QCP handle it
-    return false;
-}
-
-bool PlotWidget::handleLeaveEvent(QEvent *event)
+void PlotWidget::handleCrosshairLeave(QEvent *event)
 {
     Q_UNUSED(event);
 
@@ -302,9 +190,6 @@ bool PlotWidget::handleLeaveEvent(QEvent *event)
         isCursorOverPlot = false;
         enableCrosshairs(false);
     }
-
-    // If we get here, we didn’t handle the press event; let QCP handle it
-    return false;
 }
 
 void PlotWidget::setupCrosshairs()
@@ -366,223 +251,6 @@ bool PlotWidget::isCursorOverPlotArea(const QPoint &pos) const
 
     // Check if the position is within the axis rect
     return plotAreaRect.contains(pos);
-}
-
-// Update the selection rectangle as the mouse moves
-void PlotWidget::updateSelectionRect(const QPoint &currentPos)
-{
-    QPointF startCoord = pixelToPlotCoords(m_selectionStartPixel);
-    QPointF currentCoord = pixelToPlotCoords(currentPos);
-
-    // Update the rectangle corners
-    m_selectionRect->topLeft->setCoords(qMin(startCoord.x(), currentCoord.x()), qMax(startCoord.y(), currentCoord.y()));
-    m_selectionRect->bottomRight->setCoords(qMax(startCoord.x(), currentCoord.x()), qMin(startCoord.y(), currentCoord.y()));
-
-    customPlot->replot(QCustomPlot::rpQueuedReplot);
-}
-
-// Finalize the selection and determine which sessions are selected
-void PlotWidget::finalizeSelectionRect(const QPoint &endPos)
-{
-    // Get the final coordinates of the selection
-    QPointF startCoord = pixelToPlotCoords(m_selectionStartPixel);
-    QPointF endCoord = pixelToPlotCoords(endPos);
-
-    double xMin = qMin(startCoord.x(), endCoord.x());
-    double xMax = qMax(startCoord.x(), endCoord.x());
-    double yMin = qMin(startCoord.y(), endCoord.y());
-    double yMax = qMax(startCoord.y(), endCoord.y());
-
-    // Hide the rectangle after selection is done
-    m_selectionRect->setVisible(false);
-    customPlot->replot();
-
-    // Find sessions that intersect this region
-    QList<QString> selectedSessions = sessionsInRect(xMin, xMax, yMin, yMax);
-
-    // Emit signal with selected sessions
-    emit sessionsSelected(selectedSessions);
-}
-
-// Helper to convert pixels to plot coordinates
-QPointF PlotWidget::pixelToPlotCoords(const QPoint &pixel) const
-{
-    double x = customPlot->xAxis->pixelToCoord(pixel.x());
-    double y = customPlot->yAxis->pixelToCoord(pixel.y());
-    return QPointF(x, y);
-}
-
-// Determine which sessions have points in the specified rectangular region
-QList<QString> PlotWidget::sessionsInRect(double xMin_main, double xMax_main, double yMin_main, double yMax_main) const
-{
-    QList<QString> resultSessions;
-    QSet<QString> foundSessionIds;
-
-    // Convert the Y boundaries from main axis to pixels (since we know the rectangle in main axes coords)
-    double yMin_pixel = customPlot->yAxis->coordToPixel(yMin_main);
-    double yMax_pixel = customPlot->yAxis->coordToPixel(yMax_main);
-
-    // Iterate through each (graph, info) pair in the map
-    for (auto infoIt = m_graphInfoMap.cbegin(); infoIt != m_graphInfoMap.cend(); ++infoIt)
-    {
-        QCPGraph* graph = infoIt.key();
-        const GraphInfo& info = infoIt.value();
-
-        QString sessionId = info.sessionId;
-        if (sessionId.isEmpty())
-            continue;
-
-        // If this session is already found, skip checking
-        if (foundSessionIds.contains(sessionId))
-            continue;
-
-        // Convert the main-axis rectangle to this graph's Y-axis coordinates
-        QCPAxis *graphYAxis = graph->valueAxis();
-        double yMin_graph = graphYAxis->pixelToCoord(yMin_pixel);
-        double yMax_graph = graphYAxis->pixelToCoord(yMax_pixel);
-
-        // Retrieve data
-        QSharedPointer<QCPGraphDataContainer> dataContainer = graph->data();
-        if (dataContainer->size() == 0)
-            continue; // No data to check
-
-        // If only one point, just check if it's inside the rectangle
-        if (dataContainer->size() == 1) {
-            auto it = dataContainer->constBegin();
-            double x = it->key;
-            double y = it->value;
-            if (x >= xMin_main && x <= xMax_main && y >= yMin_graph && y <= yMax_graph) {
-                foundSessionIds.insert(sessionId);
-            }
-            continue;
-        }
-
-        // Multiple points: check line segments
-        bool intersected = false;
-        auto it = dataContainer->constBegin();
-        auto prev = it;
-        ++it;
-        for (; it != dataContainer->constEnd(); ++it) {
-            double x1 = prev->key;
-            double y1 = prev->value;
-            double x2 = it->key;
-            double y2 = it->value;
-
-            // Check if the line segment (x1,y1)-(x2,y2) intersects with the rectangle (xMin_main,xMax_main,yMin_graph,yMax_graph)
-            if (lineSegmentIntersectsRect(x1, y1, x2, y2,
-                                          xMin_main, xMax_main,
-                                          yMin_graph, yMax_graph)) {
-                foundSessionIds.insert(sessionId);
-                intersected = true;
-                break;
-            }
-
-            prev = it;
-        }
-
-        // If already found intersection, no need to continue
-        if (intersected)
-            continue;
-    }
-
-    resultSessions = foundSessionIds.values();
-    return resultSessions;
-}
-
-bool PlotWidget::lineSegmentIntersectsRect(
-    double x1, double y1, double x2, double y2,
-    double xMin, double xMax, double yMin, double yMax
-    ) const
-{
-    // Check if either endpoint is inside the rectangle
-    if (pointInRect(x1, y1, xMin, xMax, yMin, yMax) || pointInRect(x2, y2, xMin, xMax, yMin, yMax))
-        return true;
-
-    // Check intersection with rectangle edges
-    // Rectangle edges:
-    // Left edge:   x = xMin, y in [yMin, yMax]
-    // Right edge:  x = xMax, y in [yMin, yMax]
-    // Bottom edge: y = yMin, x in [xMin, xMax]
-    // Top edge:    y = yMax, x in [xMin, xMax]
-
-    // Check intersection with left and right edges (vertical lines)
-    if (intersectSegmentWithVerticalLine(x1, y1, x2, y2, xMin, yMin, yMax)) return true;
-    if (intersectSegmentWithVerticalLine(x1, y1, x2, y2, xMax, yMin, yMax)) return true;
-
-    // Check intersection with top and bottom edges (horizontal lines)
-    if (intersectSegmentWithHorizontalLine(x1, y1, x2, y2, yMin, xMin, xMax)) return true;
-    if (intersectSegmentWithHorizontalLine(x1, y1, x2, y2, yMax, xMin, xMax)) return true;
-
-    return false;
-}
-
-// Check if a point is inside the rectangle
-bool PlotWidget::pointInRect(
-    double x, double y,
-    double xMin, double xMax,
-    double yMin, double yMax
-    ) const {
-    return (x >= xMin && x <= xMax && y >= yMin && y <= yMax);
-}
-
-// Check intersection with a vertical line: x = lineX, and y in [yMin, yMax]
-bool PlotWidget::intersectSegmentWithVerticalLine(
-    double x1, double y1, double x2, double y2,
-    double lineX, double yMin, double yMax
-    ) const
-{
-    // If segment is vertical and x1 != lineX or if lineX not between min and max x of segment, might skip
-    if ((x1 < lineX && x2 < lineX) || (x1 > lineX && x2 > lineX))
-        return false; // Entire segment is on one side of lineX
-
-    double dx = (x2 - x1);
-    if (dx == 0.0) {
-        // Vertical segment
-        if (x1 == lineX) {
-            // They overlap in the vertical direction if the vertical ranges intersect
-            double ymin_seg = qMin(y1, y2);
-            double ymax_seg = qMax(y1, y2);
-            return !(ymax_seg < yMin || ymin_seg > yMax);
-        }
-        return false;
-    }
-
-    double t = (lineX - x1) / dx;
-    if (t < 0.0 || t > 1.0)
-        return false;
-
-    double yInt = y1 + t * (y2 - y1);
-    return (yInt >= yMin && yInt <= yMax);
-}
-
-// Check intersection with a horizontal line: y = lineY, and x in [xMin, xMax]
-bool PlotWidget::intersectSegmentWithHorizontalLine(
-    double x1, double y1, double x2, double y2,
-    double lineY, double xMin, double xMax
-    ) const
-{
-    // If entire segment above or below lineY
-    if ((y1 < lineY && y2 < lineY) || (y1 > lineY && y2 > lineY))
-        return false;
-
-    double dy = (y2 - y1);
-    if (dy == 0.0) {
-        // Horizontal segment
-        if (y1 == lineY) {
-            // Check horizontal overlap
-            double xmin_seg = qMin(x1, x2);
-            double xmax_seg = qMax(x1, x2);
-            return !(xmax_seg < xMin || xmin_seg > xMax);
-        }
-        return false;
-    }
-
-    double t = (lineY - y1) / dy;
-    if (t < 0.0 || t > 1.0)
-        return false;
-
-    double xInt = x1 + t * (x2 - x1);
-    return (xInt >= xMin && xInt <= xMax);
 }
 
 void PlotWidget::updatePlot()
@@ -840,18 +508,25 @@ void PlotWidget::onHoveredSessionChanged(const QString& sessionId)
     customPlot->replot();
 }
 
+void PlotWidget::handleSessionsSelected(const QList<QString> &sessionIds)
+{
+    // e.g., do something in your widget (highlight them, or further process).
+    qDebug() << "Selected sessions:" << sessionIds;
+    emit sessionsSelected(sessionIds); // If you want to re-emit from PlotWidget
+}
+
 void PlotWidget::setCurrentTool(Tool tool)
 {
-    currentTool = tool;
-    switch (currentTool) {
+    switch(tool)
+    {
     case Tool::Pan:
-        // Just let left mouse press pass to QCP for drag. Middle also drags, wheel => zoom
+        m_currentTool = m_panTool.get();
         break;
     case Tool::Zoom:
-        // We'll do a custom left-drag rectangle => zoom
+        m_currentTool = m_zoomTool.get();
         break;
     case Tool::Select:
-        // We'll do a custom left-drag rectangle => selection
+        m_currentTool = m_selectTool.get();
         break;
     }
 }
