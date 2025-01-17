@@ -55,8 +55,8 @@ private:
     QMap<QString, QVariant> m_attributes;
     QMap<QString, QMap<QString, QVector<double>>> m_sensors;
 
-    mutable CalculatedValue<QString, QVariant> m_calculatedAttributes;
-    mutable CalculatedValue<MeasurementKey, QVector<double>> m_calculatedMeasurements;
+    CalculatedValue<QString, QVariant> m_calculatedAttributes;
+    CalculatedValue<MeasurementKey, QVector<double>> m_calculatedMeasurements;
 
     QVariant computeAttribute(const QString &key) const;
     QVector<double> computeMeasurement(const QString &sensorKey, const QString &measurementKey) const;
