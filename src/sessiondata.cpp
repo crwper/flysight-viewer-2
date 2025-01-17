@@ -35,27 +35,29 @@ void SessionData::setAttribute(const QString &key, const QVariant &value) {
 }
 
 QStringList SessionData::sensorKeys() const {
-    return m_sensors.keys();
+    const QString sessionId = m_attributes.value(SessionKeys::SessionId).toString();
+    return SensorDataStore::instance().sensorKeys(sessionId);
 }
 
 bool SessionData::hasSensor(const QString &key) const {
-    return m_sensors.contains(key);
+    const QString sessionId = m_attributes.value(SessionKeys::SessionId).toString();
+    return SensorDataStore::instance().hasSensor(sessionId, key);
 }
 
 QStringList SessionData::measurementKeys(const QString &sensorKey) const {
-    if (!m_sensors.contains(sensorKey)) return QStringList();
-    return m_sensors.value(sensorKey).keys();
+    const QString sessionId = m_attributes.value(SessionKeys::SessionId).toString();
+    return SensorDataStore::instance().measurementKeys(sessionId, sensorKey);
 }
 
 bool SessionData::hasMeasurement(const QString &sensorKey, const QString &measurementKey) const {
-    auto sensorIt = m_sensors.find(sensorKey);
-    if (sensorIt == m_sensors.end()) return false;
-    return sensorIt.value().contains(measurementKey);
+    const QString sessionId = m_attributes.value(SessionKeys::SessionId).toString();
+    return SensorDataStore::instance().hasMeasurement(sessionId, sensorKey, measurementKey);
 }
 
 QVector<double> SessionData::getMeasurement(const QString &sensorKey, const QString &measurementKey) const {
     if (hasMeasurement(sensorKey, measurementKey)) {
-        return m_sensors.value(sensorKey).value(measurementKey);
+        const QString sessionId = m_attributes.value(SessionKeys::SessionId).toString();
+        return SensorDataStore::instance().getMeasurement(sessionId, sensorKey, measurementKey);
     }
 
     // If not directly stored, try to compute it from a calculated measurement
@@ -63,7 +65,8 @@ QVector<double> SessionData::getMeasurement(const QString &sensorKey, const QStr
 }
 
 void SessionData::setMeasurement(const QString &sensorKey, const QString &measurementKey, const QVector<double> &data) {
-    m_sensors[sensorKey].insert(measurementKey, data);
+    const QString sessionId = m_attributes.value(SessionKeys::SessionId).toString();
+    SensorDataStore::instance().setMeasurement(sessionId, sensorKey, measurementKey, data);
 }
 
 void SessionData::registerCalculatedAttribute(const QString &key, AttributeFunction func) {

@@ -49,16 +49,19 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
         return false;
     }
 
+    // Temporary sensor data
+    SensorMap localData;
+
     // Create a QTextStream from the QByteArray
     QTextStream in(&fileData, QIODevice::ReadOnly);
 
     // Use the fileType to choose the import method
     switch (fileType) {
     case FS_FileType::FS1:
-        importFS1(in, sessionData);
+        importFS1(in, sessionData, localData);
         break;
     case FS_FileType::FS2:
-        importFS2(in, sessionData);
+        importFS2(in, sessionData, localData);
         break;
     }
 
@@ -85,10 +88,13 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
         sessionData.setAttribute(SessionKeys::SessionId, md5HashString);
     }
 
+    // Commit to sensor data store
+    commitToStore(sessionData.getAttribute(SessionKeys::SessionId).toString(), localData);
+
     return true;
 }
 
-void DataImporter::importFS1(QTextStream& in, SessionData& sessionData) {
+void DataImporter::importFS1(QTextStream& in, SessionData& sessionData, SensorMap& localData) {
     QMap<QString, QVector<QString>> columnOrder;
 
     // Read the first line (column names)
@@ -96,10 +102,9 @@ void DataImporter::importFS1(QTextStream& in, SessionData& sessionData) {
     QVector<QString> columns = columnLine.split(',', Qt::SkipEmptyParts).toVector().toList().toVector();
     columnOrder[DefaultSensorId] = columns;
 
-    // Initialize the data map in sensors
-    QMap<QString, QVector<double>>& sensor = sessionData.m_sensors[DefaultSensorId];
+    // Initialize the sensor map
     for (const QString& colName : columns) {
-        sensor[colName]; // Initialize empty QVector<double> for each column
+        localData[DefaultSensorId][colName] = {};
     }
 
     // Read the second line (units), ignore
@@ -111,11 +116,11 @@ void DataImporter::importFS1(QTextStream& in, SessionData& sessionData) {
     // Process data lines
     while (!in.atEnd()) {
         QString dataLine = in.readLine();
-        importDataRow(dataLine, columnOrder, sessionData);
+        importDataRow(dataLine, columnOrder, localData);
     }
 }
 
-void DataImporter::importFS2(QTextStream& in, SessionData& sessionData) {
+void DataImporter::importFS2(QTextStream& in, SessionData& sessionData, SensorMap& localData) {
     FS_Section section = FS_Section::HEADER;
 
     // Temporary map to store column order per sensor
@@ -124,20 +129,23 @@ void DataImporter::importFS2(QTextStream& in, SessionData& sessionData) {
     // Read and process header lines
     while (!in.atEnd() && (section == FS_Section::HEADER)) {
         QString line = in.readLine();
-        section = importHeaderRow(line, columnOrder, sessionData);
+        section = importHeaderRow(line, columnOrder, sessionData, localData);
     }
 
     // Process data lines
     while (!in.atEnd()) {
         QString line = in.readLine();
-        importDataRow(line, columnOrder, sessionData);
+        importDataRow(line, columnOrder, localData);
     }
+
+    commitToStore(sessionData.getAttribute(SessionKeys::SessionId).toString(), localData);
 }
 
 DataImporter::FS_Section DataImporter::importHeaderRow(
     const QString& line,
     QMap<QString, QVector<QString>>& columnOrder,
-    SessionData& sessionData)
+    SessionData& sessionData,
+    SensorMap& localData)
 {
     // By default, stay in HEADER section
     FS_Section section = FS_Section::HEADER;
@@ -172,7 +180,7 @@ DataImporter::FS_Section DataImporter::importHeaderRow(
 
                     // Initialize sensor measurements as empty
                     for (const QString &colName : columns) {
-                        sessionData.setMeasurement(sensorName.toString(), colName, {});
+                        localData[sensorName.toString()][colName] = {};
                     }
                 }
             } else if (token0 == u"$UNIT") {
@@ -184,7 +192,7 @@ DataImporter::FS_Section DataImporter::importHeaderRow(
     return section;
 }
 
-void DataImporter::importDataRow(const QString& line, const QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData) {
+void DataImporter::importDataRow(const QString& line, const QMap<QString, QVector<QString>>& columnOrder, SensorMap& localData) {
     QStringView lineView(line);
     QStringTokenizer tokenizer(lineView, u',');
     auto it = tokenizer.begin();
@@ -253,7 +261,7 @@ void DataImporter::importDataRow(const QString& line, const QMap<QString, QVecto
     }
 
     // All fields are valid, append to SessionData
-    QMap<QString, QVector<double>>& sensor = sessionData.m_sensors[key];
+    QMap<QString, QVector<double>>& sensor = localData[key];
     for (int i = 0; i < cols.size(); ++i) {
         const QString& colName = cols[i];
         sensor[colName].append(tempValues[i]);
@@ -375,6 +383,23 @@ QString DataImporter::getDescription(const QString& fileName)
     }
 
     return description;
+}
+
+void DataImporter::commitToStore(const QString &sessionId, const SensorMap &localData)
+{
+    // For each sensorKey in localData
+    for (auto sensorIt = localData.constBegin(); sensorIt != localData.constEnd(); ++sensorIt) {
+        const QString &sensorKey = sensorIt.key();
+        // For each measurementKey in that sensor
+        for (auto measIt = sensorIt->constBegin(); measIt != sensorIt->constEnd(); ++measIt) {
+            const QString &measurementKey = measIt.key();
+            const QVector<double> &values = measIt.value();
+            // Store them
+            SensorDataStore::instance().setMeasurement(
+                sessionId, sensorKey, measurementKey, values
+                );
+        }
+    }
 }
 
 } // namespace FlySight
