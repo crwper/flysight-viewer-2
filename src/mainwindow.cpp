@@ -737,8 +737,7 @@ void MainWindow::initializeCalculatedMeasurements()
         double a = 0.0, b = 0.0;
         if (!haveFit) {
             // Attempt to compute the fit
-            if (!session.hasSensor("TIME") ||
-                !session.hasMeasurement("TIME", "time") ||
+            if (!session.hasMeasurement("TIME", "time") ||
                 !session.hasMeasurement("TIME", "tow") ||
                 !session.hasMeasurement("TIME", "week")) {
                 // TIME sensor not available or incomplete data
