@@ -10,7 +10,7 @@
 #include <QDirIterator>
 #include <QMouseEvent>
 
-#include "import.h"
+#include "dataimporter.h"
 #include "plotwidget.h"
 #include "sessiondata.h"
 

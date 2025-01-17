@@ -1,6 +1,6 @@
 // import.cpp
 
-#include "import.h"
+#include "dataimporter.h"
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDebug>

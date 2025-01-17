@@ -1,5 +1,5 @@
-#ifndef IMPORT_H
-#define IMPORT_H
+#ifndef DATAIMPORTER_H
+#define DATAIMPORTER_H
 
 #include "sessiondata.h"
 #include <QString>
@@ -43,4 +43,4 @@ private:
 
 } // namespace FlySight
 
-#endif // IMPORT_H
+#endif // DATAIMPORTER_H
