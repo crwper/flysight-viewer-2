@@ -1,5 +1,6 @@
 #include <QFileDialog>
 #include <QLabel>
+#include <QStandardPaths>
 #include "generalsettingspage.h"
 #include "preferencesmanager.h"
 
@@ -43,7 +44,9 @@ QGroupBox* GeneralSettingsPage::createLogbookFolderGroup() {
     browseButton->setIcon(style()->standardIcon(QStyle::SP_DirOpenIcon));
 
     // Initialize from settings
-    QString folder = PreferencesManager::instance().getValue("general/logbookFolder", "").toString();
+    QString folder = PreferencesManager::instance().getValue(
+        "general/logbookFolder",
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).toString();
     logbookFolderLineEdit->setText(folder);
 
     logbookLayout->addWidget(logbookFolderLineEdit);
