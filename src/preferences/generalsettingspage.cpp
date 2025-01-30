@@ -1,6 +1,5 @@
 #include <QFileDialog>
 #include <QLabel>
-#include <QStandardPaths>
 #include "generalsettingspage.h"
 #include "preferencesmanager.h"
 

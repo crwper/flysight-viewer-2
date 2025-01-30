@@ -9,6 +9,7 @@
 #include <QMessageBox>
 #include <QDirIterator>
 #include <QMouseEvent>
+#include <QStandardPaths>
 
 #include "dataimporter.h"
 #include "plotwidget.h"
@@ -563,8 +564,8 @@ void MainWindow::initializePreferences()
 
     // Register preferences with keys and default values
     prefs.registerPreference("general/units", "Metric");
-    prefs.registerPreference("general/logbookFolder", "");
-    prefs.registerPreference("import/groundReferenceMode", "automatic");
+    prefs.registerPreference("general/logbookFolder", QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation));
+    prefs.registerPreference("import/groundReferenceMode", "Automatic");
     prefs.registerPreference("import/fixedElevation", 0.0);
 }
 
@@ -645,10 +646,10 @@ void MainWindow::initializeCalculatedAttributes()
         QString mode = prefs.getValue("import/groundReferenceMode").toString();
         double fixedElevation = prefs.getValue("import/fixedElevation").toDouble();
 
-        if (mode == "fixed") {
+        if (mode == "Fixed") {
             // Always return the fixed elevation from preferences
             return fixedElevation;
-        } else if (mode == "automatic") {
+        } else if (mode == "Automatic") {
             // Use some GNSS/hMSL measurement from session
             QVector<double> hMSL = session.getMeasurement("GNSS", "hMSL");
             if (!hMSL.isEmpty()) {
