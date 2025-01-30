@@ -77,6 +77,11 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
         }
     }
 
+    // If DEVICE_ID still isn't set, set it
+    if (!sessionData.hasAttribute(SessionKeys::DeviceId)) {
+        sessionData.setAttribute(SessionKeys::DeviceId, "n/a");
+    }
+
     // After importing, check if SESSION_ID is set
     if (!sessionData.hasAttribute(SessionKeys::SessionId)) {
         // Compute MD5 hash of fileData
