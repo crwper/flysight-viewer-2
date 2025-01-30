@@ -1,11 +1,17 @@
+#include <QApplication>
+#include <QStyleFactory>
 #include "mainwindow.h"
 
-#include <QApplication>
+int main(int argc, char *argv[]) {
+    QApplication app(argc, argv);
 
-int main(int argc, char *argv[])
-{
-    QApplication a(argc, argv);
-    FlySight::MainWindow w;
-    w.show();
-    return a.exec();
+#ifdef Q_OS_WINDOWS
+    // Set the Windows Vista style only on Windows
+    app.setStyle(QStyleFactory::create("windowsvista"));
+#endif
+
+    FlySight::MainWindow mainWindow;
+    mainWindow.show();
+
+    return app.exec();
 }

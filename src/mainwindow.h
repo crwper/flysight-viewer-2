@@ -8,7 +8,6 @@
 #include "sessionmodel.h"
 #include "logbookview.h"
 #include "plotwidget.h"
-#include "qcustomplot/qcustomplot.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -47,6 +46,10 @@ private slots:
     void on_action_HideSelected_triggered();
     void on_action_HideOthers_triggered();
     void on_action_Delete_triggered();
+
+    void on_action_Preferences_triggered();
+
+    void on_action_Exit_triggered();
 
 private:
     // Plot values

@@ -32,8 +32,10 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         logbookview.h logbookview.cpp
         calculatedvalue.h calculatedvalue.cpp
         plottool/pantool.h plottool/plottool.h plottool/selecttool.cpp plottool/selecttool.h plottool/zoomtool.h
-
-
+        preferences/preferencesmanager.h
+        preferences/preferencesdialog.h preferences/preferencesdialog.cpp
+        preferences/generalsettingspage.h preferences/generalsettingspage.cpp
+        preferences/importsettingspage.h preferences/importsettingspage.cpp
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET FlySightViewer APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR

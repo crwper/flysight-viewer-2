@@ -12,6 +12,7 @@
 
 #include "dataimporter.h"
 #include "plotwidget.h"
+#include "preferences/preferencesdialog.h"
 #include "sessiondata.h"
 
 namespace FlySight {
@@ -403,6 +404,19 @@ void MainWindow::on_action_Delete_triggered()
             tr("Failed to delete the selected track(s).")
             );
     }
+}
+
+void MainWindow::on_action_Preferences_triggered()
+{
+    PreferencesDialog dlg(this);
+    if (dlg.exec() == QDialog::Accepted) {
+        // User clicked OK
+    }
+}
+
+void MainWindow::on_action_Exit_triggered()
+{
+    close();  // Close the main window
 }
 
 void MainWindow::setupPlotValues()
@@ -1076,5 +1090,6 @@ void MainWindow::setupPlotTools()
     // Set Pan as the default checked tool
     ui->action_Pan->setChecked(true);
 }
+
 
 } // namespace FlySight
