@@ -27,6 +27,9 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
+    // Initialize preferences
+    initializePreferences();
+
     // Initialize calculated values
     initializeCalculatedAttributes();
     initializeCalculatedMeasurements();
@@ -552,6 +555,17 @@ void MainWindow::populatePlotModel(
         // Append the plot item under its category
         categoryItemsMap[pv.category]->appendRow(plotItem);
     }
+}
+
+void MainWindow::initializePreferences()
+{
+    PreferencesManager &prefs = PreferencesManager::instance();
+
+    // Register preferences with keys and default values
+    prefs.registerPreference("general/units", "Metric");
+    prefs.registerPreference("general/logbookFolder", "");
+    prefs.registerPreference("import/groundReferenceMode", "automatic");
+    prefs.registerPreference("import/fixedElevation", 0.0);
 }
 
 void MainWindow::initializeCalculatedAttributes()

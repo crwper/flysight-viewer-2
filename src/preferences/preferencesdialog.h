@@ -7,6 +7,8 @@
 #include <QVBoxLayout>
 #include <QDialogButtonBox>
 
+namespace FlySight {
+
 class PreferencesDialog : public QDialog {
     Q_OBJECT
 
@@ -17,5 +19,7 @@ private:
     QListWidget *categoryList;
     QStackedWidget *stackedWidget;
 };
+
+} // namespace FlySight
 
 #endif // PREFERENCESDIALOG_H

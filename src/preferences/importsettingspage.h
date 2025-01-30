@@ -8,6 +8,8 @@
 #include <QVBoxLayout>
 #include <QSettings>
 
+namespace FlySight {
+
 class ImportSettingsPage : public QWidget {
     Q_OBJECT
 
@@ -24,5 +26,7 @@ private:
 
     QGroupBox* createGroundReferenceGroup();
 };
+
+} // namespace FlySight
 
 #endif // IMPORTSETTINGSPAGE_H

@@ -4,6 +4,8 @@
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 
+namespace FlySight {
+
 PreferencesDialog::PreferencesDialog(QWidget *parent)
     : QDialog(parent) {
     setWindowTitle("Preferences");
@@ -41,3 +43,5 @@ PreferencesDialog::PreferencesDialog(QWidget *parent)
     // Connect category selection to page switching
     connect(categoryList, &QListWidget::currentRowChanged, stackedWidget, &QStackedWidget::setCurrentIndex);
 }
+
+} // namespace FlySight

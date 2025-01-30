@@ -4,6 +4,8 @@
 #include "generalsettingspage.h"
 #include "preferencesmanager.h"
 
+namespace FlySight {
+
 GeneralSettingsPage::GeneralSettingsPage(QWidget *parent)
     : QWidget(parent) {
     QVBoxLayout *layout = new QVBoxLayout(this);
@@ -24,7 +26,7 @@ QGroupBox* GeneralSettingsPage::createUnitsGroup() {
     unitsComboBox->addItems({"Metric", "Imperial"});
 
     // Initialize from settings
-    QString units = PreferencesManager::instance().getValue("general/units", "Metric").toString();
+    QString units = PreferencesManager::instance().getValue("general/units").toString();
     unitsComboBox->setCurrentText(units);
 
     unitsLayout->addWidget(unitsComboBox);
@@ -44,9 +46,7 @@ QGroupBox* GeneralSettingsPage::createLogbookFolderGroup() {
     browseButton->setIcon(style()->standardIcon(QStyle::SP_DirOpenIcon));
 
     // Initialize from settings
-    QString folder = PreferencesManager::instance().getValue(
-        "general/logbookFolder",
-        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).toString();
+    QString folder = PreferencesManager::instance().getValue("general/logbookFolder").toString();
     logbookFolderLineEdit->setText(folder);
 
     logbookLayout->addWidget(logbookFolderLineEdit);
@@ -68,3 +68,5 @@ void GeneralSettingsPage::browseLogbookFolder() {
         saveSettings();
     }
 }
+
+} // namespace FlySight

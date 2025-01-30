@@ -46,9 +46,7 @@ private slots:
     void on_action_HideSelected_triggered();
     void on_action_HideOthers_triggered();
     void on_action_Delete_triggered();
-
     void on_action_Preferences_triggered();
-
     void on_action_Exit_triggered();
 
 private:
@@ -104,6 +102,9 @@ private:
 
     // Helper function for importing files
     void importFiles(const QStringList &fileNames, bool showProgress, const QString &baseDir = QString());
+
+    // Helper function for preferences
+    void initializePreferences();
 
     // Helper methods for calculated values
     void initializeCalculatedAttributes();

@@ -9,6 +9,8 @@
 #include <QSettings>
 #include <QGroupBox>
 
+namespace FlySight {
+
 class GeneralSettingsPage : public QWidget {
     Q_OBJECT
 
@@ -27,5 +29,7 @@ private:
     QGroupBox* createUnitsGroup();
     QGroupBox* createLogbookFolderGroup();
 };
+
+} // namespace FlySight
 
 #endif // GENERALSETTINGSPAGE_H

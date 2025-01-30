@@ -5,6 +5,12 @@
 #include <QSettings>
 #include <QVariant>
 
+namespace FlySight {
+
+struct Preference {
+    QVariant defaultValue;
+};
+
 class PreferencesManager : public QObject {
     Q_OBJECT
 
@@ -14,8 +20,20 @@ public:
         return instance;
     }
 
-    QVariant getValue(const QString &key, const QVariant &defaultValue = QVariant()) {
-        return m_settings.value(key, defaultValue);
+    void registerPreference(const QString &key, const QVariant &defaultValue) {
+        m_preferences[key] = Preference{defaultValue};
+
+        // Set the default value in QSettings if the key doesn't exist yet
+        if (!m_settings.contains(key)) {
+            m_settings.setValue(key, defaultValue);
+        }
+    }
+
+    QVariant getValue(const QString &key) const {
+        if (!m_preferences.contains(key)) {
+            Q_ASSERT("Requested value for an unregistered preference!");
+        }
+        return m_settings.value(key, m_preferences.value(key).defaultValue);
     }
 
     void setValue(const QString &key, const QVariant &value) {
@@ -29,10 +47,14 @@ signals:
     void preferenceChanged(const QString &key, const QVariant &value);
 
 private:
-    PreferencesManager() : m_settings("MyCompany", "MyApp") {}
+    PreferencesManager() : m_settings("FlySight", "Viewer 2") {}
+
     QSettings m_settings;
+    QMap<QString, Preference> m_preferences;
 
     Q_DISABLE_COPY(PreferencesManager)
 };
+
+} // namespace FlySight
 
 #endif // PREFERENCESMANAGER_H

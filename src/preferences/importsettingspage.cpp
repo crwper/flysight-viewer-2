@@ -3,6 +3,8 @@
 #include "importsettingspage.h"
 #include "preferencesmanager.h"
 
+namespace FlySight {
+
 ImportSettingsPage::ImportSettingsPage(QWidget *parent)
     : QWidget(parent) {
     QVBoxLayout *layout = new QVBoxLayout(this);
@@ -35,8 +37,8 @@ QGroupBox* ImportSettingsPage::createGroundReferenceGroup() {
 
     // Initialize settings
     PreferencesManager &prefs = PreferencesManager::instance();
-    QString groundRefMode = prefs.getValue("import/groundReferenceMode", "automatic").toString();
-    double elevation = prefs.getValue("import/fixedElevation", 0.0).toDouble();
+    QString groundRefMode = prefs.getValue("import/groundReferenceMode").toString();
+    double elevation = prefs.getValue("import/fixedElevation").toDouble();
 
     if (groundRefMode == "automatic") {
         automaticRadioButton->setChecked(true);
@@ -58,3 +60,5 @@ void ImportSettingsPage::saveSettings() {
     }
     prefs.setValue("import/fixedElevation", fixedElevationLineEdit->text().toDouble());
 }
+
+} // namespace FlySight
