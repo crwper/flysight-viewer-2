@@ -13,6 +13,7 @@
 #include "dataimporter.h"
 #include "plotwidget.h"
 #include "preferences/preferencesdialog.h"
+#include "preferences/preferencesmanager.h"
 #include "sessiondata.h"
 
 namespace FlySight {
@@ -182,6 +183,9 @@ void MainWindow::importFiles(
             SessionData tempSessionData;
 
             if (importer.importFile(filePath, tempSessionData)) {
+                // Force groundElev calculation on the temp session
+                tempSessionData.getAttribute(SessionKeys::GroundElev);
+
                 // Merge tempSessionData into model
                 model->mergeSessionData(tempSessionData);
 
@@ -437,7 +441,7 @@ void MainWindow::setupPlotValues()
 
     QVector<PlotValue> plotValues = {
         // Category: GNSS
-        {"GNSS", "Elevation", "m", Qt::black, "GNSS", "hMSL"},
+        {"GNSS", "Elevation", "m", Qt::black, "GNSS", "z"},
         {"GNSS", "Horizontal speed", "m/s", Qt::red, "GNSS", "velH"},
         {"GNSS", "Vertical speed", "m/s", Qt::green, "GNSS", "velD"},
         {"GNSS", "Total speed", "m/s", Qt::blue, "GNSS", "vel"},
@@ -621,16 +625,65 @@ void MainWindow::initializeCalculatedAttributes()
 
         return durationSec;
     });
+
+    SessionData::registerCalculatedAttribute(SessionKeys::GroundElev, [](SessionData &session) -> std::optional<QVariant> {
+        PreferencesManager &prefs = PreferencesManager::instance();
+        QString mode = prefs.getValue("import/groundReferenceMode").toString();
+        double fixedElevation = prefs.getValue("import/fixedElevation").toDouble();
+
+        if (mode == "fixed") {
+            // Always return the fixed elevation from preferences
+            return fixedElevation;
+        } else if (mode == "automatic") {
+            // Use some GNSS/hMSL measurement from session
+            QVector<double> hMSL = session.getMeasurement("GNSS", "hMSL");
+            if (!hMSL.isEmpty()) {
+                // e.g. use the last hMSL sample
+                double groundElev = hMSL.last();
+                return groundElev;
+            } else {
+                // Not enough data to compute
+                // Return no value => the calculation fails for now
+                return std::nullopt;
+            }
+        } else {
+            // Possibly a fallback or “no ground reference” if mode is unknown
+            return std::nullopt;
+        }
+    });
 }
 
 void MainWindow::initializeCalculatedMeasurements()
 {
+    SessionData::registerCalculatedMeasurement("GNSS", "z", [](SessionData& session) -> std::optional<QVector<double>> {
+        QVector<double> hMSL = session.getMeasurement("GNSS", "hMSL");
+
+        bool ok;
+        double groundElev = session.getAttribute(SessionKeys::GroundElev).toDouble(&ok);
+        if (!ok) {
+            qWarning() << "Cannot calculate z due to missing groundElev";
+            return std::nullopt;
+        }
+
+        if (hMSL.isEmpty()) {
+            qWarning() << "Cannot calculate z due to missing hMSL";
+            return std::nullopt;
+        }
+
+        QVector<double> z;
+        z.reserve(hMSL.size());
+        for(int i = 0; i < hMSL.size(); ++i){
+            z.append(hMSL[i] - groundElev);
+        }
+        return z;
+    });
+
     SessionData::registerCalculatedMeasurement("GNSS", "velH", [](SessionData& session) -> std::optional<QVector<double>> {
         QVector<double> velN = session.getMeasurement("GNSS", "velN");
         QVector<double> velE = session.getMeasurement("GNSS", "velE");
 
         if (velN.isEmpty() || velE.isEmpty()) {
-            qWarning() << "Cannot calculate total_speed due to missing velN or velE";
+            qWarning() << "Cannot calculate velH due to missing velN or velE";
             return std::nullopt;
         }
 
@@ -652,7 +705,7 @@ void MainWindow::initializeCalculatedMeasurements()
         QVector<double> velD = session.getMeasurement("GNSS", "velD");
 
         if (velH.isEmpty() || velD.isEmpty()) {
-            qWarning() << "Cannot calculate total_speed due to missing velH or velD";
+            qWarning() << "Cannot calculate vel due to missing velH or velD";
             return std::nullopt;
         }
 
@@ -945,7 +998,7 @@ void MainWindow::initializePlotsMenu()
     // Define the list of plots to include in the 'Plots' menu, including separators
     QVector<PlotMenuItem> plotsMenuItems = {
         // First Group: GNSS-related plots
-        PlotMenuItem("Elevation", QKeySequence(Qt::Key_E), "GNSS", "hMSL"),
+        PlotMenuItem("Elevation", QKeySequence(Qt::Key_E), "GNSS", "z"),
 
         // Separator
         PlotMenuItem(PlotMenuItemType::Separator),

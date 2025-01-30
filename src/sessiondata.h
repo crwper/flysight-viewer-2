@@ -23,6 +23,7 @@ namespace SessionKeys {
     constexpr char ExitTime[] = "_EXIT_TIME";
     constexpr char StartTime[] = "_START_TIME";
     constexpr char Duration[] = "_DURATION";
+    constexpr char GroundElev[] = "_GROUND_ELEV";
 }
 
 class SessionData {

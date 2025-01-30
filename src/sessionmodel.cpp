@@ -64,6 +64,13 @@ auto getFormattedDuration = [](const SessionData &s, const char *key) -> QVarian
     return QString("%1:%2").arg(minutes).arg(seconds, 2, 10, QChar('0'));
 };
 
+auto getDoubleAttribute = [](const SessionData &s, const char *key) -> QVariant {
+    bool ok = false;
+    double val = s.getAttribute(key).toDouble(&ok);
+    if (!ok) return QVariant();
+    return QString("%1").arg(val);
+};
+
 auto setStringAttribute = [](SessionData &s, const char *key, const QVariant &value) -> bool {
     QString newVal = value.toString();
     QString oldVal = s.getAttribute(key).toString();
@@ -124,6 +131,16 @@ static const QVector<SessionColumn>& columns()
             [](const SessionData &a, const SessionData &b) {
                 return compareDateTimes(a.getAttribute(SessionKeys::ExitTime),
                                         b.getAttribute(SessionKeys::ExitTime));
+            },
+            false
+        },
+        {
+            "Ground Elevation",
+            [](const SessionData &s) { return getDoubleAttribute(s, SessionKeys::GroundElev); },
+            nullptr,
+            [](const SessionData &a, const SessionData &b) {
+                return compareDoubles(a.getAttribute(SessionKeys::GroundElev),
+                                      b.getAttribute(SessionKeys::GroundElev));
             },
             false
         },

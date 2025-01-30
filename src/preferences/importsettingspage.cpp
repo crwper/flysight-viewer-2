@@ -42,8 +42,8 @@ QGroupBox* ImportSettingsPage::createGroundReferenceGroup() {
         automaticRadioButton->setChecked(true);
     } else {
         fixedRadioButton->setChecked(true);
-        fixedElevationLineEdit->setText(QString::number(elevation));
     }
+    fixedElevationLineEdit->setText(QString::number(elevation));
 
     return groundReferenceGroup;
 }
@@ -55,6 +55,6 @@ void ImportSettingsPage::saveSettings() {
         prefs.setValue("import/groundReferenceMode", "automatic");
     } else {
         prefs.setValue("import/groundReferenceMode", "fixed");
-        prefs.setValue("import/fixedElevation", fixedElevationLineEdit->text().toDouble());
     }
+    prefs.setValue("import/fixedElevation", fixedElevationLineEdit->text().toDouble());
 }
