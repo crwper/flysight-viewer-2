@@ -45,6 +45,16 @@ auto getStringAttribute = [](const SessionData &s, const char *key) -> QVariant 
     return s.getAttribute(key);
 };
 
+auto setStringAttribute = [](SessionData &s, const char *key, const QVariant &value) -> bool {
+    QString newVal = value.toString();
+    QString oldVal = s.getAttribute(key).toString();
+    if (oldVal != newVal) {
+        s.setAttribute(key, newVal);
+        return true;
+    }
+    return false;
+};
+
 auto getFormattedDateTime = [](const SessionData &s, const char *key) -> QVariant {
     QVariant var = s.getAttribute(key);
     if (!var.canConvert<QDateTime>()) {
@@ -71,9 +81,9 @@ auto getDoubleAttribute = [](const SessionData &s, const char *key) -> QVariant 
     return QString("%1").arg(val);
 };
 
-auto setStringAttribute = [](SessionData &s, const char *key, const QVariant &value) -> bool {
-    QString newVal = value.toString();
-    QString oldVal = s.getAttribute(key).toString();
+auto setDoubleAttribute = [](SessionData &s, const char *key, const QVariant &value) -> bool {
+    double newVal = value.toDouble();
+    double oldVal = s.getAttribute(key).toDouble();
     if (oldVal != newVal) {
         s.setAttribute(key, newVal);
         return true;
@@ -137,12 +147,12 @@ static const QVector<SessionColumn>& columns()
         {
             "Ground Elevation",
             [](const SessionData &s) { return getDoubleAttribute(s, SessionKeys::GroundElev); },
-            nullptr,
+            [](SessionData &s, const QVariant &value) { return setDoubleAttribute(s, SessionKeys::GroundElev, value); },
             [](const SessionData &a, const SessionData &b) {
                 return compareDoubles(a.getAttribute(SessionKeys::GroundElev),
                                       b.getAttribute(SessionKeys::GroundElev));
             },
-            false
+            true
         },
     };
     return s_columns;
