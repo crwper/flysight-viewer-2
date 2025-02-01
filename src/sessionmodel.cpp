@@ -417,6 +417,42 @@ void SessionModel::setHoveredSessionId(const QString& sessionId)
     }
 }
 
+bool SessionModel::updateAttribute(const QString &sessionId,
+                                   const QString &attributeKey,
+                                   const QVariant &newValue)
+{
+    // 1. Locate the row for the given session ID
+    int row = getSessionRow(sessionId);
+    if (row < 0) {
+        qWarning() << "SessionModel::updateAttribute: No session found with ID:" << sessionId;
+        return false;
+    }
+
+    // 2. Retrieve the existing value
+    SessionData &session = m_sessionData[row];
+    QVariant oldValue = session.getAttribute(attributeKey);
+
+    // 3. Check if there's actually a change
+    if (oldValue == newValue) {
+        return false;  // Nothing to update
+    }
+
+    // 4. Update the attribute in SessionData
+    session.setAttribute(attributeKey, newValue);
+
+    // 5. Notify views that data has changed
+    //    (Emit dataChanged for all columns in this row to ensure full refresh.)
+    QModelIndex topLeft = index(row, 0);
+    QModelIndex bottomRight = index(row, columnCount() - 1);
+    emit dataChanged(topLeft, bottomRight,
+                     {Qt::DisplayRole, Qt::EditRole, Qt::CheckStateRole});
+
+    // 6. Emit modelChanged so anything else bound to your model updates
+    emit modelChanged();
+
+    return true;
+}
+
 void SessionModel::sort(int column, Qt::SortOrder order)
 {
     if (column < 0 || column >= columns().size())

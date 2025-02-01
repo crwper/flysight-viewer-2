@@ -131,7 +131,7 @@ bool SetGroundTool::mousePressEvent(QMouseEvent *event)
         }
 
         // Update the session's ground elevation
-        session.setAttribute(SessionKeys::GroundElev, newGround);
+        m_model->updateAttribute(info.sessionId, SessionKeys::GroundElev, newGround);
         updatedSessionIds.insert(info.sessionId);
 
         qDebug() << "[SetGroundTool]" << info.sessionId

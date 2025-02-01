@@ -67,7 +67,8 @@ bool SetExitTool::mousePressEvent(QMouseEvent *event)
         double newExitEpoch = oldExitEpoch + xFromExit;
         QDateTime newExit = QDateTime::fromMSecsSinceEpoch(qint64(newExitEpoch * 1000.0), QTimeZone::utc());
 
-        session.setAttribute(SessionKeys::ExitTime, newExit);
+        // Update the session's exit time
+        m_model->updateAttribute(info.sessionId, SessionKeys::ExitTime, newExit);
         updatedSessionIds.insert(info.sessionId);
 
         qDebug() << "[SetExitTool] Session:" << info.sessionId

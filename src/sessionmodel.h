@@ -44,6 +44,10 @@ public:
 
     int getSessionRow(const QString& sessionId) const;
 
+    bool updateAttribute(const QString &sessionId,
+                         const QString &attributeKey,
+                         const QVariant &newValue);
+
     // Enable sorting
     void sort(int column, Qt::SortOrder order = Qt::AscendingOrder) override;
 
