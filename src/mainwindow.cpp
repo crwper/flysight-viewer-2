@@ -319,6 +319,18 @@ void MainWindow::on_action_Select_triggered()
     qDebug() << "Switched to Select tool";
 }
 
+void MainWindow::on_action_SetExit_triggered()
+{
+    plotWidget->setCurrentTool(PlotWidget::Tool::SetExit);
+    qDebug() << "Switched to Set Exit tool";
+}
+
+void MainWindow::on_action_SetGround_triggered()
+{
+    plotWidget->setCurrentTool(PlotWidget::Tool::SetGround);
+    qDebug() << "Switched to Set Ground tool";
+}
+
 void MainWindow::on_action_ShowSelected_triggered()
 {
     setSelectedTrackCheckState(Qt::Checked);
@@ -1239,6 +1251,8 @@ void MainWindow::setupPlotTools()
     toolActionGroup->addAction(ui->action_Pan);
     toolActionGroup->addAction(ui->action_Zoom);
     toolActionGroup->addAction(ui->action_Select);
+    toolActionGroup->addAction(ui->action_SetExit);
+    toolActionGroup->addAction(ui->action_SetGround);
 
     // Set Pan as the default checked tool
     ui->action_Pan->setChecked(true);

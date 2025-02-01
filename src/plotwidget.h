@@ -14,6 +14,8 @@ class PlotTool;
 class PanTool;
 class ZoomTool;
 class SelectTool;
+class SetExitTool;
+class SetGroundTool;
 
 class PlotWidget : public QWidget
 {
@@ -23,7 +25,9 @@ public:
     enum class Tool {
         Pan,
         Zoom,
-        Select
+        Select,
+        SetExit,
+        SetGround
     };
 
     struct GraphInfo {
@@ -37,6 +41,7 @@ public:
         PlotWidget *widget = nullptr;
         QCustomPlot* plot = nullptr;
         QMap<QCPGraph*, GraphInfo>* graphMap = nullptr;
+        SessionModel *model = nullptr;
     };
 
     // Constructor
@@ -87,6 +92,8 @@ private:
     std::unique_ptr<PanTool> m_panTool;
     std::unique_ptr<ZoomTool> m_zoomTool;
     std::unique_ptr<SelectTool> m_selectTool;
+    std::unique_ptr<SetExitTool> m_setExitTool;
+    std::unique_ptr<SetGroundTool> m_setGroundTool;
 
     // Plot Management
     QMap<QCPGraph*, GraphInfo> m_graphInfoMap;

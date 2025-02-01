@@ -39,6 +39,10 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         dependencykey.h
         dependencymanager.h
         dependencymanager.cpp
+        plottool/setexittool.h
+        plottool/setgroundtool.h
+        plottool/setexittool.cpp
+        plottool/setgroundtool.cpp
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET FlySightViewer APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR

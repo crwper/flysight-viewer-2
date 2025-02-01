@@ -363,6 +363,11 @@ const QVector<SessionData>& SessionModel::getAllSessions() const
     return m_sessionData;
 }
 
+SessionData &SessionModel::sessionRef(int row)
+{
+    Q_ASSERT(row >= 0 && row < m_sessionData.size());
+    return m_sessionData[row];
+}
 
 QString SessionModel::hoveredSessionId() const
 {

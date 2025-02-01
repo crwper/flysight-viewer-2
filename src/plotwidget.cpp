@@ -12,6 +12,8 @@
 #include "plottool/pantool.h"
 #include "plottool/zoomtool.h"
 #include "plottool/selecttool.h"
+#include "plottool/setexittool.h"
+#include "plottool/setgroundtool.h"
 
 namespace FlySight {
 
@@ -37,11 +39,14 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
     ctx.widget = this;
     ctx.plot = customPlot;
     ctx.graphMap = &m_graphInfoMap;
+    ctx.model = model;
 
     // instantiate tools for interacting with the plot
     m_panTool = std::make_unique<PanTool>(ctx);
     m_zoomTool = std::make_unique<ZoomTool>(ctx);
     m_selectTool = std::make_unique<SelectTool>(ctx);
+    m_setExitTool = std::make_unique<SetExitTool>(ctx);
+    m_setGroundTool = std::make_unique<SetGroundTool>(ctx);
     m_currentTool = m_panTool.get();
 
     // install an event filter to capture mouse events
@@ -76,6 +81,12 @@ void PlotWidget::setCurrentTool(Tool tool)
         break;
     case Tool::Select:
         m_currentTool = m_selectTool.get();
+        break;
+    case Tool::SetExit:
+        m_currentTool = m_setExitTool.get();
+        break;
+    case Tool::SetGround:
+        m_currentTool = m_setGroundTool.get();
         break;
     }
 }

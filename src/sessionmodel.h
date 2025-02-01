@@ -36,6 +36,7 @@ public:
     bool removeSessions(const QList<QString> &sessionIds);
 
     const QVector<SessionData>& getAllSessions() const;
+    SessionData &sessionRef(int row);
 
     // Hovered session management
     QString hoveredSessionId() const;

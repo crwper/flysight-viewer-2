@@ -42,6 +42,8 @@ private slots:
     void on_action_Pan_triggered();
     void on_action_Zoom_triggered();
     void on_action_Select_triggered();
+    void on_action_SetExit_triggered();
+    void on_action_SetGround_triggered();
     void on_action_ShowSelected_triggered();
     void on_action_HideSelected_triggered();
     void on_action_HideOthers_triggered();
