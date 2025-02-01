@@ -36,6 +36,9 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         preferences/preferencesdialog.h preferences/preferencesdialog.cpp
         preferences/generalsettingspage.h preferences/generalsettingspage.cpp
         preferences/importsettingspage.h preferences/importsettingspage.cpp
+        dependencykey.h
+        dependencymanager.h
+        dependencymanager.cpp
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET FlySightViewer APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR

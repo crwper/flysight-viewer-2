@@ -51,6 +51,12 @@ std::optional<Value> CalculatedValue<Key, Value>::getValue(SessionData &session,
     return result;
 }
 
+template<typename Key, typename Value>
+void CalculatedValue<Key, Value>::invalidate(const Key& key)
+{
+    m_cache.remove(key);
+}
+
 // Explicit template instantiations
 using MeasurementKey = QPair<QString, QString>;
 template class CalculatedValue<MeasurementKey, QVector<double>>;

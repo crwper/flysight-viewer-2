@@ -1,6 +1,7 @@
 #ifndef SESSIONDATA_H
 #define SESSIONDATA_H
 
+#include <QList>
 #include <QMap>
 #include <QString>
 #include <QVector>
@@ -8,6 +9,7 @@
 #include <optional>
 #include <functional>
 #include "calculatedvalue.h"
+#include "dependencykey.h"
 
 namespace FlySight {
 
@@ -49,8 +51,10 @@ public:
     QVector<double> getMeasurement(const QString& sensorKey, const QString& measurementKey) const;
     void setMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
 
-    static void registerCalculatedAttribute(const QString &key, AttributeFunction func);
-    static void registerCalculatedMeasurement(const QString &sensorKey, const QString &measurementKey, MeasurementFunction func);
+    static void registerCalculatedAttribute(const QString &key,
+                                            const QList<DependencyKey>& dependencies, AttributeFunction func);
+    static void registerCalculatedMeasurement(const QString &sensorKey, const QString &measurementKey,
+                                              const QList<DependencyKey>& dependencies, MeasurementFunction func);
 
 private:
     QMap<QString, QVariant> m_attributes;

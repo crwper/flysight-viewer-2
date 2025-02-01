@@ -12,6 +12,7 @@
 #include <QStandardPaths>
 
 #include "dataimporter.h"
+#include "dependencykey.h"
 #include "plotwidget.h"
 #include "preferences/preferencesdialog.h"
 #include "preferences/preferencesmanager.h"
@@ -571,7 +572,15 @@ void MainWindow::initializePreferences()
 
 void MainWindow::initializeCalculatedAttributes()
 {
-    SessionData::registerCalculatedAttribute(SessionKeys::ExitTime, [](SessionData& session) -> std::optional<QVariant> {
+    SessionData::registerCalculatedAttribute(
+        SessionKeys::ExitTime,
+        {
+            DependencyKey::measurement("GNSS", "velD"),
+            DependencyKey::measurement("GNSS", "sAcc"),
+            DependencyKey::measurement("GNSS", "accD"),
+            DependencyKey::measurement("GNSS", "_time")
+        },
+        [](SessionData& session) -> std::optional<QVariant> {
         // Find the first timestamp where vertical speed drops below a threshold
         QVector<double> velD = session.getMeasurement("GNSS", "velD");
         QVector<double> sAcc = session.getMeasurement("GNSS", "sAcc");
@@ -611,7 +620,12 @@ void MainWindow::initializeCalculatedAttributes()
         return QDateTime::fromSecsSinceEpoch((qint64)time.back(), QTimeZone::utc());
     });
 
-    SessionData::registerCalculatedAttribute(SessionKeys::StartTime, [](SessionData &session) -> std::optional<QVariant> {
+    SessionData::registerCalculatedAttribute(
+        SessionKeys::StartTime,
+        {
+            DependencyKey::measurement("GNSS", "time")
+        },
+        [](SessionData &session) -> std::optional<QVariant> {
         // Retrieve GNSS/time measurement
         QVector<double> times = session.getMeasurement("GNSS", "time");
         if (times.isEmpty()) {
@@ -623,7 +637,12 @@ void MainWindow::initializeCalculatedAttributes()
         return QDateTime::fromSecsSinceEpoch((qint64)startTime, QTimeZone::utc());
     });
 
-    SessionData::registerCalculatedAttribute(SessionKeys::Duration, [](SessionData &session) -> std::optional<QVariant> {
+    SessionData::registerCalculatedAttribute(
+        SessionKeys::Duration,
+        {
+            DependencyKey::measurement("GNSS", "time")
+        },
+        [](SessionData &session) -> std::optional<QVariant> {
         QVector<double> times = session.getMeasurement("GNSS", "time");
         if (times.isEmpty()) {
             qWarning() << "No GNSS/time data available to calculate duration.";
@@ -641,7 +660,12 @@ void MainWindow::initializeCalculatedAttributes()
         return durationSec;
     });
 
-    SessionData::registerCalculatedAttribute(SessionKeys::GroundElev, [](SessionData &session) -> std::optional<QVariant> {
+    SessionData::registerCalculatedAttribute(
+        SessionKeys::GroundElev,
+        {
+            DependencyKey::measurement("GNSS", "hMSL")
+        },
+        [](SessionData &session) -> std::optional<QVariant> {
         PreferencesManager &prefs = PreferencesManager::instance();
         QString mode = prefs.getValue("import/groundReferenceMode").toString();
         double fixedElevation = prefs.getValue("import/fixedElevation").toDouble();
@@ -670,7 +694,13 @@ void MainWindow::initializeCalculatedAttributes()
 
 void MainWindow::initializeCalculatedMeasurements()
 {
-    SessionData::registerCalculatedMeasurement("GNSS", "z", [](SessionData& session) -> std::optional<QVector<double>> {
+    SessionData::registerCalculatedMeasurement(
+        "GNSS", "z",
+        {
+            DependencyKey::measurement("GNSS", "hMSL"),
+            DependencyKey::attribute(SessionKeys::GroundElev)
+        },
+        [](SessionData& session) -> std::optional<QVector<double>> {
         QVector<double> hMSL = session.getMeasurement("GNSS", "hMSL");
 
         bool ok;
@@ -693,7 +723,13 @@ void MainWindow::initializeCalculatedMeasurements()
         return z;
     });
 
-    SessionData::registerCalculatedMeasurement("GNSS", "velH", [](SessionData& session) -> std::optional<QVector<double>> {
+    SessionData::registerCalculatedMeasurement(
+        "GNSS", "velH",
+        {
+            DependencyKey::measurement("GNSS", "velN"),
+            DependencyKey::measurement("GNSS", "velE")
+        },
+        [](SessionData& session) -> std::optional<QVector<double>> {
         QVector<double> velN = session.getMeasurement("GNSS", "velN");
         QVector<double> velE = session.getMeasurement("GNSS", "velE");
 
@@ -715,7 +751,13 @@ void MainWindow::initializeCalculatedMeasurements()
         return velH;
     });
 
-    SessionData::registerCalculatedMeasurement("GNSS", "vel", [](SessionData& session) -> std::optional<QVector<double>> {
+    SessionData::registerCalculatedMeasurement(
+        "GNSS", "vel",
+        {
+            DependencyKey::measurement("GNSS", "velH"),
+            DependencyKey::measurement("GNSS", "velD")
+        },
+        [](SessionData& session) -> std::optional<QVector<double>> {
         QVector<double> velH = session.getMeasurement("GNSS", "velH");
         QVector<double> velD = session.getMeasurement("GNSS", "velD");
 
@@ -737,7 +779,14 @@ void MainWindow::initializeCalculatedMeasurements()
         return vel;
     });
 
-    SessionData::registerCalculatedMeasurement("IMU", "aTotal", [](SessionData& session) -> std::optional<QVector<double>> {
+    SessionData::registerCalculatedMeasurement(
+        "IMU", "aTotal",
+        {
+            DependencyKey::measurement("IMU", "ax"),
+            DependencyKey::measurement("IMU", "ay"),
+            DependencyKey::measurement("IMU", "az")
+        },
+        [](SessionData& session) -> std::optional<QVector<double>> {
         QVector<double> ax = session.getMeasurement("IMU", "ax");
         QVector<double> ay = session.getMeasurement("IMU", "ay");
         QVector<double> az = session.getMeasurement("IMU", "az");
@@ -760,7 +809,14 @@ void MainWindow::initializeCalculatedMeasurements()
         return aTotal;
     });
 
-    SessionData::registerCalculatedMeasurement("IMU", "wTotal", [](SessionData& session) -> std::optional<QVector<double>> {
+    SessionData::registerCalculatedMeasurement(
+        "IMU", "wTotal",
+        {
+            DependencyKey::measurement("IMU", "wx"),
+            DependencyKey::measurement("IMU", "wy"),
+            DependencyKey::measurement("IMU", "wz")
+        },
+        [](SessionData& session) -> std::optional<QVector<double>> {
         QVector<double> wx = session.getMeasurement("IMU", "wx");
         QVector<double> wy = session.getMeasurement("IMU", "wy");
         QVector<double> wz = session.getMeasurement("IMU", "wz");
@@ -783,7 +839,14 @@ void MainWindow::initializeCalculatedMeasurements()
         return wTotal;
     });
 
-    SessionData::registerCalculatedMeasurement("MAG", "total", [](SessionData& session) -> std::optional<QVector<double>> {
+    SessionData::registerCalculatedMeasurement(
+        "MAG", "total",
+        {
+            DependencyKey::measurement("MAG", "x"),
+            DependencyKey::measurement("MAG", "y"),
+            DependencyKey::measurement("MAG", "z")
+        },
+        [](SessionData& session) -> std::optional<QVector<double>> {
         QVector<double> x = session.getMeasurement("MAG", "x");
         QVector<double> y = session.getMeasurement("MAG", "y");
         QVector<double> z = session.getMeasurement("MAG", "z");
@@ -885,7 +948,12 @@ void MainWindow::initializeCalculatedMeasurements()
     };
 
     // Register for GNSS
-    SessionData::registerCalculatedMeasurement("GNSS", SessionKeys::Time, [](SessionData& session) -> std::optional<QVector<double>> {
+    SessionData::registerCalculatedMeasurement(
+        "GNSS", SessionKeys::Time,
+        {
+            DependencyKey::measurement("GNSS", "time")
+        },
+        [](SessionData& session) -> std::optional<QVector<double>> {
         QVector<double> gnssTime = session.getMeasurement("GNSS", "time");
 
         if (gnssTime.isEmpty()) {
@@ -899,7 +967,12 @@ void MainWindow::initializeCalculatedMeasurements()
     // Register for other sensors
     QStringList sensors = {"BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
     for (const QString &sens : sensors) {
-        SessionData::registerCalculatedMeasurement(sens, SessionKeys::Time, [compute_time, sens](SessionData &s) -> std::optional<QVector<double>> {
+        SessionData::registerCalculatedMeasurement(
+            sens, SessionKeys::Time,
+            {
+                DependencyKey::measurement(sens, "time")
+            },
+            [compute_time, sens](SessionData &s) -> std::optional<QVector<double>> {
             return compute_time(s, sens);
         });
     }
@@ -934,12 +1007,24 @@ void MainWindow::initializeCalculatedMeasurements()
     // Register for all sensors
     QStringList all_sensors = {"GNSS", "BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
     for (const QString &sens : all_sensors) {
-        SessionData::registerCalculatedMeasurement(sens, SessionKeys::TimeFromExit, [compute_time_from_exit, sens](SessionData &s) {
+        SessionData::registerCalculatedMeasurement(
+            sens, SessionKeys::TimeFromExit,
+            {
+                DependencyKey::measurement(sens, SessionKeys::Time),
+                DependencyKey::attribute(SessionKeys::ExitTime)
+            },
+            [compute_time_from_exit, sens](SessionData &s) {
             return compute_time_from_exit(s, sens);
         });
     }
 
-    SessionData::registerCalculatedMeasurement("GNSS", "accD", [](SessionData& session) -> std::optional<QVector<double>> {
+    SessionData::registerCalculatedMeasurement(
+        "GNSS", "accD",
+        {
+            DependencyKey::measurement("GNSS", "velD"),
+            DependencyKey::measurement("GNSS", "time")
+        },
+        [](SessionData& session) -> std::optional<QVector<double>> {
         QVector<double> velD = session.getMeasurement("GNSS", "velD");
         QVector<double> time = session.getMeasurement("GNSS", "time");
 

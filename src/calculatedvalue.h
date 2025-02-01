@@ -28,6 +28,9 @@ public:
     // Retrieves the value associated with the given key, computing it if necessary.
     std::optional<Value> getValue(SessionData &session, const Key &key) const;
 
+    // Invalidate a calculated value
+    void invalidate(const Key& key);
+
 private:
     mutable QMap<Key, Value> m_cache;
     mutable QSet<Key> m_activeCalculations;
