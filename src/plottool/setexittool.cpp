@@ -8,7 +8,8 @@
 namespace FlySight {
 
 SetExitTool::SetExitTool(const PlotWidget::PlotContext &ctx)
-    : m_plot(ctx.plot)
+    : m_widget(ctx.widget)
+    , m_plot(ctx.plot)
     , m_graphMap(ctx.graphMap)
     , m_model(ctx.model)
 {
@@ -77,6 +78,9 @@ bool SetExitTool::mousePressEvent(QMouseEvent *event)
     if (!updatedSessionIds.isEmpty()) {
         emit m_model->modelChanged();
     }
+
+    // After setting exit times, revert to the primary tool
+    m_widget->revertToPrimaryTool();
 
     return true;
 }

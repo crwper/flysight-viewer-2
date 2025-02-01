@@ -21,6 +21,9 @@ public:
     bool mouseMoveEvent(QMouseEvent *event) override;
     bool mouseReleaseEvent(QMouseEvent *event) override;
 
+    // This is a primary tool
+    bool isPrimary() override { return true; }
+
 private:
     PlotWidget* m_widget;
     QCustomPlot* m_plot;

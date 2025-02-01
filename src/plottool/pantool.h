@@ -30,6 +30,10 @@ public:
 
     // Typically, we let QCustomPlot do the built-in dragging,
     // so we might not need to override mouseMoveEvent or mouseReleaseEvent.
+
+    // This is a primary tool
+    bool isPrimary() override { return true; }
+
 private:
     QCustomPlot* m_plot;
 };

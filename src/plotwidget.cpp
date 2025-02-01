@@ -47,7 +47,9 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
     m_selectTool = std::make_unique<SelectTool>(ctx);
     m_setExitTool = std::make_unique<SetExitTool>(ctx);
     m_setGroundTool = std::make_unique<SetGroundTool>(ctx);
+
     m_currentTool = m_panTool.get();
+    m_primaryTool = Tool::Pan;
 
     // install an event filter to capture mouse events
     customPlot->installEventFilter(this);
@@ -71,7 +73,7 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
 // Public Methods
 void PlotWidget::setCurrentTool(Tool tool)
 {
-    // switch to the appropriate tool based on the provided enum
+    // Switch to the appropriate tool based on the provided enum
     switch (tool) {
     case Tool::Pan:
         m_currentTool = m_panTool.get();
@@ -89,6 +91,19 @@ void PlotWidget::setCurrentTool(Tool tool)
         m_currentTool = m_setGroundTool.get();
         break;
     }
+
+    // Update previous primary tool
+    if (m_currentTool->isPrimary()) {
+        m_primaryTool = tool;
+    }
+
+    // Finally, notify
+    emit toolChanged(tool);
+}
+
+void PlotWidget::revertToPrimaryTool()
+{
+    setCurrentTool(m_primaryTool);
 }
 
 void PlotWidget::setXAxisRange(double min, double max)

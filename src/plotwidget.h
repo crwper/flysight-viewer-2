@@ -49,11 +49,13 @@ public:
 
     // Public Methods
     void setCurrentTool(Tool tool);
+    void revertToPrimaryTool();
     void setXAxisRange(double min, double max);
     void handleSessionsSelected(const QList<QString> &sessionIds);
 
 signals:
     void sessionsSelected(const QList<QString> &sessionIds);
+    void toolChanged(PlotWidget::Tool newTool);
 
 public slots:
     void updatePlot();
@@ -89,6 +91,8 @@ private:
 
     // Tools
     PlotTool* m_currentTool = nullptr;
+    Tool m_primaryTool;
+
     std::unique_ptr<PanTool> m_panTool;
     std::unique_ptr<ZoomTool> m_zoomTool;
     std::unique_ptr<SelectTool> m_selectTool;

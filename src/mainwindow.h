@@ -51,6 +51,8 @@ private slots:
     void on_action_Preferences_triggered();
     void on_action_Exit_triggered();
 
+    void onPlotWidgetToolChanged(PlotWidget::Tool t);
+
 private:
     // Plot values
     struct PlotValue {

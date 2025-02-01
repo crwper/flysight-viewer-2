@@ -11,7 +11,11 @@ public:
     SetExitTool(const PlotWidget::PlotContext &ctx);
     bool mousePressEvent(QMouseEvent *event) override;
 
+    // This is a momentary tool
+    bool isPrimary() override { return false; }
+
 private:
+    PlotWidget* m_widget;
     QCustomPlot* m_plot;
     QMap<QCPGraph*, PlotWidget::GraphInfo>* m_graphMap;
     SessionModel* m_model;

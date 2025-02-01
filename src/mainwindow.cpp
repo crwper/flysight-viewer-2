@@ -65,6 +65,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Plot selection
     connect(plotWidget, &PlotWidget::sessionsSelected, logbookView, &LogbookView::selectSessions);
+
+    // Handle plot tool changes
+    connect(plotWidget, &PlotWidget::toolChanged, this, &MainWindow::onPlotWidgetToolChanged);
 }
 
 MainWindow::~MainWindow()
@@ -438,6 +441,27 @@ void MainWindow::on_action_Preferences_triggered()
 void MainWindow::on_action_Exit_triggered()
 {
     close();  // Close the main window
+}
+
+void MainWindow::onPlotWidgetToolChanged(PlotWidget::Tool t)
+{
+    switch (t) {
+    case PlotWidget::Tool::Pan:
+        ui->action_Pan->setChecked(true);
+        break;
+    case PlotWidget::Tool::Zoom:
+        ui->action_Zoom->setChecked(true);
+        break;
+    case PlotWidget::Tool::Select:
+        ui->action_Select->setChecked(true);
+        break;
+    case PlotWidget::Tool::SetExit:
+        ui->action_SetExit->setChecked(true);
+        break;
+    case PlotWidget::Tool::SetGround:
+        ui->action_SetGround->setChecked(true);
+        break;
+    }
 }
 
 void MainWindow::setupPlotValues()

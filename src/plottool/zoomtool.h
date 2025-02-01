@@ -56,6 +56,9 @@ public:
         return false;
     }
 
+    // This is a primary tool
+    bool isPrimary() override { return true; }
+
 private:
     QCustomPlot*  m_plot;
     QCPItemRect*  m_zoomRect;
