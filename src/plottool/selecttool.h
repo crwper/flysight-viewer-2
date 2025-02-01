@@ -22,7 +22,7 @@ public:
     bool mouseReleaseEvent(QMouseEvent *event) override;
 
     // This is a primary tool
-    bool isPrimary() override { return true; }
+    bool isPrimary() override { return false; }
 
 private:
     PlotWidget* m_widget;

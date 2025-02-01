@@ -85,6 +85,9 @@ bool SelectTool::mouseReleaseEvent(QMouseEvent *event)
         // 4) Select the sessions in the plot widget
         m_widget->handleSessionsSelected(selectedSessions);
 
+        // After setting exit times, revert to the primary tool
+        m_widget->revertToPrimaryTool();
+
         return true;
     }
     return false;

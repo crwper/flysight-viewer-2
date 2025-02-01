@@ -55,8 +55,8 @@
     </property>
     <addaction name="action_Pan"/>
     <addaction name="action_Zoom"/>
-    <addaction name="action_Select"/>
     <addaction name="separator"/>
+    <addaction name="action_Select"/>
     <addaction name="action_SetExit"/>
     <addaction name="action_SetGround"/>
    </widget>
