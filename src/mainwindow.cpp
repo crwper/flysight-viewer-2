@@ -649,11 +649,11 @@ void MainWindow::initializeCalculatedAttributes()
 
             // Determine exit
             const double tExit = time[i - 1] + a * (time[i] - time[i - 1]) - vThreshold / az;
-            return QDateTime::fromSecsSinceEpoch((qint64)tExit, QTimeZone::utc());
+            return QDateTime::fromMSecsSinceEpoch((qint64)(tExit * 1000.0), QTimeZone::utc());
         }
 
         qWarning() << "Exit time could not be determined based on current data.";
-        return QDateTime::fromSecsSinceEpoch((qint64)time.back(), QTimeZone::utc());
+        return QDateTime::fromMSecsSinceEpoch((qint64)(time.back() * 1000.0), QTimeZone::utc());
     });
 
     SessionData::registerCalculatedAttribute(
@@ -670,7 +670,7 @@ void MainWindow::initializeCalculatedAttributes()
         }
 
         double startTime = *std::min_element(times.begin(), times.end());
-        return QDateTime::fromSecsSinceEpoch((qint64)startTime, QTimeZone::utc());
+        return QDateTime::fromMSecsSinceEpoch((qint64)(startTime * 1000.0), QTimeZone::utc());
     });
 
     SessionData::registerCalculatedAttribute(
@@ -1030,7 +1030,7 @@ void MainWindow::initializeCalculatedMeasurements()
         }
 
         // If you need the exit time as a double (seconds since epoch):
-        double exitTime = dt.toSecsSinceEpoch();
+        double exitTime = dt.toMSecsSinceEpoch() / 1000.0;
 
         // Now calculate the difference
         QVector<double> result(rawTime.size());

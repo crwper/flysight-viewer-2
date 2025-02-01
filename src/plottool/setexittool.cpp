@@ -61,11 +61,11 @@ bool SetExitTool::mousePressEvent(QMouseEvent *event)
             qWarning() << "[SetExitTool] Invalid old ExitTime for session" << info.sessionId;
             continue;
         }
-        double oldExitEpoch = oldExitVar.toDateTime().toSecsSinceEpoch();
+        double oldExitEpoch = oldExitVar.toDateTime().toMSecsSinceEpoch() / 1000.0;
 
         // The new exit is old exit + xFromExit
         double newExitEpoch = oldExitEpoch + xFromExit;
-        QDateTime newExit = QDateTime::fromSecsSinceEpoch(qint64(newExitEpoch), QTimeZone::utc());
+        QDateTime newExit = QDateTime::fromMSecsSinceEpoch(qint64(newExitEpoch * 1000.0), QTimeZone::utc());
 
         session.setAttribute(SessionKeys::ExitTime, newExit);
         updatedSessionIds.insert(info.sessionId);
