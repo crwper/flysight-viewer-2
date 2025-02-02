@@ -73,6 +73,10 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
 // Public Methods
 void PlotWidget::setCurrentTool(Tool tool)
 {
+    // Close the old tool
+    if (m_currentTool)
+        m_currentTool->closeTool();
+
     // Switch to the appropriate tool based on the provided enum
     switch (tool) {
     case Tool::Pan:
@@ -96,6 +100,10 @@ void PlotWidget::setCurrentTool(Tool tool)
     if (m_currentTool->isPrimary()) {
         m_primaryTool = tool;
     }
+
+    // Activate the new tool
+    if (m_currentTool)
+        m_currentTool->activateTool();
 
     // Finally, notify
     emit toolChanged(tool);

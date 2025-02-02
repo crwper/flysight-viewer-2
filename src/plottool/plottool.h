@@ -19,6 +19,10 @@ public:
     // Called when the mouse leaves the widget area (optional)
     virtual bool leaveEvent(QEvent *event)             { Q_UNUSED(event); return false; }
 
+    // Virtual activate/close methods
+    virtual void activateTool() {}
+    virtual void closeTool() {}
+
     // Distinguish between primary tools and momentary tools
     virtual bool isPrimary() = 0;
 };

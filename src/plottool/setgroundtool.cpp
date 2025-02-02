@@ -35,6 +35,17 @@ QCPItemTracer* SetGroundTool::getOrCreateTracer(QCPGraph* graph)
 }
 
 /*!
+ * @brief clearTracers
+ * Hides all tracer items so that tracers from a previously active tool do not remain visible.
+ */
+void SetGroundTool::clearTracers()
+{
+    for (auto tracer : m_graphTracers)
+        tracer->setVisible(false);
+    m_plot->replot(QCustomPlot::rpQueuedReplot);
+}
+
+/*!
  * \brief computeGroundElevation
  * Looks up the session’s “GNSS/hMSL” array and the matching “GNSS/TimeFromExit” array
  * to interpolate a ground elevation at the given xFromExit.
@@ -230,6 +241,28 @@ bool SetGroundTool::mouseMoveEvent(QMouseEvent *event)
 
     m_plot->replot(QCustomPlot::rpQueuedReplot);
     return true;
+}
+
+void SetGroundTool::activateTool()
+{
+    QPointF localPos = m_plot->mapFromGlobal(QCursor::pos());
+    QWidget *topLevel = m_plot->window();
+    QPointF windowPos = topLevel->mapFromGlobal(QCursor::pos());
+    QPointF screenPos = QCursor::pos();
+    QMouseEvent syntheticEvent(QEvent::MouseMove,
+                               localPos,
+                               windowPos,
+                               screenPos,
+                               Qt::NoButton,
+                               Qt::NoButton,
+                               Qt::NoModifier);
+    mouseMoveEvent(&syntheticEvent);
+}
+
+void SetGroundTool::closeTool()
+{
+    // Clear tracers so that none remain when switching tools.
+    clearTracers();
 }
 
 } // namespace FlySight

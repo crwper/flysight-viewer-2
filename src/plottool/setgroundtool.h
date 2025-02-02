@@ -13,6 +13,9 @@ public:
     bool mousePressEvent(QMouseEvent *event) override;
     bool mouseMoveEvent(QMouseEvent *event) override;
 
+    void activateTool() override;
+    void closeTool() override;
+
     // This is a momentary tool
     bool isPrimary() override { return false; }
 
@@ -26,6 +29,7 @@ private:
     QString m_hoveredSessionId;
 
     QCPItemTracer* getOrCreateTracer(QCPGraph* graph);
+    void clearTracers();
     double computeGroundElevation(SessionData &session, double xFromExit) const;
 };
 
