@@ -53,6 +53,8 @@ public:
     void setXAxisRange(double min, double max);
     void handleSessionsSelected(const QList<QString> &sessionIds);
 
+    static double interpolateY(const QCPGraph* graph, double x);
+
 signals:
     void sessionsSelected(const QList<QString> &sessionIds);
     void toolChanged(PlotWidget::Tool newTool);
@@ -80,7 +82,6 @@ private:
     bool isCursorOverPlotArea(const QPoint &pos) const;
 
     // Utility Methods
-    static double interpolateY(const QCPGraph* graph, double x);
     QPen determineGraphPen(const GraphInfo &info, const QString &hoveredSessionId) const;
     QString determineGraphLayer(const GraphInfo &info, const QString &hoveredSessionId) const;
 

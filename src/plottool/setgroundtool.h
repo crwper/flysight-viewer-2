@@ -11,6 +11,7 @@ public:
     SetGroundTool(const PlotWidget::PlotContext &ctx);
 
     bool mousePressEvent(QMouseEvent *event) override;
+    bool mouseMoveEvent(QMouseEvent *event) override;
 
     // This is a momentary tool
     bool isPrimary() override { return false; }
@@ -20,6 +21,9 @@ private:
     QCustomPlot* m_plot;
     QMap<QCPGraph*, PlotWidget::GraphInfo>* m_graphMap;
     SessionModel* m_model;
+
+    QCPItemTracer *m_tracer = nullptr;
+    QString m_hoveredSessionId;
 
     // Helper: compute ground elevation by interpolating (TimeFromExit vs hMSL)
     double computeGroundElevation(SessionData &session, double xFromExit) const;
