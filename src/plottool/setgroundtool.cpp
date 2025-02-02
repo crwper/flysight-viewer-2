@@ -15,9 +15,23 @@ SetGroundTool::SetGroundTool(const PlotWidget::PlotContext &ctx)
     , m_graphMap(ctx.graphMap)
     , m_model(ctx.model)
 {
-    // All tracer functionality will now use m_graphTracers.
     // No session hovered initially.
     m_hoveredSessionId.clear();
+}
+
+/*!
+ * \brief getOrCreateTracer
+ * Returns the tracer associated with the provided graph, creating one if needed.
+ */
+QCPItemTracer* SetGroundTool::getOrCreateTracer(QCPGraph* graph)
+{
+    if (m_graphTracers.contains(graph))
+        return m_graphTracers[graph];
+    QCPItemTracer* tracer = new QCPItemTracer(m_plot);
+    tracer->setStyle(QCPItemTracer::tsCircle);
+    tracer->setSize(6);
+    m_graphTracers.insert(graph, tracer);
+    return tracer;
 }
 
 /*!
@@ -176,20 +190,11 @@ bool SetGroundTool::mouseMoveEvent(QMouseEvent *event)
     double xPlot = m_plot->xAxis->pixelToCoord(mousePos.x());
 
     if (closestGraph && minDist < pixelThreshold) {
-        // Single-tracer mode: only show tracer for the closest graph.
+        // Single-tracer mode: show only the tracer for the closest graph.
         if (closestInfo)
             m_hoveredSessionId = closestInfo->sessionId;
 
-        // Update tracer for the closest graph.
-        QCPItemTracer* tracer = nullptr;
-        if (m_graphTracers.contains(closestGraph))
-            tracer = m_graphTracers[closestGraph];
-        else {
-            tracer = new QCPItemTracer(m_plot);
-            tracer->setStyle(QCPItemTracer::tsCircle);
-            tracer->setSize(6);
-            m_graphTracers.insert(closestGraph, tracer);
-        }
+        QCPItemTracer* tracer = getOrCreateTracer(closestGraph);
         double yPlot = PlotWidget::interpolateY(closestGraph, xPlot);
         tracer->position->setAxes(m_plot->xAxis, closestGraph->valueAxis());
         tracer->position->setCoords(xPlot, yPlot);
@@ -203,7 +208,7 @@ bool SetGroundTool::mouseMoveEvent(QMouseEvent *event)
                 it.value()->setVisible(false);
         }
     } else {
-        // Multi-tracer mode: show a tracer on every elevation plot.
+        // Multi-tracer mode: show a tracer on every eligible graph.
         for (int i = 0; i < m_plot->graphCount(); ++i) {
             QCPGraph *graph = m_plot->graph(i);
             auto it = m_graphMap->find(graph);
@@ -214,15 +219,7 @@ bool SetGroundTool::mouseMoveEvent(QMouseEvent *event)
                 continue;
 
             double yPlot = PlotWidget::interpolateY(graph, xPlot);
-            QCPItemTracer* tracer = nullptr;
-            if (m_graphTracers.contains(graph))
-                tracer = m_graphTracers[graph];
-            else {
-                tracer = new QCPItemTracer(m_plot);
-                tracer->setStyle(QCPItemTracer::tsCircle);
-                tracer->setSize(6);
-                m_graphTracers.insert(graph, tracer);
-            }
+            QCPItemTracer* tracer = getOrCreateTracer(graph);
             tracer->position->setAxes(m_plot->xAxis, graph->valueAxis());
             tracer->position->setCoords(xPlot, yPlot);
             tracer->setPen(info.defaultPen);

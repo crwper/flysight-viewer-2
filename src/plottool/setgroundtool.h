@@ -25,7 +25,7 @@ private:
     QMap<QCPGraph*, QCPItemTracer*> m_graphTracers;
     QString m_hoveredSessionId;
 
-    // Helper: compute ground elevation by interpolating (TimeFromExit vs hMSL)
+    QCPItemTracer* getOrCreateTracer(QCPGraph* graph);
     double computeGroundElevation(SessionData &session, double xFromExit) const;
 };
 
