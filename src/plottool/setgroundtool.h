@@ -22,7 +22,7 @@ private:
     QMap<QCPGraph*, PlotWidget::GraphInfo>* m_graphMap;
     SessionModel* m_model;
 
-    QCPItemTracer *m_tracer = nullptr;
+    QMap<QCPGraph*, QCPItemTracer*> m_graphTracers;
     QString m_hoveredSessionId;
 
     // Helper: compute ground elevation by interpolating (TimeFromExit vs hMSL)
