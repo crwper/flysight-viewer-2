@@ -310,7 +310,6 @@ void PlotWidget::setupPlot()
     // enable interactions for range dragging and zooming
     customPlot->setInteraction(QCP::iRangeDrag, true);
     customPlot->setInteraction(QCP::iRangeZoom, true);
-    customPlot->setInteraction(QCP::iSelectPlottables, true);
 
     // restrict range interactions to horizontal only
     customPlot->axisRect()->setRangeDrag(Qt::Horizontal);
