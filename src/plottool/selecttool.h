@@ -6,6 +6,7 @@
 #include "plottool.h"
 #include "../plotwidget.h"
 #include "../qcustomplot/qcustomplot.h"
+#include "../graphinfo.h"
 
 namespace FlySight {
 
@@ -27,7 +28,7 @@ public:
 private:
     PlotWidget* m_widget;
     QCustomPlot* m_plot;
-    QMap<QCPGraph*, PlotWidget::GraphInfo>* m_graphMap;
+    QMap<QCPGraph*, GraphInfo>* m_graphMap;
 
     QCPItemRect* m_selectionRect;
     bool m_selecting;

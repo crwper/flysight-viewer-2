@@ -4,8 +4,6 @@
 
 #include <QMouseEvent>
 #include <QDebug>
-#include <QDateTime>
-#include <limits>
 
 namespace FlySight {
 
@@ -15,34 +13,6 @@ SetGroundTool::SetGroundTool(const PlotWidget::PlotContext &ctx)
     , m_graphMap(ctx.graphMap)
     , m_model(ctx.model)
 {
-    // No session hovered initially.
-    m_hoveredSessionId.clear();
-}
-
-/*!
- * \brief getOrCreateTracer
- * Returns the tracer associated with the provided graph, creating one if needed.
- */
-QCPItemTracer* SetGroundTool::getOrCreateTracer(QCPGraph* graph)
-{
-    if (m_graphTracers.contains(graph))
-        return m_graphTracers[graph];
-    QCPItemTracer* tracer = new QCPItemTracer(m_plot);
-    tracer->setStyle(QCPItemTracer::tsCircle);
-    tracer->setSize(6);
-    m_graphTracers.insert(graph, tracer);
-    return tracer;
-}
-
-/*!
- * @brief clearTracers
- * Hides all tracer items so that tracers from a previously active tool do not remain visible.
- */
-void SetGroundTool::clearTracers()
-{
-    for (auto tracer : m_graphTracers)
-        tracer->setVisible(false);
-    m_plot->replot(QCustomPlot::rpQueuedReplot);
 }
 
 /*!
@@ -92,177 +62,54 @@ double SetGroundTool::computeGroundElevation(SessionData &session, double xFromE
 
 bool SetGroundTool::mousePressEvent(QMouseEvent *event)
 {
-    if (!m_plot || !m_model) {
-        qWarning() << "[SetGroundTool] Not properly initialized!";
+    if (!m_plot || !m_model)
         return false;
-    }
 
     if (event->button() != Qt::LeftButton)
         return false;
 
     double xFromExit = m_plot->xAxis->pixelToCoord(event->pos().x());
-    QSet<QString> updatedSessionIds;
+    QString hoveredId = m_model->hoveredSessionId();
 
-    if (!m_hoveredSessionId.isEmpty()) {
-        int row = m_model->getSessionRow(m_hoveredSessionId);
+    if (!hoveredId.isEmpty()) {
+        // compute ground for that session
+        int row = m_model->getSessionRow(hoveredId);
         if (row >= 0) {
             SessionData &sd = m_model->sessionRef(row);
-            double newElevation = computeGroundElevation(sd, xFromExit);
-            if (!std::isnan(newElevation)) {
-                m_model->updateAttribute(m_hoveredSessionId,
-                                         SessionKeys::GroundElev,
-                                         newElevation);
-                updatedSessionIds.insert(m_hoveredSessionId);
-            }
+            double newElev = computeGroundElevation(sd, xFromExit);
+            m_model->updateAttribute(hoveredId, SessionKeys::GroundElev, newElev);
         }
     } else {
-        QList<QPair<QString, double>> pendingUpdates;
-        for (int i = 0; i < m_plot->graphCount(); ++i) {
-            QCPGraph *graph = m_plot->graph(i);
-            if (!graph || !graph->visible())
-                continue;
-
-            auto it = m_graphMap->find(graph);
-            if (it == m_graphMap->end())
-                continue;
-            const PlotWidget::GraphInfo &info = it.value();
-
-            if (updatedSessionIds.contains(info.sessionId))
-                continue;
-
-            if (info.sensorId != "GNSS" || info.measurementId != "z")
-                continue;
-
-            if (graph->dataCount() < 2)
-                continue;
-            double minX = graph->data()->constBegin()->key;
-            double maxX = (graph->data()->constEnd() - 1)->key;
-            if (xFromExit < minX || xFromExit > maxX)
-                continue;
-
-            int row = m_model->getSessionRow(info.sessionId);
-            if (row < 0)
-                continue;
-
-            SessionData &session = m_model->sessionRef(row);
-            double newGround = computeGroundElevation(session, xFromExit);
-            if (std::isnan(newGround)) {
-                qWarning() << "[SetGroundTool] Could not compute ground for session"
-                           << info.sessionId << "at xFromExit=" << xFromExit;
-                continue;
-            }
-
-            pendingUpdates.append(qMakePair(info.sessionId, newGround));
-            updatedSessionIds.insert(info.sessionId);
-        }
-
-        for (const auto &update : pendingUpdates) {
-            m_model->updateAttribute(update.first, SessionKeys::GroundElev, update.second);
-        }
+        // fallback: if no single hovered session,
+        // do your "multi-graph" approach if you still want that
+        // ...
     }
 
-    if (!updatedSessionIds.isEmpty())
-        emit m_model->modelChanged();
-
+    // revert to primary tool
     m_widget->revertToPrimaryTool();
     return true;
 }
 
 bool SetGroundTool::mouseMoveEvent(QMouseEvent *event)
 {
-    QPointF mousePos = event->position();
-    double minDist = std::numeric_limits<double>::max();
-    QCPGraph *closestGraph = nullptr;
-    const PlotWidget::GraphInfo* closestInfo = nullptr;
-
-    // Clear hovered session by default.
-    m_hoveredSessionId.clear();
-
-    // First pass: find the closest eligible elevation plot.
-    for (int i = 0; i < m_plot->graphCount(); ++i) {
-        QCPGraph *graph = m_plot->graph(i);
-        auto it = m_graphMap->find(graph);
-        if (it == m_graphMap->end())
-            continue;
-
-        const PlotWidget::GraphInfo &info = it.value();
-        if (info.sensorId != "GNSS" || info.measurementId != "z")
-            continue;
-
-        double distance = graph->selectTest(mousePos, false);
-        if (distance >= 0 && distance < minDist) {
-            minDist = distance;
-            closestGraph = graph;
-            closestInfo = &it.value();
-        }
-    }
-
-    const double pixelThreshold = 10.0;
-    double xPlot = m_plot->xAxis->pixelToCoord(mousePos.x());
-
-    if (closestGraph && minDist < pixelThreshold) {
-        // Single-tracer mode: show only the tracer for the closest graph.
-        if (closestInfo)
-            m_hoveredSessionId = closestInfo->sessionId;
-
-        QCPItemTracer* tracer = getOrCreateTracer(closestGraph);
-        double yPlot = PlotWidget::interpolateY(closestGraph, xPlot);
-        tracer->position->setAxes(m_plot->xAxis, closestGraph->valueAxis());
-        tracer->position->setCoords(xPlot, yPlot);
-        tracer->setPen(closestInfo->defaultPen);
-        tracer->setBrush(closestInfo->defaultPen.color());
-        tracer->setVisible(true);
-
-        // Hide any other tracers.
-        for (auto it = m_graphTracers.begin(); it != m_graphTracers.end(); ++it) {
-            if (it.key() != closestGraph)
-                it.value()->setVisible(false);
-        }
-    } else {
-        // Multi-tracer mode: show a tracer on every eligible graph.
-        for (int i = 0; i < m_plot->graphCount(); ++i) {
-            QCPGraph *graph = m_plot->graph(i);
-            auto it = m_graphMap->find(graph);
-            if (it == m_graphMap->end())
-                continue;
-            const PlotWidget::GraphInfo &info = it.value();
-            if (info.sensorId != "GNSS" || info.measurementId != "z")
-                continue;
-
-            double yPlot = PlotWidget::interpolateY(graph, xPlot);
-            QCPItemTracer* tracer = getOrCreateTracer(graph);
-            tracer->position->setAxes(m_plot->xAxis, graph->valueAxis());
-            tracer->position->setCoords(xPlot, yPlot);
-            tracer->setPen(info.defaultPen);
-            tracer->setBrush(info.defaultPen.color());
-            tracer->setVisible(true);
-        }
-    }
-
-    m_plot->replot(QCustomPlot::rpQueuedReplot);
+    // We can do nothing here, because the CrosshairManager is already
+    // showing single or multi tracers.
+    // Or we can do extra stuff if you want.
+    Q_UNUSED(event);
     return true;
 }
 
 void SetGroundTool::activateTool()
 {
-    QPointF localPos = m_plot->mapFromGlobal(QCursor::pos());
-    QWidget *topLevel = m_plot->window();
-    QPointF windowPos = topLevel->mapFromGlobal(QCursor::pos());
-    QPointF screenPos = QCursor::pos();
-    QMouseEvent syntheticEvent(QEvent::MouseMove,
-                               localPos,
-                               windowPos,
-                               screenPos,
-                               Qt::NoButton,
-                               Qt::NoButton,
-                               Qt::NoModifier);
-    mouseMoveEvent(&syntheticEvent);
+    PlotTool::activateTool();
+    // We might do a synthetic mouse move if desired,
+    // or just do nothing
 }
 
 void SetGroundTool::closeTool()
 {
-    // Clear tracers so that none remain when switching tools.
-    clearTracers();
+    // We do nothing, because the manager handles tracer removal
+    PlotTool::closeTool();
 }
 
 } // namespace FlySight

@@ -23,7 +23,6 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
     , customPlot(new QCustomPlot(this))
     , model(model)
     , plotModel(plotModel)
-    , isCursorOverPlot(false)
 {
     // set up the layout with the custom plot
     QVBoxLayout *layout = new QVBoxLayout(this);
@@ -32,7 +31,6 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
 
     // initialize the plot and crosshairs
     setupPlot();
-    setupCrosshairs();
 
     // create the plot context for tools
     PlotContext ctx;
@@ -54,11 +52,17 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
     // install an event filter to capture mouse events
     customPlot->installEventFilter(this);
 
-    // set up cursors for crosshair functionality
-    QPixmap pixmap(16, 16);
-    pixmap.fill(Qt::transparent);
-    transparentCursor = QCursor(pixmap);
-    originalCursor = customPlot->cursor();
+    // create crosshair manager
+    m_crosshairManager = std::make_unique<CrosshairManager>(
+        customPlot,
+        model,
+        &m_graphInfoMap, // existing QMap<QCPGraph*, GraphInfo>
+        this
+        );
+
+    // For example, installing event filter:
+    customPlot->installEventFilter(this);
+
 
     // connect signals to slots for updates and interactions
     connect(model, &SessionModel::modelChanged, this, &PlotWidget::updatePlot);
@@ -261,11 +265,6 @@ void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
         }
     }
 
-    if (isCursorOverPlot) {
-        QPoint cursorPos = customPlot->mapFromGlobal(QCursor::pos());
-        updateCrosshairs(cursorPos);
-    }
-
     customPlot->replot();
     m_updatingYAxis = false;
 }
@@ -287,24 +286,36 @@ void PlotWidget::onHoveredSessionChanged(const QString &sessionId)
 // Protected Methods
 bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 {
-    if (obj != customPlot || !m_currentTool) return QWidget::eventFilter(obj, event);
-
-    // handle mouse and leave events using the current tool
-    switch (event->type()) {
-    case QEvent::MouseMove:
-        handleCrosshairMouseMove(static_cast<QMouseEvent*>(event));
-        return m_currentTool->mouseMoveEvent(static_cast<QMouseEvent*>(event));
-    case QEvent::MouseButtonPress:
-        return m_currentTool->mousePressEvent(static_cast<QMouseEvent*>(event));
-    case QEvent::MouseButtonRelease:
-        return m_currentTool->mouseReleaseEvent(static_cast<QMouseEvent*>(event));
-    case QEvent::Leave:
-        handleCrosshairLeave(event);
-        m_currentTool->leaveEvent(event);
-        return false;
-    default:
-        return QWidget::eventFilter(obj, event);
+    if (obj == customPlot && m_currentTool) {
+        switch (event->type()) {
+        case QEvent::MouseMove: {
+            auto me = static_cast<QMouseEvent*>(event);
+            // forward to crosshairManager if desired:
+            if (m_crosshairManager) {
+                m_crosshairManager->handleMouseMove(me->pos());
+            }
+            // also forward to the current tool
+            return m_currentTool->mouseMoveEvent(me);
+        }
+        case QEvent::MouseButtonPress: {
+            auto me = static_cast<QMouseEvent*>(event);
+            return m_currentTool->mousePressEvent(me);
+        }
+        case QEvent::MouseButtonRelease: {
+            auto me = static_cast<QMouseEvent*>(event);
+            return m_currentTool->mouseReleaseEvent(me);
+        }
+        case QEvent::Leave:
+            if (m_crosshairManager) {
+                m_crosshairManager->handleMouseLeave();
+            }
+            m_currentTool->leaveEvent(event);
+            return false;
+        default:
+            break;
+        }
     }
+    return QWidget::eventFilter(obj, event);
 }
 
 // Initialization
@@ -325,77 +336,6 @@ void PlotWidget::setupPlot()
 
     // create a dedicated layer for highlighted graphs
     customPlot->addLayer("highlighted", customPlot->layer("main"), QCustomPlot::limAbove);
-}
-
-void PlotWidget::setupCrosshairs()
-{
-    // create horizontal and vertical crosshairs
-    crosshairH = new QCPItemLine(customPlot);
-    crosshairH->setPen(QPen(Qt::gray, 1));
-    crosshairH->setVisible(false);
-
-    crosshairV = new QCPItemLine(customPlot);
-    crosshairV->setPen(QPen(Qt::gray, 1));
-    crosshairV->setVisible(false);
-
-    customPlot->replot();
-}
-
-// Crosshair Management
-void PlotWidget::handleCrosshairMouseMove(QMouseEvent *mouseEvent)
-{
-    // determine whether the cursor is over the plot area
-    bool currentlyOverPlot = isCursorOverPlotArea(mouseEvent->pos());
-
-    if (currentlyOverPlot && !isCursorOverPlot) {
-        isCursorOverPlot = true;
-        enableCrosshairs(true);
-    } else if (!currentlyOverPlot && isCursorOverPlot) {
-        isCursorOverPlot = false;
-        enableCrosshairs(false);
-    }
-
-    if (isCursorOverPlot) updateCrosshairs(mouseEvent->pos());
-}
-
-void PlotWidget::handleCrosshairLeave(QEvent *event)
-{
-    Q_UNUSED(event);
-    // disable crosshairs when the cursor leaves the plot area
-    if (isCursorOverPlot) {
-        isCursorOverPlot = false;
-        enableCrosshairs(false);
-    }
-}
-
-void PlotWidget::enableCrosshairs(bool enable)
-{
-    // toggle visibility of crosshairs and update the cursor
-    crosshairH->setVisible(enable);
-    crosshairV->setVisible(enable);
-
-    customPlot->setCursor(enable ? transparentCursor : originalCursor);
-    customPlot->replot(QCustomPlot::rpQueuedReplot);
-}
-
-void PlotWidget::updateCrosshairs(const QPoint &pos)
-{
-    // update crosshair positions based on cursor coordinates
-    double x = customPlot->xAxis->pixelToCoord(pos.x());
-    double y = customPlot->yAxis->pixelToCoord(pos.y());
-
-    crosshairH->start->setCoords(customPlot->xAxis->range().lower, y);
-    crosshairH->end->setCoords(customPlot->xAxis->range().upper, y);
-    crosshairV->start->setCoords(x, customPlot->yAxis->range().lower);
-    crosshairV->end->setCoords(x, customPlot->yAxis->range().upper);
-
-    customPlot->replot(QCustomPlot::rpQueuedReplot);
-}
-
-bool PlotWidget::isCursorOverPlotArea(const QPoint &pos) const
-{
-    // check if the cursor is within the plotting area
-    return customPlot->axisRect()->rect().contains(pos);
 }
 
 // Utility Methods
@@ -424,22 +364,14 @@ double PlotWidget::interpolateY(const QCPGraph* graph, double x)
 
 QPen PlotWidget::determineGraphPen(const GraphInfo &info, const QString &hoveredSessionId) const
 {
-    if (hoveredSessionId.isEmpty() || info.sessionId == hoveredSessionId) {
-        // Highlight the graph
-        return info.defaultPen;
-    } else {
-        // Dim the graph
-        QPen pen = info.defaultPen;
-        int h, s, l;
-        pen.color().getHsl(&h, &s, &l);
-        pen.setColor(QColor::fromHsl(h, s, (l + 255 * 15) / 16)); // Dimmed color
-        return pen;
-    }
+    // Always use the default pen
+    return info.defaultPen;
 }
 
 QString PlotWidget::determineGraphLayer(const GraphInfo &info, const QString &hoveredSessionId) const
 {
-    return (hoveredSessionId.isEmpty() || info.sessionId == hoveredSessionId) ? "highlighted" : "main";
+    // Always use the default layer
+    return "highlighted";
 }
 
 } // namespace FlySight

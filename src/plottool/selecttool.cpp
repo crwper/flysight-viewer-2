@@ -1,5 +1,6 @@
 #include "selecttool.h"
 #include "../plotwidget.h"
+#include "../graphinfo.h"
 
 namespace FlySight {
 
@@ -107,7 +108,7 @@ QList<QString> SelectTool::sessionsInRect(double xMin_main, double xMax_main, do
     for (auto infoIt = m_graphMap->cbegin(); infoIt != m_graphMap->cend(); ++infoIt)
     {
         QCPGraph* graph = infoIt.key();
-        const PlotWidget::GraphInfo& info = infoIt.value();
+        const GraphInfo& info = infoIt.value();
 
         QString sessionId = info.sessionId;
         if (sessionId.isEmpty())

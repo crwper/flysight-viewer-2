@@ -7,6 +7,8 @@
 #include <QSet>
 #include "qcustomplot/qcustomplot.h"
 #include "sessionmodel.h"
+#include "graphinfo.h"
+#include "crosshairmanager.h"
 
 namespace FlySight {
 
@@ -28,13 +30,6 @@ public:
         Select,
         SetExit,
         SetGround
-    };
-
-    struct GraphInfo {
-        QString sessionId;
-        QString sensorId;
-        QString measurementId;
-        QPen defaultPen;
     };
 
     struct PlotContext {
@@ -72,14 +67,6 @@ private slots:
 private:
     // Initialization
     void setupPlot();
-    void setupCrosshairs();
-
-    // Crosshair Management
-    void handleCrosshairMouseMove(QMouseEvent *mouseEvent);
-    void handleCrosshairLeave(QEvent *event);
-    void enableCrosshairs(bool enable);
-    void updateCrosshairs(const QPoint &pos);
-    bool isCursorOverPlotArea(const QPoint &pos) const;
 
     // Utility Methods
     QPen determineGraphPen(const GraphInfo &info, const QString &hoveredSessionId) const;
@@ -104,17 +91,10 @@ private:
     QMap<QCPGraph*, GraphInfo> m_graphInfoMap;
     QMap<QString, QCPAxis*> m_plotValueAxes;
 
-    // Crosshairs
-    QCPItemLine *crosshairH;
-    QCPItemLine *crosshairV;
-
-    // Cursor Management
-    QCursor transparentCursor;
-    QCursor originalCursor;
-    bool isCursorOverPlot;
-
     // State Management
     bool m_updatingYAxis = false;
+
+    std::unique_ptr<CrosshairManager> m_crosshairManager;
 };
 
 } // namespace FlySight

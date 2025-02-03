@@ -3,33 +3,31 @@
 
 #include "plottool.h"
 #include "../plotwidget.h"
+#include "../graphinfo.h"
 
 namespace FlySight {
 
+/*!
+ * \brief SetGroundTool: Now it only updates the session’s GroundElev
+ * when the user clicks, and doesn't manage tracers at all.
+ */
 class SetGroundTool : public PlotTool {
 public:
     SetGroundTool(const PlotWidget::PlotContext &ctx);
 
     bool mousePressEvent(QMouseEvent *event) override;
     bool mouseMoveEvent(QMouseEvent *event) override;
-
     void activateTool() override;
     void closeTool() override;
 
-    // This is a momentary tool
     bool isPrimary() override { return false; }
 
 private:
     PlotWidget* m_widget;
     QCustomPlot* m_plot;
-    QMap<QCPGraph*, PlotWidget::GraphInfo>* m_graphMap;
+    QMap<QCPGraph*, GraphInfo>* m_graphMap;
     SessionModel* m_model;
 
-    QMap<QCPGraph*, QCPItemTracer*> m_graphTracers;
-    QString m_hoveredSessionId;
-
-    QCPItemTracer* getOrCreateTracer(QCPGraph* graph);
-    void clearTracers();
     double computeGroundElevation(SessionData &session, double xFromExit) const;
 };
 
