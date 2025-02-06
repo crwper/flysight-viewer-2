@@ -27,6 +27,9 @@ namespace SessionKeys {
     constexpr char StartTime[] = "_START_TIME";
     constexpr char Duration[] = "_DURATION";
     constexpr char GroundElev[] = "_GROUND_ELEV";
+    constexpr char ImuGnssEkf[] = "_IMU_GNSS_EKF";
+    constexpr char AccelAcc[] = "ACCEL_ACC";
+    constexpr char GyroAcc[] = "GYRO_ACC";
 }
 
 class SessionData {
@@ -51,6 +54,7 @@ public:
     bool hasMeasurement(const QString& sensorKey, const QString& measurementKey) const;
     QVector<double> getMeasurement(const QString& sensorKey, const QString& measurementKey) const;
     void setMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
+    void setCalculatedMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
 
     static void registerCalculatedAttribute(const QString &key,
                                             const QList<DependencyKey>& dependencies, AttributeFunction func);

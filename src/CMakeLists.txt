@@ -45,7 +45,6 @@ set(PROJECT_SOURCES
     mainwindow.cpp             mainwindow.h          mainwindow.ui
     sessionmodel.h             sessionmodel.cpp
     plotwidget.h               plotwidget.cpp
-    qcustomplot/qcustomplot.cpp qcustomplot/qcustomplot.h
     dataimporter.cpp           dataimporter.h
     logbookview.h              logbookview.cpp
     plottool/pantool.h
@@ -63,6 +62,7 @@ set(PROJECT_SOURCES
     graphinfo.h
     pluginhost.h               pluginhost.cpp
     plotregistry.cpp           plotregistry.h
+    imugnssekf.h               imugnssekf.cpp
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
@@ -83,6 +83,20 @@ target_link_libraries(FlySightViewer
     PRIVATE Qt${QT_VERSION_MAJOR}::Widgets
     PRIVATE Qt${QT_VERSION_MAJOR}::PrintSupport
     PRIVATE pybind11::embed
+)
+
+target_include_directories(FlySightViewer PRIVATE
+    ${CMAKE_SOURCE_DIR}/../third-party/QCustomPlot
+    ${CMAKE_SOURCE_DIR}/../third-party/Eigen
+    ${CMAKE_SOURCE_DIR}/../third-party/GeographicLib/include
+)
+
+target_sources(FlySightViewer PRIVATE
+    ${CMAKE_SOURCE_DIR}/../third-party/QCustomPlot/QCustomPlot/qcustomplot.cpp
+)
+
+target_link_libraries(FlySightViewer PRIVATE
+    ${CMAKE_SOURCE_DIR}/../third-party/GeographicLib/lib/GeographicLib-i.lib
 )
 
 # ───────────────────────────────  pybind11 bridge (.pyd)

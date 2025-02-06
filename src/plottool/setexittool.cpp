@@ -2,7 +2,7 @@
 #include "mainwindow.h"           // for currentXAxisKey()
 #include "../plotwidget.h"
 #include "../crosshairmanager.h"
-#include "../qcustomplot/qcustomplot.h"
+#include <QCustomPlot/qcustomplot.h>
 
 #include <QMouseEvent>
 #include <QDebug>

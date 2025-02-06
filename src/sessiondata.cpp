@@ -82,6 +82,12 @@ void SessionData::setMeasurement(const QString &sensorKey, const QString &measur
         m_calculatedMeasurements);
 }
 
+void SessionData::setCalculatedMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data)
+{
+    MeasurementKey k(sensorKey, measurementKey);
+    m_calculatedMeasurements.setValue(k, data);
+}
+
 void SessionData::registerCalculatedAttribute(
     const QString& key,
     const QList<DependencyKey>& dependencies,
