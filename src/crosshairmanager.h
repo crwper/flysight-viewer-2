@@ -6,7 +6,7 @@
 #include <QCursor>
 #include <QMap>
 #include <QSet>
-#include "qcustomplot/qcustomplot.h"
+#include <QCustomPlot/qcustomplot.h>
 #include "sessionmodel.h"
 #include "graphinfo.h"
 

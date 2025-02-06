@@ -3,9 +3,9 @@
 
 #include <QMap>
 #include <QPoint>
+#include <QCustomPlot/qcustomplot.h>
 #include "plottool.h"
 #include "../plotwidget.h"
-#include "../qcustomplot/qcustomplot.h"
 #include "../graphinfo.h"
 
 namespace FlySight {

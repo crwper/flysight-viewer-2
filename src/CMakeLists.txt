@@ -26,7 +26,6 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         ${PROJECT_SOURCES}
         sessionmodel.h sessionmodel.cpp
         plotwidget.h plotwidget.cpp
-        qcustomplot/qcustomplot.cpp qcustomplot/qcustomplot.h
         sessiondata.cpp sessiondata.h
         dataimporter.cpp dataimporter.h
         logbookview.h logbookview.cpp
@@ -45,6 +44,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         plottool/setgroundtool.cpp
         crosshairmanager.h crosshairmanager.cpp
         graphinfo.h
+        imugnssekf.h imugnssekf.cpp
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET FlySightViewer APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
@@ -86,6 +86,20 @@ install(TARGETS FlySightViewer
     BUNDLE DESTINATION .
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+target_include_directories(FlySightViewer PRIVATE
+    ${CMAKE_SOURCE_DIR}/../third-party/QCustomPlot
+    ${CMAKE_SOURCE_DIR}/../third-party/Eigen
+    ${CMAKE_SOURCE_DIR}/../third-party/GeographicLib/include
+)
+
+target_sources(FlySightViewer PRIVATE
+    ${CMAKE_SOURCE_DIR}/../third-party/QCustomPlot/QCustomPlot/qcustomplot.cpp
+)
+
+target_link_libraries(FlySightViewer PRIVATE
+    ${CMAKE_SOURCE_DIR}/../third-party/GeographicLib/lib/GeographicLib-i.lib
 )
 
 if(QT_VERSION_MAJOR EQUAL 6)

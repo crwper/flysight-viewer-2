@@ -1,6 +1,6 @@
 #include "setexittool.h"
 #include "../plotwidget.h"
-#include "../qcustomplot/qcustomplot.h"
+#include <QCustomPlot/qcustomplot.h>
 
 #include <QMouseEvent>
 #include <QDebug>
