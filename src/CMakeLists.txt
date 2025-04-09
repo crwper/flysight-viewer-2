@@ -45,6 +45,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         crosshairmanager.h crosshairmanager.cpp
         graphinfo.h
         imugnssekf.h imugnssekf.cpp
+        gnssfactor.h
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET FlySightViewer APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
@@ -92,6 +93,8 @@ target_include_directories(FlySightViewer PRIVATE
     ${CMAKE_SOURCE_DIR}/../third-party/QCustomPlot
     ${CMAKE_SOURCE_DIR}/../third-party/Eigen
     ${CMAKE_SOURCE_DIR}/../third-party/GeographicLib/include
+    ${CMAKE_SOURCE_DIR}/../third-party/GTSAM/install/include
+    ${CMAKE_SOURCE_DIR}/../third-party/oneTBB/install/include
 )
 
 target_sources(FlySightViewer PRIVATE
@@ -101,6 +104,27 @@ target_sources(FlySightViewer PRIVATE
 target_link_libraries(FlySightViewer PRIVATE
     ${CMAKE_SOURCE_DIR}/../third-party/GeographicLib/lib/GeographicLib-i.lib
 )
+
+target_link_libraries(FlySightViewer PRIVATE
+    $<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/../third-party/GTSAM/install/lib/gtsamDebug.lib>
+    $<$<CONFIG:Release>:${CMAKE_SOURCE_DIR}/../third-party/GTSAM/install/lib/gtsam.lib>
+)
+
+target_link_directories(FlySightViewer PRIVATE
+    ${CMAKE_SOURCE_DIR}/../third-party/oneTBB/install/lib
+)
+
+find_package(Boost REQUIRED)
+
+if(Boost_FOUND)
+    message(STATUS "Boost found: ${Boost_INCLUDE_DIRS}")
+    message(STATUS "Boost library directory: ${Boost_LIBRARY_DIRS}")
+
+    target_include_directories(FlySightViewer PRIVATE ${Boost_INCLUDE_DIRS})
+    target_link_directories(FlySightViewer PRIVATE ${Boost_LIBRARY_DIRS})
+else()
+    message(FATAL_ERROR "Boost not found! Ensure BOOST_ROOT is set correctly.")
+endif()
 
 if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(FlySightViewer)

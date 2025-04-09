@@ -3,6 +3,8 @@
 
 #include <QVector>
 
+namespace FlySight {
+
 struct FusionOutput {
     QVector<double> time;
     QVector<double> accN;
@@ -32,5 +34,7 @@ FusionOutput runFusion(
     double aAcc, // IMU accel accuracy (g)
     double wAcc // IMU gyro accuracy (deg/s)
     );
+
+} // namespace FlySight
 
 #endif // IMUGNSSEKF_H

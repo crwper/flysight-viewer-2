@@ -4,10 +4,11 @@
 #include <QString>
 #include <QPen>
 
+namespace FlySight {
+
 /*!
  * \brief A small struct to describe sessionId, sensorId, etc.
  */
-namespace FlySight {
 struct GraphInfo
 {
     QString sessionId;
@@ -15,6 +16,7 @@ struct GraphInfo
     QString measurementId;
     QPen    defaultPen;
 };
+
 } // namespace FlySight
 
 #endif // GRAPHINFO_H
