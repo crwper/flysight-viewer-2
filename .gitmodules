@@ -1,3 +1,9 @@
 [submodule "third-party/pybind11"]
 	path = third-party/pybind11
 	url = https://github.com/pybind/pybind11.git
+[submodule "third-party/gtsam"]
+	path = third-party/gtsam
+	url = https://github.com/borglab/gtsam.git
+[submodule "third-party/oneTBB"]
+	path = third-party/oneTBB
+	url = https://github.com/uxlfoundation/oneTBB.git
