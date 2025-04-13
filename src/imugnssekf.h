@@ -7,9 +7,10 @@ namespace FlySight {
 
 struct FusionOutput {
     QVector<double> time;
-    QVector<double> accN;
-    QVector<double> accE;
-    QVector<double> accD;
+    QVector<double> accN, accE, accD;
+    QVector<double> velN, velE, velD;
+    QVector<double> posN, posE, posD;
+    QVector<double> roll, pitch, yaw;
 };
 
 FusionOutput runFusion(
