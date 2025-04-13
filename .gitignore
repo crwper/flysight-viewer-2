@@ -37,3 +37,11 @@ secrets.h
 # PowerShell script
 /combine.ps1
 /combined.txt
+
+# Third party
+third-party/GeographicLib/build/
+third-party/GeographicLib-install/
+third-party/oneTBB/build/
+third-party/oneTBB-install/
+third-party/gtsam/build/
+third-party/gtsam-install/
