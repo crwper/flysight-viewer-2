@@ -89,9 +89,9 @@ target_link_libraries(FlySightViewer
 target_include_directories(FlySightViewer PRIVATE
     ${CMAKE_SOURCE_DIR}/../third-party/QCustomPlot
     ${CMAKE_SOURCE_DIR}/../third-party/Eigen
-    ${CMAKE_SOURCE_DIR}/../third-party/GeographicLib/include
-    ${CMAKE_SOURCE_DIR}/../third-party/GTSAM/install/include
-    ${CMAKE_SOURCE_DIR}/../third-party/oneTBB/install/include
+    ${CMAKE_SOURCE_DIR}/../third-party/oneTBB-install/include
+    ${CMAKE_SOURCE_DIR}/../third-party/GeographicLib-install/include
+    ${CMAKE_SOURCE_DIR}/../third-party/GTSAM-install/include
 )
 
 target_sources(FlySightViewer PRIVATE
@@ -99,16 +99,21 @@ target_sources(FlySightViewer PRIVATE
 )
 
 target_link_libraries(FlySightViewer PRIVATE
-    ${CMAKE_SOURCE_DIR}/../third-party/GeographicLib/lib/GeographicLib-i.lib
+    ${CMAKE_SOURCE_DIR}/../third-party/GeographicLib-install/lib/GeographicLib.lib
 )
 
 target_link_libraries(FlySightViewer PRIVATE
-    $<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/../third-party/GTSAM/install/lib/gtsamDebug.lib>
-    $<$<CONFIG:Release>:${CMAKE_SOURCE_DIR}/../third-party/GTSAM/install/lib/gtsam.lib>
+    ${CMAKE_SOURCE_DIR}/../third-party/GTSAM-install/lib/cephes-gtsam.lib
+    ${CMAKE_SOURCE_DIR}/../third-party/GTSAM-install/lib/libgtsam.lib
+    ${CMAKE_SOURCE_DIR}/../third-party/GTSAM-install/lib/metis-gtsam.lib
+    DbgHelp
 )
 
-target_link_directories(FlySightViewer PRIVATE
-    ${CMAKE_SOURCE_DIR}/../third-party/oneTBB/install/lib
+target_link_libraries(FlySightViewer PRIVATE
+    ${CMAKE_SOURCE_DIR}/../third-party/oneTBB-install/lib/tbb.lib
+    ${CMAKE_SOURCE_DIR}/../third-party/oneTBB-install/lib/tbb12.lib
+    ${CMAKE_SOURCE_DIR}/../third-party/oneTBB-install/lib/tbbmalloc.lib
+    ${CMAKE_SOURCE_DIR}/../third-party/oneTBB-install/lib/tbbmalloc_proxy.lib
 )
 
 find_package(Boost REQUIRED)

@@ -40,3 +40,11 @@ secrets.h
 
 # Python plugin cache
 plugins/__pycache__/
+
+# Third party
+third-party/GeographicLib/build/
+third-party/GeographicLib-install/
+third-party/oneTBB/build/
+third-party/oneTBB-install/
+third-party/gtsam/build/
+third-party/gtsam-install/
