@@ -533,8 +533,20 @@ void MainWindow::registerBuiltInPlots()
         {"GNSS time", "Week number", "", QColor::fromHsl(0, 0, 128), "TIME", "week"},
 
         // Category: Sensor fusion
+        {"Sensor fusion", "North position", "m", QColor::fromHsl(240 - group_a, 255, 128), SessionKeys::ImuGnssEkf, "posN"},
+        {"Sensor fusion", "East position", "m", QColor::fromHsl(240, 255, 128), SessionKeys::ImuGnssEkf, "posE"},
+        {"Sensor fusion", "Down position", "m", QColor::fromHsl(240 + group_a, 255, 128), SessionKeys::ImuGnssEkf, "posD"},
+
+        {"Sensor fusion", "North velocity", "m/s", QColor::fromHsl(180 - group_a, 255, 128), SessionKeys::ImuGnssEkf, "velN"},
+        {"Sensor fusion", "East velocity", "m/s", QColor::fromHsl(180, 255, 128), SessionKeys::ImuGnssEkf, "velE"},
+        {"Sensor fusion", "Down velocity", "m/s", QColor::fromHsl(180 + group_a, 255, 128), SessionKeys::ImuGnssEkf, "velD"},
+
         {"Sensor fusion", "Horizontal acceleration", "g", Qt::magenta, SessionKeys::ImuGnssEkf, "accH"},
         {"Sensor fusion", "Vertical acceleration", "g", Qt::cyan, SessionKeys::ImuGnssEkf, "accD"},
+
+        {"Sensor fusion", "X rotation", "deg", QColor::fromHsl(120 - group_a, 255, 128), SessionKeys::ImuGnssEkf, "roll"},
+        {"Sensor fusion", "Y rotation", "deg", QColor::fromHsl(120, 255, 128), SessionKeys::ImuGnssEkf, "pitch"},
+        {"Sensor fusion", "Z rotation", "deg", QColor::fromHsl(120 + group_a, 255, 128), SessionKeys::ImuGnssEkf, "yaw"},
     };
 
     for (auto &pv : defaults)
@@ -1175,9 +1187,18 @@ void MainWindow::initializeCalculatedMeasurements()
 
     static const std::vector<FusionOutputMapping> fusion_outputs = {
         {SessionKeys::Time, &FusionOutput::time},
+        {"posN", &FusionOutput::posN},
+        {"posE", &FusionOutput::posE},
+        {"posD", &FusionOutput::posD},
+        {"velN", &FusionOutput::velN},
+        {"velE", &FusionOutput::velE},
+        {"velD", &FusionOutput::velD},
         {"accN", &FusionOutput::accN},
         {"accE", &FusionOutput::accE},
-        {"accD", &FusionOutput::accD}
+        {"accD", &FusionOutput::accD},
+        {"roll", &FusionOutput::roll},
+        {"pitch", &FusionOutput::pitch},
+        {"yaw", &FusionOutput::yaw}
     };
 
     auto compute_imu_gnss_ekf = [](SessionData &session, const QString &outputKey) -> std::optional<QVector<double>> {
