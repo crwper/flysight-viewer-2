@@ -151,11 +151,11 @@ FusionOutput runFusion(
 
     // 3) Local Cartesian system
     GnssData firstGnss = gnssQueue.front();
-    GeographicLib::LocalCartesian nedConverter(firstGnss.lat, firstGnss.lon, firstGnss.alt);
-    auto toNED = [&](double la, double lo, double alt){
-        double x,y,z;
-        nedConverter.Forward(la, lo, alt, x,y,z);
-        return gtsam::Vector3(x,y,z);
+    GeographicLib::LocalCartesian enuConverter(firstGnss.lat, firstGnss.lon, firstGnss.alt);
+    auto toENU = [&](double lat, double lon, double alt){
+        double east, north, up;
+        enuConverter.Forward(lat, lon, alt, east, north, up);
+        return gtsam::Vector3(east, north, up);
     };
 
     // 4) Setup iSAM2
@@ -186,8 +186,8 @@ FusionOutput runFusion(
 
     // 6) Initialize state: from first GNSS
     int stateIndex = 0;
-    Pose3 initPose(Rot3::Yaw(0.0), toNED(firstGnss.lat, firstGnss.lon, firstGnss.alt));
-    Vector3 initVel(firstGnss.velN, firstGnss.velE, firstGnss.velD);
+    Pose3 initPose(Rot3(), toENU(firstGnss.lat, firstGnss.lon, firstGnss.alt));
+    Vector3 initVel(firstGnss.velE, firstGnss.velN, -firstGnss.velD);
     imuBias::ConstantBias initBias;  // zero bias guess
 
     // We'll create an initial factor graph & values just for this first state
@@ -195,8 +195,19 @@ FusionOutput runFusion(
     Values newValues;
 
     // Provide a prior on Pose/Vel/Bias
-    auto priorPoseNoise = noiseModel::Diagonal::Sigmas(
-        (Vector(6) << Vector3::Constant(1.0), Vector3::Constant(0.1)).finished());
+    // Use large sigma for rotation (e.g., pi radians or ~3.14)
+    // Use GNSS sigmas for translation (e.g., hAcc, vAcc)
+    double rot_sigma = M_PI; // Large uncertainty (radians)
+    double pos_sigma_horiz = std::max(1.0, firstGnss.hAcc); // Use hAcc, ensure non-zero
+    double pos_sigma_vert = std::max(1.0, firstGnss.vAcc);  // Use vAcc, ensure non-zero
+
+    Vector6 priorSigmas;
+    priorSigmas << rot_sigma, rot_sigma, rot_sigma, // Roll, Pitch, Yaw sigmas (large)
+        pos_sigma_horiz, pos_sigma_horiz, pos_sigma_vert; // E, N, U sigmas (from GNSS)
+
+    auto priorPoseNoise = noiseModel::Diagonal::Sigmas(priorSigmas);
+
+    // Provide a prior on Vel/Bias
     auto priorVelNoise  = noiseModel::Isotropic::Sigma(3, 1.0);
     auto priorBiasNoise = noiseModel::Isotropic::Sigma(6, 1e-2);
 
@@ -284,11 +295,11 @@ FusionOutput runFusion(
 
         // Now add GNSS factor
         {
-            Vector3 nedPos = toNED(gd.lat, gd.lon, gd.alt);
-            Vector3 nedVel(gd.velN, gd.velE, gd.velD);
+            Vector3 enuPos = toENU(gd.lat, gd.lon, gd.alt);
+            Vector3 enuVel(gd.velE, gd.velN, -gd.velD);
             Vector6 meas;
-            meas << nedPos.x(), nedPos.y(), nedPos.z(),
-                nedVel.x(), nedVel.y(), nedVel.z();
+            meas << enuPos.x(), enuPos.y(), enuPos.z(),
+                enuVel.x(), enuVel.y(), enuVel.z();
 
             Vector6 sigmas;
             sigmas << gd.hAcc, gd.hAcc, gd.vAcc,
@@ -341,9 +352,9 @@ FusionOutput runFusion(
         Rot3 rot = poseI.rotation();
 
         // Fill position
-        output.posN[i] = trans.x();
-        output.posE[i] = trans.y();
-        output.posD[i] = trans.z();
+        output.posE[i] = trans.x();
+        output.posN[i] = trans.y();
+        output.posD[i] = -trans.z();
 
         // Extract RPY angles (in radians)
         double r = rot.roll();   // rotation about X
@@ -362,9 +373,9 @@ FusionOutput runFusion(
         // Velocity
         Vector3 vel = curEstimate.at<Vector3>( V((int)i) );
 
-        output.velN[i] = vel.x();
-        output.velE[i] = vel.y();
-        output.velD[i] = vel.z();
+        output.velE[i] = vel.x();
+        output.velN[i] = vel.y();
+        output.velD[i] = -vel.z();
     }
 
     // 9) Compute symmetrical acceleration using velocity at each state
@@ -374,13 +385,13 @@ FusionOutput runFusion(
         double dtMinus = stateTimes[i]   - stateTimes[i-1];
         Vector3 vMinus = curEstimate.at<Vector3>(V((int)(i-1)));
         Vector3 vPlus  = curEstimate.at<Vector3>(V((int)(i+1)));
-        Vector3 aNED   = (vPlus - vMinus)/(dtPlus + dtMinus);
+        Vector3 aENU   = (vPlus - vMinus)/(dtPlus + dtMinus);
 
         // Convert to "g"
         double invG = 1.0 / 9.81;
-        output.accN[i] = aNED.x() * invG;
-        output.accE[i] = aNED.y() * invG;
-        output.accD[i] = aNED.z() * invG;
+        output.accE[i] = aENU.x() * invG;
+        output.accN[i] = aENU.y() * invG;
+        output.accD[i] = -aENU.z() * invG;
     }
 
     return output;

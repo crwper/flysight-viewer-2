@@ -9,7 +9,7 @@ using namespace gtsam;
 namespace FlySight {
 
 // -----------------------------------------------------------------------------
-// A custom GNSS factor: Pose3 + Vector3 -> position + velocity in NED
+// A custom GNSS factor: Pose3 + Vector3 -> position + velocity in ENU
 // IMPORTANT: declare in global (or named) namespace, not anonymous
 // -----------------------------------------------------------------------------
 class GnssFactor : public NoiseModelFactor2<Pose3, Vector3> {
@@ -21,7 +21,7 @@ public:
     GTSAM_MAKE_ALIGNED_OPERATOR_NEW
 
         private:
-                  Vector6 measured_; // [pN, pE, pD, vN, vE, vD]
+                  Vector6 measured_; // [pE, pN, pU, vE, vN, vU]
 
 public:
     GnssFactor(Key poseKey, Key velKey,
@@ -36,7 +36,7 @@ public:
         Matrix* H1 = nullptr, Matrix* H2 = nullptr
         ) const override {
 
-        // Position residual in NED
+        // Position residual in ENU
         Vector3 p = pose.translation();
         Vector3 posError = p - measured_.head<3>();
 
