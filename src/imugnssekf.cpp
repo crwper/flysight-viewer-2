@@ -3,17 +3,32 @@
 #include <QtGlobal>
 #include <GeographicLib/LocalCartesian.hpp>
 
+// --- GTSAM Includes ---
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/navigation/CombinedImuFactor.h>
 #include <gtsam/navigation/GPSFactor.h>
 #include <gtsam/navigation/ImuBias.h>
-#include <gtsam/nonlinear/ISAM2.h>
-#include <gtsam/nonlinear/ISAM2Params.h>
+#include <gtsam/navigation/NavState.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/Values.h>
+#include <gtsam/nonlinear/ISAM2.h>
+#include <gtsam/linear/linearExceptions.h>
+#include <gtsam/geometry/Rot3.h>
+#include <gtsam/geometry/Point3.h>
+#include <gtsam/geometry/Pose3.h>
+#include <gtsam/linear/NoiseModel.h>
+#include <gtsam/base/Matrix.h>
+#include <Eigen/Geometry>
 
+// --- Standard Includes ---
+#include <vector>
 #include <cassert>
 #include <cmath>
+#include <algorithm>
+
+// --- Qt Includes ---
+#include <QDebug>
+#include <QVector>
 
 namespace FlySight {
 using namespace gtsam;
@@ -23,11 +38,132 @@ using symbol_shorthand::X;
 
 // ---- constants -----------------------------------------------------------
 static constexpr double kDeg2Rad = M_PI / 180.0;
+static constexpr double kRad2Deg = 1.0 / kDeg2Rad;
 static constexpr double kG2ms2   = 9.80665;
-static constexpr double kRad2Deg = 180.0 / M_PI;
+static constexpr double kms22G   = 1.0 / kG2ms2;
 static constexpr double kMinSigma = 1e-3;   // 1 mm floor to avoid singularities
 
 // ---- helpers -------------------------------------------------------------
+struct StartIndices {
+    bool success = false;
+    int gnssIdx = -1;
+    int imuIdx = -1;
+};
+
+static StartIndices findStartIndices(
+    const QVector<double>& gnssTime,
+    const QVector<double>& hAcc,
+    const QVector<double>& imuTime,
+    double hAccInitThreshold)
+{
+    StartIndices result;
+    const int nGnss = gnssTime.size();
+    const int nImu = imuTime.size();
+
+    result.gnssIdx = -1;
+    for (int g = 0; g < nGnss; ++g) {
+        if (hAcc[g] < hAccInitThreshold) {
+            result.gnssIdx = g;
+            break;
+        }
+    }
+
+    if (result.gnssIdx == -1) {
+#ifdef QT_DEBUG
+        qWarning() << "Could not find any GNSS point with hAcc <" << hAccInitThreshold;
+#endif
+        result.success = false;
+        return result;
+    }
+
+    double startTime = gnssTime[result.gnssIdx];
+    result.imuIdx = -1;
+    for (int i = 0; i < nImu; ++i) {
+        if (imuTime[i] >= startTime) {
+            result.imuIdx = i;
+            break;
+        }
+    }
+
+    if (result.imuIdx == -1) {
+#ifdef QT_DEBUG
+        qWarning() << "Could not find any IMU point after the selected GNSS start time:" << startTime;
+#endif
+        result.success = false;
+        return result;
+    }
+
+#ifdef QT_DEBUG
+    qInfo() << "Found start indices - GNSS:" << result.gnssIdx << "(t=" << gnssTime[result.gnssIdx] << ", hAcc=" << hAcc[result.gnssIdx] << ")"
+            << "IMU:" << result.imuIdx << "(t=" << imuTime[result.imuIdx] << ")";
+#endif
+
+    result.success = true;
+    return result;
+}
+
+
+static gtsam::Rot3 calculateInitialOrientation(
+    const QVector<double>& imuAx,
+    const QVector<double>& imuAy,
+    const QVector<double>& imuAz,
+    int nImu,
+    int imuStartIndex,
+    int numSamplesToAvg = 10)
+{
+    using namespace gtsam;
+
+    int avgEnd = imuStartIndex;
+    int avgStart = std::max(0, avgEnd - numSamplesToAvg);
+
+    if (avgEnd <= avgStart) {
+#ifdef QT_DEBUG
+        qWarning() << "Not enough preceding IMU samples (" << avgStart << "to" << avgEnd << ") for initial orientation calculation near IMU start index" << imuStartIndex << ". Using identity rotation.";
+#endif
+        return Rot3();
+    }
+
+    Vector3 avgAcc = Vector3::Zero();
+    int count = 0;
+    for (int i = avgStart; i < avgEnd; ++i) {
+        if (i >= 0 && i < nImu) {
+            avgAcc += Vector3(imuAx[i], imuAy[i], imuAz[i]);
+            count++;
+        }
+    }
+
+    if (count == 0) {
+#ifdef QT_DEBUG
+        qWarning() << "No valid IMU samples found in averaging window [" << avgStart << "," << avgEnd << "). Using identity rotation.";
+#endif
+        return Rot3();
+    }
+
+    avgAcc /= count;
+    avgAcc *= kG2ms2;
+
+    double avgAccNorm = avgAcc.norm();
+    if (avgAccNorm < kG2ms2 / 2.0 || avgAccNorm > kG2ms2 * 2.0 || avgAccNorm < 1e-9 ) {
+#ifdef QT_DEBUG
+        qWarning() << "Initial acceleration magnitude (" << avgAccNorm << "m/s^2) from samples [" << avgStart << "," << avgEnd << ") too far from g (" << kG2ms2 << ") or near zero. Using identity rotation.";
+#endif
+        return Rot3();
+    }
+
+    Vector3 body_grav_vector = -avgAcc;
+    Vector3 nav_grav_vector(0.0, 0.0, kG2ms2);
+    Eigen::Quaterniond q = Eigen::Quaterniond::FromTwoVectors(body_grav_vector, nav_grav_vector);
+    Rot3 rot0 = Rot3(q);
+
+#ifdef QT_DEBUG
+    qDebug() << "Calculated Initial RPY (deg) using IMU samples [" << avgStart << "," << avgEnd << "):"
+             << rot0.roll() * kRad2Deg
+             << rot0.pitch() * kRad2Deg
+             << rot0.yaw() * kRad2Deg;
+#endif
+    return rot0;
+}
+
 static inline Vector3 toNED(const GeographicLib::LocalCartesian& lc,
                             double latDeg, double lonDeg, double hMsl) {
     double x, y, z; // ENU
@@ -49,13 +185,12 @@ makeImuParams(double gMag = kG2ms2) {
     // datasheet‑derived noise densities
     double accNoiseDensity  = 80e-6 * kG2ms2;     // 80 µg/√Hz  → 7.85e‑4 m/s²/√Hz
     double gyroNoiseDensity = 3.8e-3 * kDeg2Rad;  // 3.8 mdps/√Hz → 6.63e‑5 rad/s/√Hz
-    // continuous‑time PSDs (σ²)
     Matrix33 Qa = I_3x3 * std::pow(accNoiseDensity , 2);
     Matrix33 Qg = I_3x3 * std::pow(gyroNoiseDensity, 2);
 
     // empirical bias random walks
-    double accBiasRw  = 1e-3;
-    double gyroBiasRw = 1e-4;
+    double accBiasRw  = 1e-3; // m/s²/√s
+    double gyroBiasRw = 1e-4; // rad/s/√s
     Matrix33 Qba = I_3x3 * std::pow(accBiasRw , 2);
     Matrix33 Qbg = I_3x3 * std::pow(gyroBiasRw, 2);
 
@@ -93,117 +228,179 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
     Q_ASSERT(nGnss>1 && nImu>1);
     Q_ASSERT(hAcc.size()==nGnss && vAcc.size()==nGnss && sAcc.size()==nGnss);
 
-    // ---- coordinate conversion prep ------------------------------------
-    GeographicLib::LocalCartesian lc(lat[0], lon[0], hMSL[0]);
+    // ---- Find valid starting point ----
+    const double hAccInitThreshold = 10.0;
+    StartIndices startInfo = findStartIndices(gnssTime, hAcc, imuTime, hAccInitThreshold);
+    if (!startInfo.success) {
+        qWarning() << "Failed to find suitable start point. Returning empty output.";
+        return FusionOutput();
+    }
+    const int startGnssIdx = startInfo.gnssIdx;
+    const int startImuIdx  = startInfo.imuIdx;
+
+    // ---- coordinate conversion prep ----
+    GeographicLib::LocalCartesian lc(lat[startGnssIdx], lon[startGnssIdx], hMSL[startGnssIdx]);
     std::vector<Vector3> nedPos(nGnss);
     for (int i=0;i<nGnss;++i)
         nedPos[i] = toNED(lc, lat[i], lon[i], hMSL[i]);
 
-    // ---- graph / initial values ---------------------------------------
-    NonlinearFactorGraph graph;
-    Values               values;
-
-    Pose3   pose0(Rot3(), nedPos[0]);
-    Vector3 vel0(velN[0], velE[0], velD[0]);
-    imuBias::ConstantBias bias0;
-
-    // orientation sigmas (rad) remain heuristic
-    Vector6 priorSig;
-    priorSig << M_PI, M_PI, M_PI,     // roll,pitch,yaw
-        std::max(hAcc[0], kMinSigma), // N
-        std::max(hAcc[0], kMinSigma), // E
-        std::max(vAcc[0], kMinSigma); // D
-
-    graph.addPrior<Pose3>(X(0), pose0, noiseModel::Diagonal::Sigmas(priorSig));
-
-    double velSigma = std::max(sAcc[0], kMinSigma);
-    graph.addPrior<Vector3>(V(0), vel0, noiseModel::Isotropic::Sigma(3, velSigma));
-
-    graph.addPrior<imuBias::ConstantBias>(B(0), bias0, noiseModel::Isotropic::Sigma(6,1e-3));
-
-    values.insert(X(0), pose0);
-    values.insert(V(0), vel0);
-    values.insert(B(0), bias0);
-
-    // ---- set up iSAM2 -----------------------------------------------
+    // ---- iSAM2 Setup ----
     ISAM2Params isamParams;
+    isamParams.relinearizeThreshold = 0.01;
+    isamParams.relinearizeSkip = 1;
     ISAM2 isam(isamParams);
 
-    // initial update
-    isam.update(graph, values);
+    NonlinearFactorGraph graphFactors;
+    Values               initialEstimate;
 
-    // ---- IMU preintegration -----------------------------------------
+    // ---- Initial State Setup ----
+    Rot3 rot0 = calculateInitialOrientation(imuAx, imuAy, imuAz, nImu, startImuIdx);
+    Pose3   pose0(rot0, nedPos[startGnssIdx]);
+    Vector3 vel0(velN[startGnssIdx], velE[startGnssIdx], velD[startGnssIdx]);
+    imuBias::ConstantBias bias0;
+
+    // ---- Set up priors ----
+    Vector6 priorPoseSig;
+    priorPoseSig << 0.5, 0.5, M_PI,
+        std::max(hAcc[startGnssIdx], kMinSigma),
+        std::max(hAcc[startGnssIdx], kMinSigma),
+        std::max(vAcc[startGnssIdx], kMinSigma);
+    graphFactors.addPrior<Pose3>(X(0), pose0, noiseModel::Diagonal::Sigmas(priorPoseSig));
+
+    double velSigma = std::max(sAcc[startGnssIdx], kMinSigma);
+    graphFactors.addPrior<Vector3>(V(0), vel0, noiseModel::Isotropic::Sigma(3, velSigma));
+
+    graphFactors.addPrior<imuBias::ConstantBias>(B(0), bias0, noiseModel::Isotropic::Sigma(6, 0.1));
+
+    initialEstimate.insert(X(0), pose0);
+    initialEstimate.insert(V(0), vel0);
+    initialEstimate.insert(B(0), bias0);
+
+
+    // ---- Initialize iSAM2 ----
+    try {
+        isam.update(graphFactors, initialEstimate);
+        qInfo() << "iSAM2 initialized successfully.";
+    } catch (const std::exception& e) {
+        qWarning() << "Exception during iSAM2 initialization:" << e.what();
+        return FusionOutput();
+    } catch (...) {
+        qWarning() << "Unknown exception during iSAM2 initialization";
+        return FusionOutput();
+    }
+    Values currentEstimate = isam.calculateEstimate();
+
+    // ---- IMU preintegration ----
     auto pimParams = makeImuParams();
-    auto pim       = std::make_shared<PreintegratedCombinedMeasurements>(pimParams, bias0);
+    auto pim = std::make_shared<PreintegratedCombinedMeasurements>(pimParams, currentEstimate.at<imuBias::ConstantBias>(B(0)));
 
-    NavState prevState(pose0, vel0);
-    imuBias::ConstantBias prevBias = bias0;
+    size_t currentImuIdx = startImuIdx;
+    QVector<int> graphGnssIndices;
+    graphGnssIndices.append(startGnssIdx);
 
-    size_t imuIdx = 1; // second IMU sample
-    int    idx    = 0; // graph index
+    // ---- Incremental Update Loop ----
+    for (int g = startGnssIdx + 1; g < nGnss; ++g) {
+        double currentGnssTime = gnssTime[g];
+        int k = g - startGnssIdx;
+        int prev_k = k - 1;
 
-    // ---- graph building loop ------------------------------------------
-    for (int g=1; g<nGnss; ++g) {
-        double gnssT = gnssTime[g];
-        // integrate IMU until GNSS time
-        for (; imuIdx<nImu && imuTime[imuIdx]<=gnssT; ++imuIdx) {
-            double dt = imuTime[imuIdx] - imuTime[imuIdx-1];
-            Vector3 acc(imuAx[imuIdx-1]*kG2ms2,
-                        imuAy[imuIdx-1]*kG2ms2,
-                        imuAz[imuIdx-1]*kG2ms2);
-            Vector3 gyr(imuWx[imuIdx-1]*kDeg2Rad,
-                        imuWy[imuIdx-1]*kDeg2Rad,
-                        imuWz[imuIdx-1]*kDeg2Rad);
+        Pose3   prevPose = currentEstimate.at<Pose3>(X(prev_k));
+        Vector3 prevVel  = currentEstimate.at<Vector3>(V(prev_k));
+        imuBias::ConstantBias prevBias = currentEstimate.at<imuBias::ConstantBias>(B(prev_k));
+        NavState prevState(prevPose, prevVel);
+
+        pim->resetIntegrationAndSetBias(prevBias);
+
+        // Integrate IMU
+        for (; currentImuIdx < nImu && imuTime[currentImuIdx] <= currentGnssTime; ++currentImuIdx) {
+            if (currentImuIdx == 0) continue;
+            double dt = imuTime[currentImuIdx] - imuTime[currentImuIdx - 1];
+            if (dt <= 0) {
+#ifdef QT_DEBUG
+                qWarning() << "Skipping IMU integration due to non-positive dt=" << dt << "at imuIdx=" << currentImuIdx;
+#endif
+                continue;
+            }
+            Vector3 acc(imuAx[currentImuIdx - 1] * kG2ms2, imuAy[currentImuIdx - 1] * kG2ms2, imuAz[currentImuIdx - 1] * kG2ms2);
+            Vector3 gyr(imuWx[currentImuIdx - 1] * kDeg2Rad, imuWy[currentImuIdx - 1] * kDeg2Rad, imuWz[currentImuIdx - 1] * kDeg2Rad);
             pim->integrateMeasurement(acc, gyr, dt);
         }
 
-        int next = ++idx;
+        // Prepare for iSAM2 update
+        NonlinearFactorGraph newFactors;
+        Values               newValues;
+
+        // Add IMU factor
         const auto& pimConst = dynamic_cast<const PreintegratedCombinedMeasurements&>(*pim);
+        newFactors.emplace_shared<CombinedImuFactor>(X(prev_k), V(prev_k), X(k), V(k), B(prev_k), B(k), pimConst);
 
-        // predict state for initial estimate
-        NavState pred = pim->predict(prevState, prevBias);
-
-        // create factor graph for this step
-        NonlinearFactorGraph graphStep;
-        graphStep.emplace_shared<CombinedImuFactor>(
-            X(next-1), V(next-1), X(next), V(next), B(next-1), B(next), pimConst);
+        // Add GPS factor
         auto gpsNoise = makePosNoise(hAcc[g], vAcc[g]);
-        graphStep.emplace_shared<GPSFactor>(X(next), Point3(nedPos[g]), gpsNoise);
+        newFactors.emplace_shared<GPSFactor>(X(k), Point3(nedPos[g]), gpsNoise);
 
-        // initial estimates for new variables
-        Values newValues;
-        newValues.insert(X(next), pred.pose());
-        newValues.insert(V(next), pred.v());
-        newValues.insert(B(next), prevBias);
+        // Predict initial guess for the new state
+        NavState pred = pim->predict(prevState, prevBias);
+        newValues.insert(X(k), pred.pose());
+        newValues.insert(V(k), pred.v());
+        newValues.insert(B(k), prevBias);
 
-        // update iSAM2
-        isam.update(graphStep, newValues);
+        // Update iSAM2
+        try {
+            isam.update(newFactors, newValues);
+            currentEstimate = isam.calculateEstimate();
+        } catch (const gtsam::IndeterminantLinearSystemException& e) { // Added gtsam:: namespace
+            qWarning() << "IndeterminantLinearSystemException at GNSS index" << g << "(Graph node" << k << "):" << e.what();
+            return FusionOutput();
+        } catch (const std::exception& e) {
+            qWarning() << "Standard exception during iSAM2 update at GNSS index" << g << "(Graph node" << k << "):" << e.what();
+            return FusionOutput();
+        } catch (...) {
+            qWarning() << "Unknown exception during iSAM2 update at GNSS index" << g << "(Graph node" << k << ")";
+            return FusionOutput();
+        }
 
-        // reset preint buffer for next segment
-        prevState = pred; // only as starting guess, bias unchanged
-        pim->resetIntegrationAndSetBias(prevBias);
+        graphGnssIndices.append(g);
+    } // End of main loop
+
+    int numGraphNodes = graphGnssIndices.size();
+    if (numGraphNodes <= 1) {
+        qWarning() << "Graph has too few nodes (" << numGraphNodes << ") after filtering. Cannot generate output.";
+        return FusionOutput();
     }
 
-    // ---- extract results --------------------------------------------
-    Values res = isam.calculateEstimate();
 
-    // ---- build FusionOutput from *final* trajectory -------------------
+    // ---- build FusionOutput ----
+    Values res = currentEstimate;
     FusionOutput out;
 
-    // pre‑compute velocity list for acceleration finite diff
-    std::vector<Vector3> velList(idx+1);
-    for (int k=0;k<=idx;++k)
-        velList[k] = res.at<Vector3>(V(k));
+    std::vector<Vector3> velList(numGraphNodes);
+    for (int k = 0; k < numGraphNodes; ++k) {
+        if (res.exists(V(k))) {
+            velList[k] = res.at<Vector3>(V(k));
+        } else {
+            qWarning() << "Velocity V(" << k << ") not found in final estimate!";
+            velList[k] = Vector3::Zero();
+        }
+    }
 
-    for (int k=0;k<=idx;++k) {
-        double t = gnssTime[k];
+    for (int k = 0; k < numGraphNodes; ++k) {
+        int originalGnssIdx = graphGnssIndices[k];
+        double t = gnssTime[originalGnssIdx];
+
+        if (!res.exists(X(k))) {
+            qWarning() << "Pose X(" << k << ") not found in final estimate! Skipping output point.";
+            continue;
+        }
         Pose3 pose = res.at<Pose3>(X(k));
         Vector3 vel = velList[k];
-        Vector3 acc;
-        if (k == 0) {
-            acc.setZero();
-        } else {
-            acc = (vel - velList[k-1]) / (t - gnssTime[k-1]);
+        Vector3 acc = Vector3::Zero();
+
+        if (k > 0) {
+            int prevOriginalGnssIdx = graphGnssIndices[k-1];
+            double prev_t = gnssTime[prevOriginalGnssIdx];
+            if (t > prev_t && res.exists(V(k-1))) {
+                acc = (vel - velList[k-1]) / (t - prev_t);
+            }
         }
 
         out.time.append(t);
@@ -213,9 +410,9 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
         out.velN.append(vel.x());
         out.velE.append(vel.y());
         out.velD.append(vel.z());
-        out.accN.append(acc.x());
-        out.accE.append(acc.y());
-        out.accD.append(acc.z());
+        out.accN.append(acc.x()*kms22G);
+        out.accE.append(acc.y()*kms22G);
+        out.accD.append(acc.z()*kms22G);
         Vector3 rpy = pose.rotation().rpy();
         out.roll .append(rpy.x()*kRad2Deg);
         out.pitch.append(rpy.y()*kRad2Deg);
