@@ -98,22 +98,34 @@ target_sources(FlySightViewer PRIVATE
     ${CMAKE_SOURCE_DIR}/../third-party/QCustomPlot/QCustomPlot/qcustomplot.cpp
 )
 
-target_link_libraries(FlySightViewer PRIVATE
-    ${CMAKE_SOURCE_DIR}/../third-party/GeographicLib-install/lib/GeographicLib.lib
-)
+set(GTSAM_INSTALL_LIB_DIR ${CMAKE_SOURCE_DIR}/../third-party/GTSAM-install/lib)
 
 target_link_libraries(FlySightViewer PRIVATE
-    ${CMAKE_SOURCE_DIR}/../third-party/GTSAM-install/lib/cephes-gtsam.lib
-    ${CMAKE_SOURCE_DIR}/../third-party/GTSAM-install/lib/libgtsam.lib
-    ${CMAKE_SOURCE_DIR}/../third-party/GTSAM-install/lib/metis-gtsam.lib
-    DbgHelp
+  # --- Debug Libraries ---
+  debug ${GTSAM_INSTALL_LIB_DIR}/cephes-gtsamDebug.lib
+  debug ${GTSAM_INSTALL_LIB_DIR}/gtsamDebug.lib
+  debug ${GTSAM_INSTALL_LIB_DIR}/metis-gtsamDebug.lib
+  debug ${GTSAM_INSTALL_LIB_DIR}/Geographic_d.lib
+
+  # --- Optimized (Release, RelWithDebInfo, MinSizeRel) Libraries ---
+  optimized ${GTSAM_INSTALL_LIB_DIR}/cephes-gtsam.lib
+  optimized ${GTSAM_INSTALL_LIB_DIR}/gtsam.lib
+  optimized ${GTSAM_INSTALL_LIB_DIR}/metis-gtsam.lib
+  optimized ${GTSAM_INSTALL_LIB_DIR}/Geographic.lib
 )
 
+set(TBB_INSTALL_LIB_DIR ${CMAKE_SOURCE_DIR}/../third-party/oneTBB-install/lib)
+
 target_link_libraries(FlySightViewer PRIVATE
-    ${CMAKE_SOURCE_DIR}/../third-party/oneTBB-install/lib/tbb.lib
-    ${CMAKE_SOURCE_DIR}/../third-party/oneTBB-install/lib/tbb12.lib
-    ${CMAKE_SOURCE_DIR}/../third-party/oneTBB-install/lib/tbbmalloc.lib
-    ${CMAKE_SOURCE_DIR}/../third-party/oneTBB-install/lib/tbbmalloc_proxy.lib
+  # --- Debug Libraries ---
+  debug ${TBB_INSTALL_LIB_DIR}/tbb_debug.lib
+  debug ${TBB_INSTALL_LIB_DIR}/tbb12_debug.lib
+  debug ${TBB_INSTALL_LIB_DIR}/tbbmalloc_debug.lib
+
+  # --- Optimized (Release, RelWithDebInfo, MinSizeRel) Libraries ---
+  optimized ${TBB_INSTALL_LIB_DIR}/tbb.lib
+  optimized ${TBB_INSTALL_LIB_DIR}/tbb12.lib
+  optimized ${TBB_INSTALL_LIB_DIR}/tbbmalloc.lib
 )
 
 find_package(Boost REQUIRED)
