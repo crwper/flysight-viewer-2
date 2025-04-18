@@ -7,7 +7,8 @@
 #include <gtsam/navigation/CombinedImuFactor.h>
 #include <gtsam/navigation/GPSFactor.h>
 #include <gtsam/navigation/ImuBias.h>
-#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
+#include <gtsam/nonlinear/ISAM2.h>
+#include <gtsam/nonlinear/ISAM2Params.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/Values.h>
 
@@ -42,16 +43,30 @@ static noiseModel::Diagonal::shared_ptr makePosNoise(double hSigma, double vSigm
 }
 
 static std::shared_ptr<PreintegratedCombinedMeasurements::Params>
-makeImuParams(double accelNoise_g, double gyroNoise_deg) {
-    double accelSigma = accelNoise_g * kG2ms2;
-    double gyroSigma  = gyroNoise_deg * kDeg2Rad;
-    auto p = PreintegratedCombinedMeasurements::Params::MakeSharedD(0.0);
-    p->accelerometerCovariance = I_3x3 * std::pow(accelSigma,2);
-    p->gyroscopeCovariance     = I_3x3 * std::pow(gyroSigma,2);
+makeImuParams(double gMag = kG2ms2) {
+    // Based on https://www.st.com/resource/en/datasheet/lsm6dso.pdf
+
+    // datasheet‑derived noise densities
+    double accNoiseDensity  = 80e-6 * kG2ms2;     // 80 µg/√Hz  → 7.85e‑4 m/s²/√Hz
+    double gyroNoiseDensity = 3.8e-3 * kDeg2Rad;  // 3.8 mdps/√Hz → 6.63e‑5 rad/s/√Hz
+    // continuous‑time PSDs (σ²)
+    Matrix33 Qa = I_3x3 * std::pow(accNoiseDensity , 2);
+    Matrix33 Qg = I_3x3 * std::pow(gyroNoiseDensity, 2);
+
+    // empirical bias random walks
+    double accBiasRw  = 1e-3;
+    double gyroBiasRw = 1e-4;
+    Matrix33 Qba = I_3x3 * std::pow(accBiasRw , 2);
+    Matrix33 Qbg = I_3x3 * std::pow(gyroBiasRw, 2);
+
+    // assemble the params object
+    auto p = PreintegratedCombinedMeasurements::Params::MakeSharedD(gMag);
+    p->accelerometerCovariance = Qa;
+    p->gyroscopeCovariance     = Qg;
     p->integrationCovariance   = I_3x3 * 1e-8;
-    p->biasAccCovariance   = I_3x3 * std::pow(0.03,2);
-    p->biasOmegaCovariance = I_3x3 * std::pow(1e-5,2);
-    p->biasAccOmegaInt     = I_6x6 * 1e-5;
+    p->biasAccCovariance       = Qba;
+    p->biasOmegaCovariance     = Qbg;
+    p->biasAccOmegaInt         = Z_6x6;
     return p;
 }
 
@@ -72,9 +87,7 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
                        const QVector<double>& imuAz,
                        const QVector<double>& imuWx,
                        const QVector<double>& imuWy,
-                       const QVector<double>& imuWz,
-                       double aAcc,
-                       double wAcc) {
+                       const QVector<double>& imuWz) {
     const int nGnss = gnssTime.size();
     const int nImu  = imuTime.size();
     Q_ASSERT(nGnss>1 && nImu>1);
@@ -83,7 +96,8 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
     // ---- coordinate conversion prep ------------------------------------
     GeographicLib::LocalCartesian lc(lat[0], lon[0], hMSL[0]);
     std::vector<Vector3> nedPos(nGnss);
-    for (int i=0;i<nGnss;++i) nedPos[i] = toNED(lc, lat[i], lon[i], hMSL[i]);
+    for (int i=0;i<nGnss;++i)
+        nedPos[i] = toNED(lc, lat[i], lon[i], hMSL[i]);
 
     // ---- graph / initial values ---------------------------------------
     NonlinearFactorGraph graph;
@@ -111,8 +125,15 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
     values.insert(V(0), vel0);
     values.insert(B(0), bias0);
 
+    // ---- set up iSAM2 -----------------------------------------------
+    ISAM2Params isamParams;
+    ISAM2 isam(isamParams);
+
+    // initial update
+    isam.update(graph, values);
+
     // ---- IMU preintegration -----------------------------------------
-    auto pimParams = makeImuParams(aAcc, wAcc);
+    auto pimParams = makeImuParams();
     auto pim       = std::make_shared<PreintegratedCombinedMeasurements>(pimParams, bias0);
 
     NavState prevState(pose0, vel0);
@@ -138,32 +159,41 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
 
         int next = ++idx;
         const auto& pimConst = dynamic_cast<const PreintegratedCombinedMeasurements&>(*pim);
-        graph.emplace_shared<CombinedImuFactor>(X(next-1),V(next-1),X(next),V(next),B(next-1),B(next),pimConst);
 
-        auto gpsNoise = makePosNoise(hAcc[g], vAcc[g]);
-        graph.emplace_shared<GPSFactor>(X(next), Point3(nedPos[g]), gpsNoise);
-
+        // predict state for initial estimate
         NavState pred = pim->predict(prevState, prevBias);
-        values.insert(X(next), pred.pose());
-        values.insert(V(next), pred.v());
-        values.insert(B(next), prevBias);
+
+        // create factor graph for this step
+        NonlinearFactorGraph graphStep;
+        graphStep.emplace_shared<CombinedImuFactor>(
+            X(next-1), V(next-1), X(next), V(next), B(next-1), B(next), pimConst);
+        auto gpsNoise = makePosNoise(hAcc[g], vAcc[g]);
+        graphStep.emplace_shared<GPSFactor>(X(next), Point3(nedPos[g]), gpsNoise);
+
+        // initial estimates for new variables
+        Values newValues;
+        newValues.insert(X(next), pred.pose());
+        newValues.insert(V(next), pred.v());
+        newValues.insert(B(next), prevBias);
+
+        // update iSAM2
+        isam.update(graphStep, newValues);
 
         // reset preint buffer for next segment
         prevState = pred; // only as starting guess, bias unchanged
         pim->resetIntegrationAndSetBias(prevBias);
     }
 
-    // ---- single optimisation pass -------------------------------------
-    LevenbergMarquardtParams lm; lm.maxIterations = 100;
-    LevenbergMarquardtOptimizer opt(graph, values, lm);
-    Values res = opt.optimize();
+    // ---- extract results --------------------------------------------
+    Values res = isam.calculateEstimate();
 
     // ---- build FusionOutput from *final* trajectory -------------------
     FusionOutput out;
 
     // pre‑compute velocity list for acceleration finite diff
     std::vector<Vector3> velList(idx+1);
-    for (int k=0;k<=idx;++k) velList[k] = res.at<Vector3>(V(k));
+    for (int k=0;k<=idx;++k)
+        velList[k] = res.at<Vector3>(V(k));
 
     for (int k=0;k<=idx;++k) {
         double t = gnssTime[k];
