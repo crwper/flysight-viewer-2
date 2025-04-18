@@ -1,8 +1,3 @@
-// imugnssekf.cpp – output only after final optimisation
-// All GNSS epochs build the factor graph; no intermediate results are stored.
-// After the while‑loop we run a single optimiser and then fill FusionOutput
-// with the *final* MAP trajectory.
-
 #include "imugnssekf.h"
 
 #include <QtGlobal>
@@ -29,6 +24,7 @@ using symbol_shorthand::X;
 static constexpr double kDeg2Rad = M_PI / 180.0;
 static constexpr double kG2ms2   = 9.80665;
 static constexpr double kRad2Deg = 180.0 / M_PI;
+static constexpr double kMinSigma = 1e-3;   // 1 mm floor to avoid singularities
 
 // ---- helpers -------------------------------------------------------------
 static inline Vector3 toNED(const GeographicLib::LocalCartesian& lc,
@@ -36,6 +32,13 @@ static inline Vector3 toNED(const GeographicLib::LocalCartesian& lc,
     double x, y, z; // ENU
     lc.Forward(latDeg, lonDeg, hMsl, x, y, z);
     return Vector3(y, x, -z); // N,E,D
+}
+
+static noiseModel::Diagonal::shared_ptr makePosNoise(double hSigma, double vSigma) {
+    double sigN = std::max(hSigma, kMinSigma);
+    double sigE = sigN;
+    double sigD = std::max(vSigma, kMinSigma);
+    return noiseModel::Diagonal::Sigmas((Vector3() << sigN, sigE, sigD).finished());
 }
 
 static std::shared_ptr<PreintegratedCombinedMeasurements::Params>
@@ -62,7 +65,7 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
                        const QVector<double>& velD,
                        const QVector<double>& hAcc,
                        const QVector<double>& vAcc,
-                       const QVector<double>& /*sAcc*/,
+                       const QVector<double>& sAcc,
                        const QVector<double>& imuTime,
                        const QVector<double>& imuAx,
                        const QVector<double>& imuAy,
@@ -75,6 +78,7 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
     const int nGnss = gnssTime.size();
     const int nImu  = imuTime.size();
     Q_ASSERT(nGnss>1 && nImu>1);
+    Q_ASSERT(hAcc.size()==nGnss && vAcc.size()==nGnss && sAcc.size()==nGnss);
 
     // ---- coordinate conversion prep ------------------------------------
     GeographicLib::LocalCartesian lc(lat[0], lon[0], hMSL[0]);
@@ -89,14 +93,25 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
     Vector3 vel0(velN[0], velE[0], velD[0]);
     imuBias::ConstantBias bias0;
 
-    graph.addPrior<Pose3>(X(0), pose0, noiseModel::Diagonal::Sigmas((Vector(6)<<0.1,0.1,0.1,1,1,1).finished()));
-    graph.addPrior<Vector3>(V(0), vel0, noiseModel::Isotropic::Sigma(3,0.1));
+    // orientation sigmas (rad) remain heuristic
+    Vector6 priorSig;
+    priorSig << M_PI, M_PI, M_PI,     // roll,pitch,yaw
+        std::max(hAcc[0], kMinSigma), // N
+        std::max(hAcc[0], kMinSigma), // E
+        std::max(vAcc[0], kMinSigma); // D
+
+    graph.addPrior<Pose3>(X(0), pose0, noiseModel::Diagonal::Sigmas(priorSig));
+
+    double velSigma = std::max(sAcc[0], kMinSigma);
+    graph.addPrior<Vector3>(V(0), vel0, noiseModel::Isotropic::Sigma(3, velSigma));
+
     graph.addPrior<imuBias::ConstantBias>(B(0), bias0, noiseModel::Isotropic::Sigma(6,1e-3));
 
     values.insert(X(0), pose0);
     values.insert(V(0), vel0);
     values.insert(B(0), bias0);
 
+    // ---- IMU preintegration -----------------------------------------
     auto pimParams = makeImuParams(aAcc, wAcc);
     auto pim       = std::make_shared<PreintegratedCombinedMeasurements>(pimParams, bias0);
 
@@ -125,13 +140,7 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
         const auto& pimConst = dynamic_cast<const PreintegratedCombinedMeasurements&>(*pim);
         graph.emplace_shared<CombinedImuFactor>(X(next-1),V(next-1),X(next),V(next),B(next-1),B(next),pimConst);
 
-        double sigmaN = std::max(hAcc[g], 1e-3);
-        double sigmaE = sigmaN;
-        double sigmaD = std::max(vAcc[g], 1e-3);
-
-        auto gpsNoise = noiseModel::Diagonal::Sigmas(
-            (Vector3() << sigmaN, sigmaE, sigmaD).finished());
-
+        auto gpsNoise = makePosNoise(hAcc[g], vAcc[g]);
         graph.emplace_shared<GPSFactor>(X(next), Point3(nedPos[g]), gpsNoise);
 
         NavState pred = pim->predict(prevState, prevBias);
