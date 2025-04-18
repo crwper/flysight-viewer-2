@@ -766,20 +766,6 @@ void MainWindow::initializeCalculatedAttributes()
             return std::nullopt;
         }
     });
-
-    SessionData::registerCalculatedAttribute(
-        SessionKeys::AccelAcc,
-        {},
-        [](SessionData &session) -> std::optional<QVariant> {
-            return 0.02; // g
-        });
-
-    SessionData::registerCalculatedAttribute(
-        SessionKeys::GyroAcc,
-        {},
-        [](SessionData &session) -> std::optional<QVariant> {
-            return 0.5; // deg/s
-        });
 }
 
 void MainWindow::initializeCalculatedMeasurements()
@@ -1229,22 +1215,10 @@ void MainWindow::initializeCalculatedMeasurements()
             return std::nullopt;
         }
 
-        bool ok;
-        double aAcc = session.getAttribute(SessionKeys::AccelAcc).toDouble(&ok);
-        if (!ok) {
-            qWarning() << "Cannot calculate EKF due to missing ACCEL_ACC";
-            return std::nullopt;
-        }
-        double wAcc = session.getAttribute(SessionKeys::GyroAcc).toDouble(&ok);
-        if (!ok) {
-            qWarning() << "Cannot calculate EKF due to missing GYRO_ACC";
-            return std::nullopt;
-        }
-
         // Run the fusion
         FusionOutput out = runFusion(
             gnssTime, lat, lon, hMSL, velN, velE, velD, hAcc, vAcc, sAcc,
-            imuTime, ax, ay, az, wx, wy, wz, aAcc, wAcc);
+            imuTime, ax, ay, az, wx, wy, wz);
 
         std::optional<QVector<double>> result;
 

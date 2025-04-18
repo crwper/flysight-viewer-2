@@ -31,9 +31,7 @@ FusionOutput runFusion(
     const QVector<double>& imuAz,
     const QVector<double>& imuWx,
     const QVector<double>& imuWy,
-    const QVector<double>& imuWz,
-    double aAcc, // IMU accel accuracy (g)
-    double wAcc // IMU gyro accuracy (deg/s)
+    const QVector<double>& imuWz
     );
 
 } // namespace FlySight

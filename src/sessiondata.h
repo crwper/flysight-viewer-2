@@ -28,8 +28,6 @@ namespace SessionKeys {
     constexpr char Duration[] = "_DURATION";
     constexpr char GroundElev[] = "_GROUND_ELEV";
     constexpr char ImuGnssEkf[] = "_IMU_GNSS_EKF";
-    constexpr char AccelAcc[] = "ACCEL_ACC";
-    constexpr char GyroAcc[] = "GYRO_ACC";
 }
 
 class SessionData {
