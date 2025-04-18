@@ -60,8 +60,8 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
                        const QVector<double>& velN,
                        const QVector<double>& velE,
                        const QVector<double>& velD,
-                       const QVector<double>& /*hAcc*/,
-                       const QVector<double>& /*vAcc*/,
+                       const QVector<double>& hAcc,
+                       const QVector<double>& vAcc,
                        const QVector<double>& /*sAcc*/,
                        const QVector<double>& imuTime,
                        const QVector<double>& imuAx,
@@ -124,7 +124,15 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
         int next = ++idx;
         const auto& pimConst = dynamic_cast<const PreintegratedCombinedMeasurements&>(*pim);
         graph.emplace_shared<CombinedImuFactor>(X(next-1),V(next-1),X(next),V(next),B(next-1),B(next),pimConst);
-        graph.emplace_shared<GPSFactor>(X(next), Point3(nedPos[g]), noiseModel::Isotropic::Sigma(3,1.0));
+
+        double sigmaN = std::max(hAcc[g], 1e-3);
+        double sigmaE = sigmaN;
+        double sigmaD = std::max(vAcc[g], 1e-3);
+
+        auto gpsNoise = noiseModel::Diagonal::Sigmas(
+            (Vector3() << sigmaN, sigmaE, sigmaD).finished());
+
+        graph.emplace_shared<GPSFactor>(X(next), Point3(nedPos[g]), gpsNoise);
 
         NavState pred = pim->predict(prevState, prevBias);
         values.insert(X(next), pred.pose());
