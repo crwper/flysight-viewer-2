@@ -40,10 +40,12 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
 
     // Determine file type based on the first line
     FS_FileType fileType;
-    if (firstLine.startsWith("time")) {
+    if (firstLine.startsWith("time,lat,lon,hMSL")) {
         fileType = FS_FileType::FS1;
     } else if (firstLine.startsWith("$FLYS")) {
         fileType = FS_FileType::FS2;
+    } else if (firstLine.startsWith("time,pressure")) {
+        fileType = FS_FileType::Pitot;
     } else {
         m_lastError = "Unknown file format";
         return false;
@@ -55,10 +57,13 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
     // Use the fileType to choose the import method
     switch (fileType) {
     case FS_FileType::FS1:
-        importFS1(in, sessionData);
+        importSimple(in, sessionData, "GNSS");
         break;
     case FS_FileType::FS2:
         importFS2(in, sessionData);
+        break;
+    case FS_FileType::Pitot:
+        importSimple(in, sessionData, "PITOT");
         break;
     }
 
@@ -73,6 +78,8 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
             break;
         case FS_FileType::FS2:
             extractDeviceId(fileName, sessionData, "Device_ID");
+            break;
+        case FS_FileType::Pitot:
             break;
         }
     }
@@ -93,16 +100,16 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
     return true;
 }
 
-void DataImporter::importFS1(QTextStream& in, SessionData& sessionData) {
+void DataImporter::importSimple(QTextStream& in, SessionData& sessionData, const QString &sensorName) {
     QMap<QString, QVector<QString>> columnOrder;
 
     // Read the first line (column names)
     QString columnLine = in.readLine();
     QVector<QString> columns = columnLine.split(',', Qt::SkipEmptyParts).toVector().toList().toVector();
-    columnOrder[DefaultSensorId] = columns;
+    columnOrder[sensorName] = columns;
 
     // Initialize the data map in sensors
-    QMap<QString, QVector<double>>& sensor = sessionData.m_sensors[DefaultSensorId];
+    QMap<QString, QVector<double>>& sensor = sessionData.m_sensors[sensorName];
     for (const QString& colName : columns) {
         sensor[colName]; // Initialize empty QVector<double> for each column
     }
@@ -116,7 +123,7 @@ void DataImporter::importFS1(QTextStream& in, SessionData& sessionData) {
     // Process data lines
     while (!in.atEnd()) {
         QString dataLine = in.readLine();
-        importDataRow(dataLine, columnOrder, sessionData);
+        importDataRow(dataLine, columnOrder, sessionData, sensorName);
     }
 }
 
@@ -135,7 +142,7 @@ void DataImporter::importFS2(QTextStream& in, SessionData& sessionData) {
     // Process data lines
     while (!in.atEnd()) {
         QString line = in.readLine();
-        importDataRow(line, columnOrder, sessionData);
+        importDataRow(line, columnOrder, sessionData, "");
     }
 }
 
@@ -189,12 +196,10 @@ DataImporter::FS_Section DataImporter::importHeaderRow(
     return section;
 }
 
-void DataImporter::importDataRow(const QString& line, const QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData) {
+void DataImporter::importDataRow(const QString& line, const QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData, QString key) {
     QStringView lineView(line);
     QStringTokenizer tokenizer(lineView, u',');
     auto it = tokenizer.begin();
-
-    QString key = DefaultSensorId;
 
     // For FS2 format, the first token is the sensor key
     if (line.startsWith("$")) {

@@ -19,17 +19,17 @@ public:
 
 private:
     // Enums and type definitions
-    enum class FS_FileType { FS1, FS2 };
+    enum class FS_FileType { FS1, FS2, Pitot };
     enum class FS_Section { HEADER, DATA };
 
     // Last import error
     QString m_lastError;
 
     // Private helper methods
-    void importFS1(QTextStream& in, SessionData& sessionData);
+    void importSimple(QTextStream& in, SessionData& sessionData, const QString &sensorName);
     void importFS2(QTextStream& in, SessionData& sessionData);
     FS_Section importHeaderRow(const QString& line, QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData);
-    void importDataRow(const QString& line, const QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData);
+    void importDataRow(const QString& line, const QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData, QString key);
 
     // Helper function to extract device ID
     void extractDeviceId(const QString& fileName, SessionData& sessionData, const QString& expectedKey);
