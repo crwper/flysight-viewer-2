@@ -4,22 +4,23 @@
 #include "dependencykey.h"
 #include "calculatedvalue.h"
 #include <QMap>
+#include <QSet>
 
 namespace FlySight {
 
 class DependencyManager {
 public:
-    static void registerDependencies(
+    void registerDependencies(
         const DependencyKey& thisKey,
         const QList<DependencyKey>& dependsOn);
 
-    static void invalidateKeyAndDependents(
+    void invalidateKeyAndDependents(
         const DependencyKey& changedKey,
         CalculatedValue<QString, QVariant>& attributeCache,
         CalculatedValue<QPair<QString, QString>, QVector<double>>& measurementCache);
 
 private:
-    static QMap<DependencyKey, QSet<DependencyKey>> s_reverseDeps;
+    QMap<DependencyKey, QSet<DependencyKey>> m_reverseDeps;
 };
 
 } // namespace FlySight

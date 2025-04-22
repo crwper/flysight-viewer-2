@@ -10,6 +10,7 @@
 #include <functional>
 #include "calculatedvalue.h"
 #include "dependencykey.h"
+#include "dependencymanager.h"
 
 namespace FlySight {
 
@@ -56,12 +57,18 @@ public:
     static void registerCalculatedMeasurement(const QString &sensorKey, const QString &measurementKey,
                                               const QList<DependencyKey>& dependencies, MeasurementFunction func);
 
+    void addDependencies(const DependencyKey& thisKey,
+                         const QList<DependencyKey>& deps) {
+        m_dependencyManager.registerDependencies(thisKey, deps);
+    }
 private:
     QMap<QString, QVariant> m_attributes;
     QMap<QString, QMap<QString, QVector<double>>> m_sensors;
 
     CalculatedValue<QString, QVariant> m_calculatedAttributes;
     CalculatedValue<MeasurementKey, QVector<double>> m_calculatedMeasurements;
+
+    DependencyManager m_dependencyManager;
 
     QVariant computeAttribute(const QString &key) const;
     QVector<double> computeMeasurement(const QString &sensorKey, const QString &measurementKey) const;

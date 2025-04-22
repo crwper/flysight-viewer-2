@@ -1,24 +1,30 @@
 #include "calculatedvalue.h"
+#include "sessiondata.h"
+#include <type_traits>
 
 namespace FlySight {
 
 template<typename Key, typename Value>
-QMap<Key, typename CalculatedValue<Key, Value>::CalculationFunction> CalculatedValue<Key, Value>::s_calculations;
+QMap<Key, QVector<typename CalculatedValue<Key, Value>::Method>>
+    CalculatedValue<Key, Value>::s_methods;
 
 template<typename Key, typename Value>
-void CalculatedValue<Key, Value>::registerCalculation(const Key &key, CalculationFunction func)
+void CalculatedValue<Key, Value>::registerCalculation(const Key &key,
+                                                      const QList<DependencyKey>& deps,
+                                                      CalculationFunction func)
 {
-    s_calculations[key] = func;
+    s_methods[key].append(Method{deps, std::move(func)});
 }
 
 template<typename Key, typename Value>
 bool CalculatedValue<Key, Value>::hasCalculation(const Key &key) const
 {
-    return s_calculations.contains(key);
+    return s_methods.contains(key);
 }
 
 template<typename Key, typename Value>
-std::optional<Value> CalculatedValue<Key, Value>::getValue(SessionData &session, const Key &key) const
+std::optional<Value> CalculatedValue<Key, Value>::getValue(SessionData &session,
+                                                           const Key &key) const
 {
     // If the value is already computed and cached
     if (m_cache.contains(key)) {
@@ -31,19 +37,50 @@ std::optional<Value> CalculatedValue<Key, Value>::getValue(SessionData &session,
         return std::nullopt;
     }
 
-    // Check if a calculation function is registered
-    if (!s_calculations.contains(key)) {
-        qWarning() << "No calculation registered for key:" << key;
+    // Check if a calculation method is registered
+    if (!s_methods.contains(key)) {
+        qWarning() << "No method registered for key:" << key;
         return std::nullopt;
     }
 
     // Perform the calculation
     m_activeCalculations.insert(key);
-    std::optional<Value> result = s_calculations[key](session);
+
+    const auto& recipes = s_methods[key];
+    auto depsSatisfied  = [&](const QList<DependencyKey>& deps) -> bool {
+        for (const auto& d : deps) {
+            if (d.type == DependencyKey::Type::Attribute) {
+                if (!session.getAttribute(d.attributeKey).isValid())
+                    return false;
+            } else {
+                if (session.getMeasurement(d.measurementKey.first,
+                                           d.measurementKey.second).isEmpty())
+                    return false;
+            }
+        }
+        return true;
+    };
+
+    std::optional<Value> result;
+
+    for (const auto& r : recipes) {
+        if (!depsSatisfied(r.deps))
+            continue;
+
+        // Try the recipe
+        result = r.func(session);
+        if (result.has_value()) {
+            // Build concrete reverse‑deps graph
+            DependencyKey thisKey = toDependencyKey(key);
+            session.addDependencies(thisKey, r.deps);
+            break;
+        }
+    }
+
     m_activeCalculations.remove(key);
 
     if (result.has_value()) {
-        m_cache.insert(key, result.value());
+        m_cache.insert(key, *result);
     } else {
         qWarning() << "Calculation failed for key:" << key;
     }

@@ -37,7 +37,7 @@ void SessionData::setAttribute(const QString &key, const QVariant &value) {
     m_attributes.insert(key, value);
 
     // Invalidate dependencies
-    DependencyManager::invalidateKeyAndDependents(
+    m_dependencyManager.invalidateKeyAndDependents(
         DependencyKey::attribute(key),
         m_calculatedAttributes,
         m_calculatedMeasurements);
@@ -76,7 +76,7 @@ void SessionData::setMeasurement(const QString &sensorKey, const QString &measur
     m_sensors[sensorKey].insert(measurementKey, data);
 
     // Invalidate dependencies
-    DependencyManager::invalidateKeyAndDependents(
+    m_dependencyManager.invalidateKeyAndDependents(
         DependencyKey::measurement(sensorKey, measurementKey),
         m_calculatedAttributes,
         m_calculatedMeasurements);
@@ -88,10 +88,8 @@ void SessionData::registerCalculatedAttribute(
     AttributeFunction func)
 {
     // Register the calculation function
-    CalculatedValue<QString, QVariant>::registerCalculation(key, func);
-
-    // Register the reverse dependencies
-    DependencyManager::registerDependencies(DependencyKey::attribute(key), dependencies);
+    CalculatedValue<QString, QVariant>::
+        registerCalculation(key, dependencies, func);
 }
 
 void SessionData::registerCalculatedMeasurement(
@@ -102,12 +100,8 @@ void SessionData::registerCalculatedMeasurement(
 {
     // Register the calculation function
     MeasurementKey key(sensorKey, measurementKey);
-    CalculatedValue<MeasurementKey, QVector<double>>::registerCalculation(key, func);
-
-    // Register the reverse dependencies
-    DependencyManager::registerDependencies(
-        DependencyKey::measurement(sensorKey, measurementKey),
-        dependencies);
+    CalculatedValue<MeasurementKey, QVector<double>>::
+        registerCalculation(key, dependencies, func);
 }
 
 QVariant SessionData::computeAttribute(const QString &key) const {

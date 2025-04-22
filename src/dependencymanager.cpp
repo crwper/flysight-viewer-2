@@ -10,7 +10,7 @@ void DependencyManager::registerDependencies(
 {
     for (const DependencyKey& d : dependsOn) {
         // "thisKey" is the newly registered key as a DependencyKey
-        s_reverseDeps[d].insert(thisKey);
+        m_reverseDeps[d].insert(thisKey);
     }
 }
 
@@ -30,7 +30,7 @@ void DependencyManager::invalidateKeyAndDependents(
         DependencyKey current = queue.dequeue();
 
         // For all keys that directly depend on 'current'
-        const auto &depSet = s_reverseDeps[current];
+        const auto &depSet = m_reverseDeps[current];
         for (const DependencyKey& depKey : depSet) {
             if (!visited.contains(depKey)) {
                 visited.insert(depKey);
@@ -48,8 +48,5 @@ void DependencyManager::invalidateKeyAndDependents(
         }
     }
 }
-
-// Define the static member variable
-QMap<DependencyKey, QSet<DependencyKey>> DependencyManager::s_reverseDeps;
 
 } // namespace FlySight

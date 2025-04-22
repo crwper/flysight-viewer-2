@@ -8,6 +8,7 @@
 #include <functional>
 #include <QDebug>
 #include <QVariant>
+#include "dependencykey.h"
 
 namespace FlySight {
 
@@ -19,8 +20,15 @@ class CalculatedValue
 public:
     using CalculationFunction = std::function<std::optional<Value>(SessionData&)>;
 
+    struct Method {
+        QList<DependencyKey>      deps;
+        CalculationFunction       func;
+    };
+
     // Registers a calculation function for a given key.
-    static void registerCalculation(const Key &key, CalculationFunction func);
+    static void registerCalculation(const Key &key,
+                                    const QList<DependencyKey>&deps,
+                                    CalculationFunction func);
 
     // Checks if there's a registered calculation function for the given key.
     bool hasCalculation(const Key &key) const;
@@ -34,7 +42,7 @@ public:
 private:
     mutable QMap<Key, Value> m_cache;
     mutable QSet<Key> m_activeCalculations;
-    static QMap<Key, CalculationFunction> s_calculations;
+    static QMap<Key, QVector<Method>> s_methods;
 };
 
 } // namespace FlySight
