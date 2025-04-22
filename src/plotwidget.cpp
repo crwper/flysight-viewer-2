@@ -138,7 +138,7 @@ void PlotWidget::updatePlot()
     customPlot->clearPlottables();
     m_graphInfoMap.clear();
 
-    QList<QCPAxis *> axesToRemove = m_plotValueAxes.values();
+    const QList<QCPAxis *> axesToRemove = m_plotValueAxes.values();
     m_plotValueAxes.clear();
     for (auto axis : axesToRemove) {
         customPlot->axisRect()->removeAxis(axis);
