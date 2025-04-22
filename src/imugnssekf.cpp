@@ -19,6 +19,7 @@
 #include <gtsam/linear/NoiseModel.h>
 #include <gtsam/base/Matrix.h>
 #include <Eigen/Geometry>
+#include <Eigen/StdVector>
 
 // --- Standard Includes ---
 #include <vector>
@@ -188,9 +189,18 @@ makeImuParams(double gMag = kG2ms2) {
     Matrix33 Qa = I_3x3 * std::pow(accNoiseDensity , 2);
     Matrix33 Qg = I_3x3 * std::pow(gyroNoiseDensity, 2);
 
+    // Bias testing in Data comp 1 - FS 2 - serie nr 2 - 01465 (test 08)\24-09-07
+    //
+    // accBiasRW / gyroBiasRW
+    //   - 1e-1 / 1e-1 crashed on 10-16-23
+    //   - 1e-2 / 1e-2 worked on all but 10-16-23
+    //   - 1e-2 / 1e-3 worked on all but 10-16-23
+    //   - 1e-3 / 1e-4 crashed on 16-05-34
+    //   - 1e-3 / 1e-4 worked on 17-26-24
+
     // empirical bias random walks
-    double accBiasRw  = 1e-3; // m/s²/√s
-    double gyroBiasRw = 1e-4; // rad/s/√s
+    double accBiasRw  = 1e-2; // m/s²/√s
+    double gyroBiasRw = 1e-3; // rad/s/√s
     Matrix33 Qba = I_3x3 * std::pow(accBiasRw , 2);
     Matrix33 Qbg = I_3x3 * std::pow(gyroBiasRw, 2);
 
@@ -240,7 +250,7 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
 
     // ---- coordinate conversion prep ----
     GeographicLib::LocalCartesian lc(lat[startGnssIdx], lon[startGnssIdx], hMSL[startGnssIdx]);
-    std::vector<Vector3> nedPos(nGnss);
+    std::vector<Vector3, Eigen::aligned_allocator<Vector3>> nedPos(nGnss);
     for (int i=0;i<nGnss;++i)
         nedPos[i] = toNED(lc, lat[i], lon[i], hMSL[i]);
 
@@ -373,7 +383,7 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
     Values res = currentEstimate;
     FusionOutput out;
 
-    std::vector<Vector3> velList(numGraphNodes);
+    std::vector<Vector3, Eigen::aligned_allocator<Vector3>> velList(numGraphNodes);
     for (int k = 0; k < numGraphNodes; ++k) {
         if (res.exists(V(k))) {
             velList[k] = res.at<Vector3>(V(k));
