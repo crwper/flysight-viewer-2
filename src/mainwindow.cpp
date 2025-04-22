@@ -658,44 +658,63 @@ void MainWindow::initializeCalculatedAttributes()
     });
 
     SessionData::registerCalculatedAttribute(
-        SessionKeys::StartTime,
+        SessionKeys::ExitTime,
         {
-            DependencyKey::measurement("GNSS", "time")
+            DependencyKey::measurement("PITOT", "_time")
         },
-        [](SessionData &session) -> std::optional<QVariant> {
-        // Retrieve GNSS/time measurement
-        QVector<double> times = session.getMeasurement("GNSS", "time");
-        if (times.isEmpty()) {
-            qWarning() << "No GNSS/time data available to calculate start time.";
+        [](SessionData& session) -> std::optional<QVariant> {
+        QVector<double> time = session.getMeasurement("PITOT", "_time");
+
+        if (time.isEmpty()) {
+            qWarning() << "Insufficient data to calculate exit time.";
             return std::nullopt;
         }
 
-        double startTime = *std::min_element(times.begin(), times.end());
-        return QDateTime::fromMSecsSinceEpoch((qint64)(startTime * 1000.0), QTimeZone::utc());
+        return QDateTime::fromMSecsSinceEpoch((qint64)(time.back() * 1000.0), QTimeZone::utc());
     });
 
-    SessionData::registerCalculatedAttribute(
-        SessionKeys::Duration,
-        {
-            DependencyKey::measurement("GNSS", "time")
-        },
-        [](SessionData &session) -> std::optional<QVariant> {
-        QVector<double> times = session.getMeasurement("GNSS", "time");
-        if (times.isEmpty()) {
-            qWarning() << "No GNSS/time data available to calculate duration.";
-            return std::nullopt;
-        }
+    QStringList sensors = {"GNSS", "PITOT"};
+    for (const QString &sens : sensors) {
+        SessionData::registerCalculatedAttribute(
+            SessionKeys::StartTime,
+            {
+                DependencyKey::measurement(sens, "time")
+            },
+            [sens](SessionData &session) -> std::optional<QVariant> {
+            // Retrieve GNSS/time measurement
+            QVector<double> times = session.getMeasurement(sens, "time");
+            if (times.isEmpty()) {
+                qWarning() << "No " << sens << "/time data available to calculate start time.";
+                return std::nullopt;
+            }
 
-        double minTime = *std::min_element(times.begin(), times.end());
-        double maxTime = *std::max_element(times.begin(), times.end());
-        double durationSec = maxTime - minTime;
-        if (durationSec < 0) {
-            qWarning() << "Invalid GNSS/time data (max < min).";
-            return std::nullopt;
-        }
+            double startTime = *std::min_element(times.begin(), times.end());
+            return QDateTime::fromMSecsSinceEpoch((qint64)(startTime * 1000.0), QTimeZone::utc());
+        });
 
-        return durationSec;
-    });
+        SessionData::registerCalculatedAttribute(
+            SessionKeys::Duration,
+            {
+                DependencyKey::measurement(sens, "time")
+            },
+            [sens](SessionData &session) -> std::optional<QVariant> {
+            QVector<double> times = session.getMeasurement(sens, "time");
+            if (times.isEmpty()) {
+                qWarning() << "No " << sens << "/time data available to calculate duration.";
+                return std::nullopt;
+            }
+
+            double minTime = *std::min_element(times.begin(), times.end());
+            double maxTime = *std::max_element(times.begin(), times.end());
+            double durationSec = maxTime - minTime;
+            if (durationSec < 0) {
+                qWarning() << "Invalid " << sens << "/time data (max < min).";
+                return std::nullopt;
+            }
+
+            return durationSec;
+        });
+    }
 
     SessionData::registerCalculatedAttribute(
         SessionKeys::GroundElev,
@@ -985,8 +1004,8 @@ void MainWindow::initializeCalculatedMeasurements()
     };
 
     // Register for GNSS and pitot tube
-    QStringList sensors = {"GNSS", "PITOT"};
-    for (const QString &sens : sensors) {
+    const QStringList gnss_sensors = {"GNSS", "PITOT"};
+    for (const QString &sens : gnss_sensors) {
         SessionData::registerCalculatedMeasurement(
             sens, SessionKeys::Time,
             {
@@ -1005,7 +1024,7 @@ void MainWindow::initializeCalculatedMeasurements()
     }
 
     // Register for other sensors
-    sensors = {"BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
+    const QStringList sensors = {"BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
     for (const QString &sens : sensors) {
         SessionData::registerCalculatedMeasurement(
             sens, SessionKeys::Time,
@@ -1045,7 +1064,7 @@ void MainWindow::initializeCalculatedMeasurements()
     };
 
     // Register for all sensors
-    QStringList all_sensors = {"GNSS", "BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
+    QStringList all_sensors = {"GNSS", "BARO", "HUM", "MAG", "IMU", "TIME", "VBAT", "PITOT"};
     for (const QString &sens : all_sensors) {
         SessionData::registerCalculatedMeasurement(
             sens, SessionKeys::TimeFromExit,
@@ -1057,17 +1076,6 @@ void MainWindow::initializeCalculatedMeasurements()
             return compute_time_from_exit(s, sens);
         });
     }
-
-    // Register for pitot tube
-    SessionData::registerCalculatedMeasurement(
-        "PITOT", SessionKeys::TimeFromExit,
-        {
-            DependencyKey::measurement("PITOT", SessionKeys::Time),
-            DependencyKey::attribute(SessionKeys::ExitTime)
-        },
-        [](SessionData &session) -> std::optional<QVector<double>> {
-            return session.getMeasurement("PITOT", SessionKeys::Time);
-        });
 
     SessionData::registerCalculatedMeasurement(
         "PITOT", "pressure",
