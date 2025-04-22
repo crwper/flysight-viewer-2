@@ -70,6 +70,7 @@ private slots:
 private:
     // Initialization
     void setupPlot();
+    void updateXAxisTicker();
 
     // Utility Methods
     QPen determineGraphPen(const GraphInfo &info, const QString &hoveredSessionId) const;

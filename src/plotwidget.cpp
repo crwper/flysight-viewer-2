@@ -266,6 +266,10 @@ void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
     }
 
     customPlot->replot();
+
+    if (m_xAxisKey == SessionKeys::Time)
+        updateXAxisTicker();      // update format when span changes
+
     m_updatingYAxis = false;
 }
 
@@ -336,6 +340,31 @@ void PlotWidget::setupPlot()
 
     // create a dedicated layer for highlighted graphs
     customPlot->addLayer("highlighted", customPlot->layer("main"), QCustomPlot::limAbove);
+}
+
+void PlotWidget::updateXAxisTicker()
+{
+    if (m_xAxisKey == SessionKeys::Time) {
+        // Absolute UTC time → human‑readable
+        auto dtTicker = QSharedPointer<QCPAxisTickerDateTime>::create();
+        dtTicker->setDateTimeSpec(Qt::UTC);
+
+        // Choose format based on current visible span (seconds)
+        double span = customPlot->xAxis->range().size();
+        if (span < 30)                   // < 30 s
+            dtTicker->setDateTimeFormat("HH:mm:ss.z");
+        else if (span < 3600)            // < 1 h
+            dtTicker->setDateTimeFormat("HH:mm:ss");
+        else if (span < 86400)           // < 1 day
+            dtTicker->setDateTimeFormat("HH:mm");
+        else                             // ≥ 1 day
+            dtTicker->setDateTimeFormat("yyyy‑MM‑dd\nHH:mm");
+
+        customPlot->xAxis->setTicker(dtTicker);
+    } else {
+        // Relative seconds → default numeric ticker
+        customPlot->xAxis->setTicker(QSharedPointer<QCPAxisTicker>::create());
+    }
 }
 
 // Utility Methods
@@ -440,6 +469,8 @@ void PlotWidget::setXAxisKey(const QString& key, const QString& label)
 
     updatePlot();                 // rebuild graphs with new x‑values
     customPlot->replot();
+
+    updateXAxisTicker();
 }
 
 } // namespace FlySight
