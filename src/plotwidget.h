@@ -50,6 +50,7 @@ public:
 
     static double interpolateY(const QCPGraph* graph, double x);
 
+    // View management
     void setXAxisKey(const QString& key, const QString& label);
 
 signals:
@@ -73,6 +74,13 @@ private:
     // Utility Methods
     QPen determineGraphPen(const GraphInfo &info, const QString &hoveredSessionId) const;
     QString determineGraphLayer(const GraphInfo &info, const QString &hoveredSessionId) const;
+
+    // View management
+    const SessionData* referenceSession() const;
+    static double exitTimeSeconds(const SessionData& s);
+    QCPRange keyRangeOf(const SessionData& s,
+                        const QString& sensor,
+                        const QString& meas) const;
 
     // Member Variables
     QCustomPlot *customPlot;

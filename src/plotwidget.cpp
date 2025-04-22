@@ -374,13 +374,72 @@ QString PlotWidget::determineGraphLayer(const GraphInfo &info, const QString &ho
     return "highlighted";
 }
 
+// View management
+const SessionData* PlotWidget::referenceSession() const
+{
+    // 1. hovered?
+    QString hovered = model->hoveredSessionId();
+    if (!hovered.isEmpty()) {
+        for (const auto& s : model->getAllSessions())
+            if (s.getAttribute(SessionKeys::SessionId).toString() == hovered)
+                return &s;
+    }
+    // 2. first visible
+    for (const auto& s : model->getAllSessions())
+        if (s.isVisible()) return &s;
+
+    return nullptr;           // should not happen
+}
+
+double PlotWidget::exitTimeSeconds(const SessionData& s)
+{
+    QVariant v = s.getAttribute(SessionKeys::ExitTime);
+    if (!v.canConvert<QDateTime>()) return 0.0;
+    return v.toDateTime().toMSecsSinceEpoch() / 1000.0;
+}
+
+QCPRange PlotWidget::keyRangeOf(const SessionData& s,
+                                const QString& sensor,
+                                const QString& meas) const
+{
+    QVector<double> v =
+        const_cast<SessionData&>(s).getMeasurement(sensor, meas);
+    if (v.isEmpty()) return QCPRange(0,0);
+
+    auto [minIt,maxIt] = std::minmax_element(v.begin(), v.end());
+    return QCPRange(*minIt, *maxIt);
+}
+
 void PlotWidget::setXAxisKey(const QString& key, const QString& label)
 {
-    if (key == m_xAxisKey) return;
+    if (key == m_xAxisKey)           // already on this scale
+        return;
+
+    /* 1. keep a copy of the current window (old scale) */
+    QCPRange oldRange = customPlot->xAxis->range();
+
+    /* 2. locate a reference session */
+    const SessionData* ref = referenceSession();
+    double exitT = ref ? exitTimeSeconds(*ref) : 0.0;
+
+    /* 3. translate the window */
+    QCPRange newRange;
+    if (key == SessionKeys::Time) {                  // going relative → absolute
+        newRange.lower = oldRange.lower + exitT;
+        newRange.upper = oldRange.upper + exitT;
+    } else {                                         // absolute → relative
+        newRange.lower = oldRange.lower - exitT;
+        newRange.upper = oldRange.upper - exitT;
+    }
+
+    /* 4. commit the switch */
     m_xAxisKey   = key;
     m_xAxisLabel = label;
     customPlot->xAxis->setLabel(label);
-    updatePlot();                       // rebuild with new X data
+    customPlot->xAxis->setRange(newRange);
+
+    updatePlot();                 // rebuild graphs with new x‑values
+    customPlot->replot();
 }
 
 } // namespace FlySight
