@@ -58,6 +58,7 @@ MainWindow::MainWindow(QWidget *parent)
     setupPlotValues();
 
     // Initialize the Plots menu
+    initializeXAxisMenu();
     initializePlotsMenu();
 
     // Setup plot tools
@@ -1172,12 +1173,55 @@ void MainWindow::initializeCalculatedMeasurements()
     });
 }
 
-// mainwindow.cpp
+void MainWindow::initializeXAxisMenu()
+{
+    // Access the 'Plots' menu from the UI
+    QMenu *plotsMenu = ui->menuPlots;
+
+    QMenu* xAxisMenu = plotsMenu->addMenu(tr("Horizontal Axis"));
+    plotsMenu->addSeparator();
+
+    auto* axisGroup  = new QActionGroup(this);
+    axisGroup->setExclusive(true);
+
+    auto addAxisChoice = [&](const QString& text,
+                             const QKeySequence& shortcut,
+                             const QString& key,
+                             const QString& label,
+                             bool checked)
+    {
+        QAction* a = xAxisMenu->addAction(text);
+        a->setCheckable(true);
+        a->setShortcut(shortcut);
+        a->setChecked(checked);
+        axisGroup->addAction(a);
+        connect(a, &QAction::triggered, this,[=]{
+            plotWidget->setXAxisKey(key, label);
+            m_settings->setValue("plot/xAxisKey", key);
+        });
+    };
+
+    addAxisChoice(tr("Time from Exit"),
+                  QKeySequence(Qt::CTRL | Qt::Key_1),
+                  SessionKeys::TimeFromExit,
+                  tr("Time from exit (s)"),
+                  m_settings->value("plot/xAxisKey",
+                                    SessionKeys::TimeFromExit).toString()
+                      == SessionKeys::TimeFromExit);
+
+    addAxisChoice(tr("UTC Time"),
+                  QKeySequence(Qt::CTRL | Qt::Key_2),
+                  SessionKeys::Time,
+                  tr("Time (s)"),
+                  m_settings->value("plot/xAxisKey",
+                                    SessionKeys::TimeFromExit).toString()
+                      == SessionKeys::Time);
+}
 
 void MainWindow::initializePlotsMenu()
 {
     // Access the 'Plots' menu from the UI
-    QMenu *plotsMenu = ui->menuPlots; // Ensure 'menuPlots' is the objectName set in Qt Designer
+    QMenu *plotsMenu = ui->menuPlots;
 
     // Define the list of plots to include in the 'Plots' menu, including separators
     QVector<PlotMenuItem> plotsMenuItems = {

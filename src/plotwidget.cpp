@@ -193,7 +193,7 @@ void PlotWidget::updatePlot()
                         continue;
                     }
 
-                    QVector<double> xData = const_cast<SessionData &>(session).getMeasurement(sensorID, SessionKeys::TimeFromExit);
+                    QVector<double> xData = const_cast<SessionData &>(session).getMeasurement(sensorID, m_xAxisKey);
                     if (xData.isEmpty() || xData.size() != yData.size()) {
                         qWarning() << "Time and measurement data size mismatch for session:" << session.getAttribute(SessionKeys::SessionId);
                         continue;
@@ -372,6 +372,15 @@ QString PlotWidget::determineGraphLayer(const GraphInfo &info, const QString &ho
 {
     // Always use the default layer
     return "highlighted";
+}
+
+void PlotWidget::setXAxisKey(const QString& key, const QString& label)
+{
+    if (key == m_xAxisKey) return;
+    m_xAxisKey   = key;
+    m_xAxisLabel = label;
+    customPlot->xAxis->setLabel(label);
+    updatePlot();                       // rebuild with new X data
 }
 
 } // namespace FlySight

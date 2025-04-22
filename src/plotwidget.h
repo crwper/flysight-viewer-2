@@ -50,6 +50,8 @@ public:
 
     static double interpolateY(const QCPGraph* graph, double x);
 
+    void setXAxisKey(const QString& key, const QString& label);
+
 signals:
     void sessionsSelected(const QList<QString> &sessionIds);
     void toolChanged(PlotWidget::Tool newTool);
@@ -95,6 +97,9 @@ private:
     bool m_updatingYAxis = false;
 
     std::unique_ptr<CrosshairManager> m_crosshairManager;
+
+    QString m_xAxisKey   = SessionKeys::TimeFromExit;
+    QString m_xAxisLabel = "Time from exit (s)";
 };
 
 } // namespace FlySight

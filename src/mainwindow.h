@@ -115,6 +115,7 @@ private:
     void initializeCalculatedMeasurements();
 
     // Helper methods for plot menu
+    void initializeXAxisMenu();
     void initializePlotsMenu();
     void togglePlot(const QString &sensorID, const QString &measurementID);
 
