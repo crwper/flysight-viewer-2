@@ -1,4 +1,4 @@
-# From the `third-party` folder:
+:: From the `third-party` folder:
 
 rmdir /s /q oneTBB-install
 cd oneTBB
@@ -8,7 +8,7 @@ cmake --build build --config Release && cmake --install build --config Release -
 cmake --build build --config Debug && cmake --install build --config Debug --prefix "..\oneTBB-install"
 cd ..
 
-# After commenting out `add_subdirectory (js)` in `gtsam/3rdparty/GeographicLib/CMakeLists.txt`
+:: After commenting out `add_subdirectory (js)` in `gtsam/3rdparty/GeographicLib/CMakeLists.txt`
 
 rmdir /s /q GTSAM-install
 cd GTSAM
