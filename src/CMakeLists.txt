@@ -45,7 +45,6 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         crosshairmanager.h crosshairmanager.cpp
         graphinfo.h
         imugnssekf.h imugnssekf.cpp
-
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET FlySightViewer APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
@@ -93,7 +92,6 @@ target_include_directories(FlySightViewer PRIVATE
     ${CMAKE_SOURCE_DIR}/../third-party/QCustomPlot
     ${CMAKE_SOURCE_DIR}/../third-party/Eigen
     ${CMAKE_SOURCE_DIR}/../third-party/oneTBB-install/include
-    ${CMAKE_SOURCE_DIR}/../third-party/GeographicLib-install/include
     ${CMAKE_SOURCE_DIR}/../third-party/GTSAM-install/include
 )
 
@@ -130,6 +128,8 @@ target_link_libraries(FlySightViewer PRIVATE
   optimized ${TBB_INSTALL_LIB_DIR}/tbb12.lib
   optimized ${TBB_INSTALL_LIB_DIR}/tbbmalloc.lib
 )
+
+set(BOOST_ROOT "C:/Program Files/Boost/boost_1_87_0")
 
 find_package(Boost REQUIRED)
 
