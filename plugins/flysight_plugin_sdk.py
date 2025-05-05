@@ -111,6 +111,21 @@ class DefaultExitTime(AttributePlugin):
         dt = datetime.fromtimestamp(t0, tz=timezone.utc)
         return dt.isoformat().replace("+00:00","Z")
 
+class DefaultTime(MeasurementPlugin):
+    units = "s"
+    def __init__(self, sensor: str, time: str):
+        self.name   = "_time"
+        self.sensor = sensor
+        self.time   = time
+    def inputs(self):
+        return [
+            meas(self.sensor, self.time),
+        ]
+    def compute(self, session):
+        raw = np.array(session.getMeasurement(self.sensor, self.time), float)
+        if raw.size==0: return None
+        return raw 
+
 class DefaultTimeFromExit(MeasurementPlugin):
     units = "s"
     def __init__(self, sensor: str):
