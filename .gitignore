@@ -37,3 +37,6 @@ secrets.h
 # PowerShell script
 /combine.ps1
 /combined.txt
+
+# Python plugin cache
+plugins/__pycache__/
