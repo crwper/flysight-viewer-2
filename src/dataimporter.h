@@ -19,7 +19,7 @@ public:
 
 private:
     // Enums and type definitions
-    enum class FS_FileType { FS1, FS2, Pitot };
+    enum class FS_FileType { FS1, FS2 };
     enum class FS_Section { HEADER, DATA };
 
     // Last import error

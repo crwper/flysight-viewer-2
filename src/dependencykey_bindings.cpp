@@ -9,12 +9,19 @@ void register_dependencykey(py::module_ &m) {
     // Bind the DependencyKey struct
     py::class_<DependencyKey> dk(m, "DependencyKey");
     dk
-        // default ctor
         .def(py::init<>())
         // expose the enum value
         .def_readwrite("kind", &DependencyKey::type)
-        // for Attributes
-        .def_readwrite("attributeKey", &DependencyKey::attributeKey)
+        // attributeKey as a Python string
+        .def_property("attributeKey",
+                      // getter: QString -> std::string
+                      [](DependencyKey const &self) {
+                          return self.attributeKey.toStdString();
+                      },
+                      // setter: std::string -> QString
+                      [](DependencyKey &self, std::string v) {
+                          self.attributeKey = QString::fromStdString(v);
+                      })
         // for Measurements we split the QPair into two string props:
         .def_property("sensorKey",
                       [](DependencyKey const &self) {

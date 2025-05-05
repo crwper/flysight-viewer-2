@@ -64,8 +64,35 @@ void PluginHost::initialise(const QString& pluginDir) {
 
         // Build dependency list
         QList<DependencyKey> deps;
-        for (py::handle d : plugin.attr("inputs")()) {
-            deps.append(d.cast<DependencyKey>());
+        try {
+            // call the Python inputs() and force it into a list
+            py::object raw = plugin.attr("inputs")();
+            py::list  inputs = raw.cast<py::list>();
+            // iterate the list
+            for (py::handle h : inputs) {
+                // h is a Python DependencyKey instance; extract its fields
+                py::object dk = h.cast<py::object>();
+                int kind = dk.attr("kind").cast<int>();  // enum value
+
+                if (kind == static_cast<int>(DependencyKey::Type::Attribute)) {
+                    // attributeKey
+                    std::string name = dk.attr("attributeKey").cast<std::string>();
+                    deps.append(DependencyKey::attribute(QString::fromStdString(name)));
+                } else {
+                    // measurement: sensorKey + measurementKey
+                    std::string sensor = dk.attr("sensorKey").cast<std::string>();
+                    std::string meas   = dk.attr("measurementKey").cast<std::string>();
+                    deps.append(DependencyKey::measurement(
+                        QString::fromStdString(sensor),
+                        QString::fromStdString(meas)));
+                }
+            }
+        } catch (const py::cast_error &e) {
+            qWarning() << "[PluginHost] inputs() did not return a list of DependencyKey:";
+            qWarning() << e.what();
+        } catch (const py::error_already_set &e) {
+            qWarning() << "[PluginHost] exception in inputs():";
+            qWarning() << e.what();
         }
 
         // Register into SessionData
@@ -78,7 +105,10 @@ void PluginHost::initialise(const QString& pluginDir) {
                 py::object out = plugin
                                      .attr("compute")(py::cast(&session,
                                                                py::return_value_policy::reference));
-
+                // if Python returned None => no result
+                if (out.is_none()) {
+                    return std::nullopt;
+                }
                 if (py::isinstance<py::float_>(out) ||
                     py::isinstance<py::int_>(out))
                 {
@@ -86,9 +116,15 @@ void PluginHost::initialise(const QString& pluginDir) {
                         out.cast<double>());
                 }
                 if (py::isinstance<py::str>(out)) {
-                    return QVariant::fromValue(
-                        QString::fromStdString(
-                            out.cast<std::string>()));
+                    QString s = QString::fromStdString(out.cast<std::string>());
+                    // try to parse an ISO timestamp into QDateTime
+                    QDateTime dt = QDateTime::fromString(s, Qt::ISODate);
+                    if (dt.isValid()) {
+                        return QVariant::fromValue(dt);
+                    } else {
+                        // fallback to plain string
+                        return QVariant::fromValue(s);
+                    }
                 }
                 return std::nullopt;
             }
@@ -103,9 +139,37 @@ void PluginHost::initialise(const QString& pluginDir) {
         QString name   = QString::fromStdString(
             plugin.attr("name").cast<std::string>());
 
+        // Build dependency list
         QList<DependencyKey> deps;
-        for (py::handle d : plugin.attr("inputs")()) {
-            deps.append(d.cast<DependencyKey>());
+        try {
+            // call the Python inputs() and force it into a list
+            py::object raw = plugin.attr("inputs")();
+            py::list  inputs = raw.cast<py::list>();
+            // iterate the list
+            for (py::handle h : inputs) {
+                // h is a Python DependencyKey instance; extract its fields
+                py::object dk = h.cast<py::object>();
+                int kind = dk.attr("kind").cast<int>();  // enum value
+
+                if (kind == static_cast<int>(DependencyKey::Type::Attribute)) {
+                    // attributeKey
+                    std::string name = dk.attr("attributeKey").cast<std::string>();
+                    deps.append(DependencyKey::attribute(QString::fromStdString(name)));
+                } else {
+                    // measurement: sensorKey + measurementKey
+                    std::string sensor = dk.attr("sensorKey").cast<std::string>();
+                    std::string meas   = dk.attr("measurementKey").cast<std::string>();
+                    deps.append(DependencyKey::measurement(
+                        QString::fromStdString(sensor),
+                        QString::fromStdString(meas)));
+                }
+            }
+        } catch (const py::cast_error &e) {
+            qWarning() << "[PluginHost] inputs() did not return a list of DependencyKey:";
+            qWarning() << e.what();
+        } catch (const py::error_already_set &e) {
+            qWarning() << "[PluginHost] exception in inputs():";
+            qWarning() << e.what();
         }
 
         SessionData::registerCalculatedMeasurement(
@@ -117,6 +181,10 @@ void PluginHost::initialise(const QString& pluginDir) {
                 py::object out = plugin
                                      .attr("compute")(py::cast(&session,
                                                                py::return_value_policy::reference));
+                // if Python returned None => no result
+                if (out.is_none()) {
+                    return std::nullopt;
+                }
                 auto buf = out.cast<
                     py::array_t<double,
                                 py::array::c_style |

@@ -2,6 +2,7 @@
 #include <pybind11/stl.h>
 #include <QString>
 #include <QVariant>
+#include <QDateTime>
 #include "sessiondata.h"
 
 namespace py = pybind11;
@@ -26,10 +27,16 @@ void register_sessiondata(py::module_ &m) {
         // session.getAttribute(key) → float, str, or None
         .def("getAttribute",
              [](SessionData &self, std::string key) -> py::object {
-                 QVariant v = self.getAttribute(
-                     QString::fromStdString(key));
+                 QVariant v = self.getAttribute(QString::fromStdString(key));
                  if (!v.isValid()) {
                      return py::none();
+                 }
+                 // QDateTime → ISO8601 string with ms + 'Z'
+                 if (v.canConvert<QDateTime>()) {
+                     QDateTime dt = v.toDateTime();
+                     dt.setTimeSpec(Qt::UTC);
+                     QString s = dt.toString(Qt::ISODateWithMs) + "Z";
+                     return py::cast(s.toStdString());
                  }
                  // numeric?
                  bool ok = false;
@@ -37,11 +44,10 @@ void register_sessiondata(py::module_ &m) {
                  if (ok) {
                      return py::cast(d);
                  }
-                 // string?
+                 // plain string?
                  if (v.type() == QVariant::String) {
                      return py::cast(v.toString().toStdString());
                  }
-                 // fallback
                  return py::none();
              },
              py::arg("key"))

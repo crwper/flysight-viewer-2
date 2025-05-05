@@ -44,8 +44,6 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
         fileType = FS_FileType::FS1;
     } else if (firstLine.startsWith("$FLYS")) {
         fileType = FS_FileType::FS2;
-    } else if (firstLine.startsWith("time,pressure")) {
-        fileType = FS_FileType::Pitot;
     } else {
         m_lastError = "Unknown file format";
         return false;
@@ -62,9 +60,6 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
     case FS_FileType::FS2:
         importFS2(in, sessionData);
         break;
-    case FS_FileType::Pitot:
-        importSimple(in, sessionData, "PITOT");
-        break;
     }
 
     // Set default description
@@ -78,8 +73,6 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
             break;
         case FS_FileType::FS2:
             extractDeviceId(fileName, sessionData, "Device_ID");
-            break;
-        case FS_FileType::Pitot:
             break;
         }
     }

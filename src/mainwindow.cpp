@@ -526,9 +526,6 @@ void MainWindow::registerBuiltInPlots()
         // Category: GNSS time
         {"GNSS time", "Time of week", "s", QColor::fromHsl(0, 0, 64), "TIME", "tow"},
         {"GNSS time", "Week number", "", QColor::fromHsl(0, 0, 128), "TIME", "week"},
-
-        // Category: Pitot tube
-        {"Pitot tube", "Air pressure", "Pa", QColor::fromHsl(0, 0, 64), "PITOT", "pressure"},
     };
 
     for (auto &pv : defaults)
@@ -674,23 +671,7 @@ void MainWindow::initializeCalculatedAttributes()
         return QDateTime::fromMSecsSinceEpoch((qint64)(time.back() * 1000.0), QTimeZone::utc());
     });
 
-    SessionData::registerCalculatedAttribute(
-        SessionKeys::ExitTime,
-        {
-            DependencyKey::measurement("PITOT", "_time")
-        },
-        [](SessionData& session) -> std::optional<QVariant> {
-        QVector<double> time = session.getMeasurement("PITOT", "_time");
-
-        if (time.isEmpty()) {
-            qWarning() << "Insufficient data to calculate exit time.";
-            return std::nullopt;
-        }
-
-        return QDateTime::fromMSecsSinceEpoch((qint64)(time.back() * 1000.0), QTimeZone::utc());
-    });
-
-    QStringList sensors = {"GNSS", "PITOT"};
+    QStringList sensors = {"GNSS"};
     for (const QString &sens : sensors) {
         SessionData::registerCalculatedAttribute(
             SessionKeys::StartTime,
@@ -1020,8 +1001,8 @@ void MainWindow::initializeCalculatedMeasurements()
         return result;
     };
 
-    // Register for GNSS and pitot tube
-    const QStringList gnss_sensors = {"GNSS", "PITOT"};
+    // Register for GNSS
+    const QStringList gnss_sensors = {"GNSS"};
     for (const QString &sens : gnss_sensors) {
         SessionData::registerCalculatedMeasurement(
             sens, SessionKeys::Time,
@@ -1081,7 +1062,7 @@ void MainWindow::initializeCalculatedMeasurements()
     };
 
     // Register for all sensors
-    QStringList all_sensors = {"GNSS", "BARO", "HUM", "MAG", "IMU", "TIME", "VBAT", "PITOT"};
+    QStringList all_sensors = {"GNSS", "BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
     for (const QString &sens : all_sensors) {
         SessionData::registerCalculatedMeasurement(
             sens, SessionKeys::TimeFromExit,
@@ -1093,32 +1074,6 @@ void MainWindow::initializeCalculatedMeasurements()
             return compute_time_from_exit(s, sens);
         });
     }
-
-    SessionData::registerCalculatedMeasurement(
-        "PITOT", "pressure",
-        {
-            DependencyKey::measurement("PITOT", "raw"),
-            DependencyKey::attribute("CAL_M"),
-            DependencyKey::attribute("CAL_B")
-        },
-        [](SessionData& session) -> std::optional<QVector<double>> {
-            QVector<double> raw = session.getMeasurement("PITOT", "raw");
-            double calM = session.getAttribute("CAL_M").toDouble();
-            double calB = session.getAttribute("CAL_B").toDouble();
-
-            if (raw.isEmpty()) {
-                qWarning() << "Cannot calculate pressure due to missing raw";
-                return std::nullopt;
-            }
-
-            QVector<double> pressure;
-            pressure.reserve(raw.size());
-            for(int i = 0; i < raw.size(); ++i){
-                pressure.append(calM * raw[i] + calB);
-            }
-            return pressure;
-        });
-
     SessionData::registerCalculatedMeasurement(
         "GNSS", "accD",
         {
