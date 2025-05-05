@@ -629,14 +629,14 @@ void MainWindow::initializeCalculatedAttributes()
             DependencyKey::measurement("GNSS", "velD"),
             DependencyKey::measurement("GNSS", "sAcc"),
             DependencyKey::measurement("GNSS", "accD"),
-            DependencyKey::measurement("GNSS", "_time")
+            DependencyKey::measurement("GNSS", SessionKeys::Time)
         },
         [](SessionData& session) -> std::optional<QVariant> {
         // Find the first timestamp where vertical speed drops below a threshold
         QVector<double> velD = session.getMeasurement("GNSS", "velD");
         QVector<double> sAcc = session.getMeasurement("GNSS", "sAcc");
         QVector<double> accD = session.getMeasurement("GNSS", "accD");
-        QVector<double> time = session.getMeasurement("GNSS", "_time");
+        QVector<double> time = session.getMeasurement("GNSS", SessionKeys::Time);
 
         if (velD.isEmpty() || time.isEmpty() || velD.size() != time.size()) {
             qWarning() << "Insufficient data to calculate exit time.";
@@ -671,16 +671,17 @@ void MainWindow::initializeCalculatedAttributes()
         return QDateTime::fromMSecsSinceEpoch((qint64)(time.back() * 1000.0), QTimeZone::utc());
     });
 
-    QStringList sensors = {"GNSS"};
-    for (const QString &sens : sensors) {
+    // Register for all sensors
+    QStringList all_sensors = {"GNSS", "BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
+    for (const QString &sens : all_sensors) {
         SessionData::registerCalculatedAttribute(
             SessionKeys::StartTime,
             {
-                DependencyKey::measurement(sens, "time")
+                DependencyKey::measurement(sens, SessionKeys::Time)
             },
             [sens](SessionData &session) -> std::optional<QVariant> {
             // Retrieve GNSS/time measurement
-            QVector<double> times = session.getMeasurement(sens, "time");
+            QVector<double> times = session.getMeasurement(sens, SessionKeys::Time);
             if (times.isEmpty()) {
                 qWarning() << "No " << sens << "/time data available to calculate start time.";
                 return std::nullopt;
@@ -693,10 +694,10 @@ void MainWindow::initializeCalculatedAttributes()
         SessionData::registerCalculatedAttribute(
             SessionKeys::Duration,
             {
-                DependencyKey::measurement(sens, "time")
+                DependencyKey::measurement(sens, SessionKeys::Time)
             },
             [sens](SessionData &session) -> std::optional<QVariant> {
-            QVector<double> times = session.getMeasurement(sens, "time");
+            QVector<double> times = session.getMeasurement(sens, SessionKeys::Time);
             if (times.isEmpty()) {
                 qWarning() << "No " << sens << "/time data available to calculate duration.";
                 return std::nullopt;
