@@ -1,4 +1,5 @@
-import datetime, numpy as np
+import numpy as np
+from datetime import datetime, timezone
 from flysight_plugin_sdk import AttributePlugin, attr, register_attribute
 from flysight_plugin_sdk import MeasurementPlugin, meas, register_measurement
 from flysight_plugin_sdk import SimplePlot, register_plot
@@ -19,9 +20,9 @@ class PitotExitTime(AttributePlugin):
 
         # last timestamp
         last_sec = float(times[-1])
-        dt = datetime.datetime.utcfromtimestamp(last_sec)
+        dt = datetime.fromtimestamp(last_sec, tz=timezone.utc)
         # return ISO8601 with fractional seconds; C++ will parse this into QDateTime
-        return dt.isoformat() + "Z"
+        return dt.isoformat().replace("+00:00", "Z")
 
 register_attribute(PitotExitTime())
 
@@ -39,9 +40,9 @@ class PitotStartTime(AttributePlugin):
 
         # earliest timestamp
         start_sec = float(np.min(times))
-        dt = datetime.datetime.utcfromtimestamp(start_sec)
+        dt = datetime.fromtimestamp(start_sec, tz=timezone.utc)
         # return ISO8601 with fractional seconds; C++ will parse this into QDateTime
-        return dt.isoformat() + "Z"
+        return dt.isoformat().replace("+00:00", "Z")
 
 register_attribute(PitotStartTime())
 
@@ -115,7 +116,7 @@ class PitotTimeFromExit(MeasurementPlugin):
         # parse into a timestamp (float seconds since epoch)
         # strip trailing Z, then fromisoformat
         try:
-            dt = datetime.datetime.fromisoformat(exit_iso.rstrip("Z"))
+            dt = datetime.fromisoformat(exit_iso.replace("Z", "+00:00"))
             exit_ts = dt.timestamp()
         except ValueError:
             return None

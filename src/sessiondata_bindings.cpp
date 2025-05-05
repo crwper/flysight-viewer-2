@@ -34,8 +34,10 @@ void register_sessiondata(py::module_ &m) {
                  // QDateTime → ISO8601 string with ms + 'Z'
                  if (v.canConvert<QDateTime>()) {
                      QDateTime dt = v.toDateTime();
-                     dt.setTimeSpec(Qt::UTC);
-                     QString s = dt.toString(Qt::ISODateWithMs) + "Z";
+                     // 1. Convert the time value to UTC
+                     QDateTime utcDt = dt.toUTC();
+                     // 2. Format the UTC time using the desired ISO format
+                     QString s = utcDt.toString(Qt::ISODate);
                      return py::cast(s.toStdString());
                  }
                  // numeric?
