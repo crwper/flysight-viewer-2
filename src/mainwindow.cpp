@@ -14,6 +14,7 @@
 #include "dataimporter.h"
 #include "dependencykey.h"
 #include "plotwidget.h"
+#include "pluginhost.h"
 #include "preferences/preferencesdialog.h"
 #include "preferences/preferencesmanager.h"
 #include "sessiondata.h"
@@ -35,6 +36,13 @@ MainWindow::MainWindow(QWidget *parent)
     // Initialize calculated values
     initializeCalculatedAttributes();
     initializeCalculatedMeasurements();
+
+    // Initialize plugin calculations
+    QString defaultDir = QCoreApplication::applicationDirPath() + "/plugins";
+    QString pluginDir = qEnvironmentVariable("FLYSIGHT_PLUGINS", defaultDir);
+
+    registerBuiltInPlots();
+    PluginHost::instance().initialise(pluginDir);
 
     // Add logbook view
     QDockWidget *logbookDock = new QDockWidget(tr("Logbook"), this);
@@ -465,23 +473,13 @@ void MainWindow::onPlotWidgetToolChanged(PlotWidget::Tool t)
     }
 }
 
-void MainWindow::setupPlotValues()
+void MainWindow::registerBuiltInPlots()
 {
-    // Create the dock widget
-    plotDock = new QDockWidget(tr("Plot Selection"), this);
-    plotTreeView = new QTreeView(plotDock);
-    plotDock->setWidget(plotTreeView);
-    addDockWidget(Qt::LeftDockWidgetArea, plotDock);
-
-    // Attach the model
-    plotTreeView->setModel(plotModel);
-    plotTreeView->setHeaderHidden(true);
-    plotTreeView->setEditTriggers(QAbstractItemView::NoEditTriggers);
-
     // Angular spread for grouped colours
     const int group_a = 40;
 
-    QVector<PlotValue> plotValues = {
+    // use the exact vector you already have…
+    QVector<PlotValue> defaults = {
         // Category: GNSS
         {"GNSS", "Elevation", "m", Qt::black, "GNSS", "z"},
         {"GNSS", "Horizontal speed", "m/s", Qt::red, "GNSS", "velH"},
@@ -533,7 +531,25 @@ void MainWindow::setupPlotValues()
         {"Pitot tube", "Air pressure", "Pa", QColor::fromHsl(0, 0, 64), "PITOT", "pressure"},
     };
 
+    for (auto &pv : defaults)
+        PlotRegistry::instance().registerPlot(pv);
+}
+
+void MainWindow::setupPlotValues()
+{
+    // Create the dock widget
+    plotDock = new QDockWidget(tr("Plot Selection"), this);
+    plotTreeView = new QTreeView(plotDock);
+    plotDock->setWidget(plotTreeView);
+    addDockWidget(Qt::LeftDockWidgetArea, plotDock);
+
+    // Attach the model
+    plotTreeView->setModel(plotModel);
+    plotTreeView->setHeaderHidden(true);
+    plotTreeView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
     // Populate the model with plot values and track the first checked item
+    QVector<PlotValue> plotValues = PlotRegistry::instance().allPlots();
     populatePlotModel(plotModel, plotValues);
 
     // Connect to clicked signal to handle plot selection

@@ -8,6 +8,7 @@
 #include "sessionmodel.h"
 #include "logbookview.h"
 #include "plotwidget.h"
+#include "plotregistry.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -54,16 +55,6 @@ private slots:
     void onPlotWidgetToolChanged(PlotWidget::Tool t);
 
 private:
-    // Plot values
-    struct PlotValue {
-        QString category;          // Category name
-        QString plotName;          // Display name of the plot
-        QString plotUnits;         // Units for the y-axis
-        QColor defaultColor;       // Default color for the plot
-        QString sensorID;          // Sensor name (e.g., "GNSS")
-        QString measurementID;     // Measurement name (e.g., "hMSL")
-    };
-
     enum class PlotMenuItemType {
         Regular,
         Separator
@@ -101,6 +92,7 @@ private:
     QActionGroup *toolActionGroup;
 
     // Helper functions for plot values
+    static void registerBuiltInPlots();
     void setupPlotValues();
     void populatePlotModel(QStandardItemModel* plotModel, const QVector<PlotValue>& plotValues);
 
