@@ -174,6 +174,11 @@ void MainWindow::importFiles(
         return;
     }
 
+    // honour whatever the user picked in the Horizontal-Axis menu
+    const QString xAxisKey = m_settings
+                                 ->value("plot/xAxisKey", SessionKeys::TimeFromExit)
+                                 .toString();
+
     // Initialize a map to collect failed imports with error messages
     QMap<QString, QString> failedImports;
 
@@ -208,7 +213,7 @@ void MainWindow::importFiles(
 
                 // Collect min and max time from tempSessionData
                 for (const QString &sensorKey : tempSessionData.sensorKeys()) {
-                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, SessionKeys::TimeFromExit);
+                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, xAxisKey);
                     if (!times.isEmpty()) {
                         double minTime = *std::min_element(times.begin(), times.end());
                         double maxTime = *std::max_element(times.begin(), times.end());
@@ -254,7 +259,7 @@ void MainWindow::importFiles(
 
                 // Collect min and max time from tempSessionData
                 for (const QString &sensorKey : tempSessionData.sensorKeys()) {
-                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, SessionKeys::TimeFromExit);
+                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, xAxisKey);
                     if (!times.isEmpty()) {
                         double minTime = *std::min_element(times.begin(), times.end());
                         double maxTime = *std::max_element(times.begin(), times.end());
@@ -1147,47 +1152,64 @@ void MainWindow::initializeCalculatedMeasurements()
 
 void MainWindow::initializeXAxisMenu()
 {
-    // Access the 'Plots' menu from the UI
-    QMenu *plotsMenu = ui->menuPlots;
+    // 1) pull in the saved key (default to TimeFromExit)
+    const QString savedKey = m_settings
+                                 ->value("plot/xAxisKey", SessionKeys::TimeFromExit)
+                                 .toString();
 
+    // 2) define all of your possible axes in one place
+    struct AxisChoice {
+        QString        menuText;
+        QKeySequence   shortcut;
+        QString        key;
+        QString        axisLabel;
+    };
+    const AxisChoice choices[] = {
+        { tr("Time from Exit"),
+         QKeySequence(Qt::CTRL | Qt::Key_1),
+         SessionKeys::TimeFromExit,
+         tr("Time from exit (s)") },
+        { tr("UTC Time"),
+         QKeySequence(Qt::CTRL | Qt::Key_2),
+         SessionKeys::Time,
+         tr("Time (s)") }
+    };
+
+    // 3) create the submenu and an exclusive group
+    QMenu* plotsMenu = ui->menuPlots;
     QMenu* xAxisMenu = plotsMenu->addMenu(tr("Horizontal Axis"));
     plotsMenu->addSeparator();
 
-    auto* axisGroup  = new QActionGroup(this);
+    QActionGroup* axisGroup = new QActionGroup(this);
     axisGroup->setExclusive(true);
 
-    auto addAxisChoice = [&](const QString& text,
-                             const QKeySequence& shortcut,
-                             const QString& key,
-                             const QString& label,
-                             bool checked)
-    {
-        QAction* a = xAxisMenu->addAction(text);
+    // 4) build each QAction in a loop
+    for (const AxisChoice& ch : choices) {
+        QAction* a = xAxisMenu->addAction(ch.menuText);
         a->setCheckable(true);
-        a->setShortcut(shortcut);
-        a->setChecked(checked);
+        a->setShortcut(ch.shortcut);
+        a->setChecked(ch.key == savedKey);
+
+        // stash key & label so we can grab them later
+        a->setData(ch.key);
+        a->setProperty("axisLabel", ch.axisLabel);
+
         axisGroup->addAction(a);
-        connect(a, &QAction::triggered, this,[=]{
+
+        connect(a, &QAction::triggered, this, [=]{
+            const QString key   = a->data().toString();
+            const QString label = a->property("axisLabel").toString();
             plotWidget->setXAxisKey(key, label);
             m_settings->setValue("plot/xAxisKey", key);
         });
-    };
+    }
 
-    addAxisChoice(tr("Time from Exit"),
-                  QKeySequence(Qt::CTRL | Qt::Key_1),
-                  SessionKeys::TimeFromExit,
-                  tr("Time from exit (s)"),
-                  m_settings->value("plot/xAxisKey",
-                                    SessionKeys::TimeFromExit).toString()
-                      == SessionKeys::TimeFromExit);
-
-    addAxisChoice(tr("UTC Time"),
-                  QKeySequence(Qt::CTRL | Qt::Key_2),
-                  SessionKeys::Time,
-                  tr("Time (s)"),
-                  m_settings->value("plot/xAxisKey",
-                                    SessionKeys::TimeFromExit).toString()
-                      == SessionKeys::Time);
+    // 5) finally, apply the saved choice now that the menu is built
+    if (QAction* init = axisGroup->checkedAction()) {
+        const QString key   = init->data().toString();
+        const QString label = init->property("axisLabel").toString();
+        plotWidget->setXAxisKey(key, label);
+    }
 }
 
 void MainWindow::initializePlotsMenu()
