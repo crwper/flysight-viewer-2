@@ -1,4 +1,5 @@
 #include "setgroundtool.h"
+#include "mainwindow.h"               // for currentXAxisKey()
 #include "../plotwidget.h"
 #include "../qcustomplot/qcustomplot.h"
 
@@ -15,77 +16,70 @@ SetGroundTool::SetGroundTool(const PlotWidget::PlotContext &ctx)
 {
 }
 
-/*!
- * \brief computeGroundElevation
- * Looks up the session’s “GNSS/hMSL” array and the matching “GNSS/TimeFromExit” array
- * to interpolate a ground elevation at the given xFromExit.
- */
-double SetGroundTool::computeGroundElevation(SessionData &session, double xFromExit) const
+double SetGroundTool::computeGroundElevation(SessionData &session, double xCoord) const
 {
-    constexpr char sensorGNSS[]  = "GNSS";
-    constexpr char measurementH[] = "hMSL";
-    QString timeFromExitKey = SessionKeys::TimeFromExit;
+    // 1) fetch the current time-measurement key from MainWindow
+    auto *mw = qobject_cast<MainWindow*>(m_widget->parentWidget());
+    const QString timeKey = mw
+                                ? mw->currentXAxisKey()
+                                : SessionKeys::TimeFromExit;  // safe fallback
 
-    QVector<double> timeArr = session.getMeasurement(sensorGNSS, timeFromExitKey);
-    QVector<double> hmslArr = session.getMeasurement(sensorGNSS, measurementH);
+    constexpr char sensor[] = "GNSS";
+    constexpr char measH[]  = "hMSL";
 
-    if (timeArr.size() < 2 || timeArr.size() != hmslArr.size()) {
-        qWarning() << "[SetGroundTool] In computeGroundElevation():"
-                   << "mismatched or insufficient data in GNSS/timeFromExit and GNSS/hMSL";
+    const auto times      = session.getMeasurement(sensor, timeKey);
+    const auto elevations = session.getMeasurement(sensor, measH);
+
+    const int n = times.size();
+    if (n < 2 || n != elevations.size()) {
+        qWarning() << "[SetGroundTool] Bad data sizes:"
+                   << "times=" << n << "elevations=" << elevations.size();
         return std::numeric_limits<double>::quiet_NaN();
     }
 
-    double minX = timeArr.first();
-    double maxX = timeArr.last();
-    if (xFromExit < minX || xFromExit > maxX)
+    // 2) out-of-bounds?
+    if (xCoord < times.first() || xCoord > times.last()) {
         return std::numeric_limits<double>::quiet_NaN();
-
-    for (int i = 0; i < timeArr.size() - 1; ++i) {
-        double x1 = timeArr[i];
-        double x2 = timeArr[i+1];
-        double y1 = hmslArr[i];
-        double y2 = hmslArr[i+1];
-
-        if (xFromExit == x1)
-            return y1;
-        if (xFromExit == x2)
-            return y2;
-
-        if (x1 <= xFromExit && xFromExit < x2) {
-            double t = (xFromExit - x1) / (x2 - x1);
-            return y1 + t * (y2 - y1);
-        }
     }
 
-    return hmslArr.last();
+    // 3) find insertion point
+    auto it = std::lower_bound(times.constBegin(), times.constEnd(), xCoord);
+    int idx = std::clamp<int>(int(it - times.constBegin()), 1, n - 1);
+
+    // exact matches?
+    if (qFuzzyCompare(xCoord, times[idx]))     return elevations[idx];
+    if (qFuzzyCompare(xCoord, times[idx-1]))   return elevations[idx-1];
+
+    // 4) linear interpolate
+    double x1 = times[idx-1], x2 = times[idx];
+    double y1 = elevations[idx-1], y2 = elevations[idx];
+    double t  = (xCoord - x1) / (x2 - x1);
+
+    return y1 + t * (y2 - y1);
 }
 
 bool SetGroundTool::mousePressEvent(QMouseEvent *event)
 {
-    if (!m_plot || !m_model)
+    // only left-button clicks, and only if plot+model exist
+    if (!m_plot || !m_model || event->button() != Qt::LeftButton)
         return false;
 
-    if (event->button() != Qt::LeftButton)
-        return false;
+    // 1) pixel → data coordinate
+    double xCoord = m_plot->xAxis->pixelToCoord(event->pos().x());
 
-    double xFromExit = m_plot->xAxis->pixelToCoord(event->pos().x());
-    QString hoveredId = m_model->hoveredSessionId();
-
-    if (!hoveredId.isEmpty()) {
-        // compute ground for that session
-        int row = m_model->getSessionRow(hoveredId);
+    // 2) if hovering over exactly one session, set its ground elev
+    const QString hovered = m_model->hoveredSessionId();
+    if (!hovered.isEmpty()) {
+        int row = m_model->getSessionRow(hovered);
         if (row >= 0) {
-            SessionData &sd = m_model->sessionRef(row);
-            double newElev = computeGroundElevation(sd, xFromExit);
-            m_model->updateAttribute(hoveredId, SessionKeys::GroundElev, newElev);
+            SessionData &session = m_model->sessionRef(row);
+            double newElev = computeGroundElevation(session, xCoord);
+            m_model->updateAttribute(hovered, SessionKeys::GroundElev, newElev);
         }
-    } else {
-        // fallback: if no single hovered session,
-        // do your "multi-graph" approach if you still want that
-        // ...
     }
+    // else: multi-session fallback could go here
 
-    // revert to primary tool
+    // 3) clean up
     m_widget->revertToPrimaryTool();
     return true;
 }

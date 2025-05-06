@@ -175,9 +175,7 @@ void MainWindow::importFiles(
     }
 
     // honour whatever the user picked in the Horizontal-Axis menu
-    const QString xAxisKey = m_settings
-                                 ->value("plot/xAxisKey", SessionKeys::TimeFromExit)
-                                 .toString();
+    const QString xAxisKey = currentXAxisKey();
 
     // Initialize a map to collect failed imports with error messages
     QMap<QString, QString> failedImports;
@@ -1153,9 +1151,7 @@ void MainWindow::initializeCalculatedMeasurements()
 void MainWindow::initializeXAxisMenu()
 {
     // 1) pull in the saved key (default to TimeFromExit)
-    const QString savedKey = m_settings
-                                 ->value("plot/xAxisKey", SessionKeys::TimeFromExit)
-                                 .toString();
+    const QString savedKey = currentXAxisKey();
 
     // 2) define all of your possible axes in one place
     struct AxisChoice {
@@ -1200,7 +1196,7 @@ void MainWindow::initializeXAxisMenu()
             const QString key   = a->data().toString();
             const QString label = a->property("axisLabel").toString();
             plotWidget->setXAxisKey(key, label);
-            m_settings->setValue("plot/xAxisKey", key);
+            setXAxisKey(key);
         });
     }
 
@@ -1368,5 +1364,15 @@ void MainWindow::setupPlotTools()
     ui->action_Pan->setChecked(true);
 }
 
+// Accessors for persisting the current x-axis measurement key
+QString MainWindow::currentXAxisKey() const {
+    return m_settings
+        ->value("plot/xAxisKey", SessionKeys::TimeFromExit)
+        .toString();
+}
+
+void MainWindow::setXAxisKey(const QString &key) {
+    m_settings->setValue("plot/xAxisKey", key);
+}
 
 } // namespace FlySight

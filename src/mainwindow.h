@@ -33,6 +33,9 @@ public:
         PlotUnitsRole
     };
 
+    // Accessors for persisting the current x-axis measurement key
+    QString currentXAxisKey() const;
+
 signals:
     void plotValueSelected(const QModelIndex &selectedIndex);
     void newTimeRange(double min, double max);
@@ -116,6 +119,9 @@ private:
 
     // Plot tools
     void setupPlotTools();
+
+    // Accessors for persisting the current x-axis measurement key
+    void setXAxisKey(const QString &key);
 };
 
 } // namespace FlySight

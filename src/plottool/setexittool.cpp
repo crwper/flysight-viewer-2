@@ -1,4 +1,5 @@
 #include "setexittool.h"
+#include "mainwindow.h"           // for currentXAxisKey()
 #include "../plotwidget.h"
 #include "../qcustomplot/qcustomplot.h"
 
@@ -17,42 +18,48 @@ SetExitTool::SetExitTool(const PlotWidget::PlotContext &ctx)
 
 bool SetExitTool::mousePressEvent(QMouseEvent *event)
 {
-    if (!m_plot || !m_model) {
+    // only left-click, and only if we have a plot + model
+    if (!m_plot || !m_model || event->button() != Qt::LeftButton)
         return false;
-    }
-    if (event->button() != Qt::LeftButton) {
-        return false;
-    }
 
-    // Figure out the xFromExit from the mouse click
-    double xFromExit = m_plot->xAxis->pixelToCoord(event->pos().x());
+    // 1) pixel → axis coordinate (could be seconds-from-exit or epoch secs)
+    double xCoord = m_plot->xAxis->pixelToCoord(event->pos().x());
 
-    // We'll do the same logic as before:
-    // If the user wants to set exit time for whichever session is hovered,
-    // we can check model->hoveredSessionId() now:
-    QString hoveredId = m_model->hoveredSessionId();
-    if (!hoveredId.isEmpty()) {
-        // update that one session
-        int row = m_model->getSessionRow(hoveredId);
+    // 2) lookup current mode from MainWindow
+    auto *mw = qobject_cast<MainWindow*>(m_widget->parentWidget());
+    const QString axisKey = mw
+                                ? mw->currentXAxisKey()
+                                : SessionKeys::TimeFromExit;  // fallback
+
+    // 3) if we’re over a single session, update its ExitTime
+    const QString hovered = m_model->hoveredSessionId();
+    if (!hovered.isEmpty()) {
+        int row = m_model->getSessionRow(hovered);
         if (row >= 0) {
             SessionData &session = m_model->sessionRef(row);
-            // do your old "computeNewExit" logic
-            QVariant oldExitVar = session.getAttribute(SessionKeys::ExitTime);
-            if (oldExitVar.canConvert<QDateTime>()) {
-                QDateTime oldExit = oldExitVar.toDateTime();
-                double oldEpoch = oldExit.toMSecsSinceEpoch() / 1000.0;
-                double newEpoch = oldEpoch + xFromExit;
-                QDateTime newExit = QDateTime::fromMSecsSinceEpoch(static_cast<qint64>(newEpoch * 1000.0), QTimeZone::utc());
-                m_model->updateAttribute(hoveredId, SessionKeys::ExitTime, newExit);
+            QVariant oldVar = session.getAttribute(SessionKeys::ExitTime);
+            if (oldVar.canConvert<QDateTime>()) {
+                QDateTime newExit;
+                if (axisKey == SessionKeys::TimeFromExit) {
+                    // relative mode: add xCoord seconds to existing exit
+                    QDateTime oldExit = oldVar.toDateTime();
+                    double oldSec = oldExit.toMSecsSinceEpoch() / 1000.0;
+                    newExit = QDateTime::fromMSecsSinceEpoch(
+                        qint64((oldSec + xCoord) * 1000.0),
+                        QTimeZone::utc());
+                } else {
+                    // absolute UTC mode: treat xCoord as epoch seconds
+                    newExit = QDateTime::fromMSecsSinceEpoch(
+                        qint64(xCoord * 1000.0),
+                        QTimeZone::utc());
+                }
+                m_model->updateAttribute(hovered, SessionKeys::ExitTime, newExit);
             }
         }
-    } else {
-        // fallback: if no single hovered session,
-        // do your "multi-graph" approach if you still want that
-        // ...
     }
+    // else: multi-session fallback could go here
 
-    // revert to primary tool
+    // 4) done — go back to your primary tool
     m_widget->revertToPrimaryTool();
     return true;
 }
