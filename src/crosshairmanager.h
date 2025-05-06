@@ -48,6 +48,9 @@ public:
     //! to keep the crosshair lines in sync if needed
     void updateIfOverPlotArea();
 
+    //! Returns the set of session IDs currently marked by a visible tracer.
+    QSet<QString> getTracedSessionIds() const;
+
 private:
     // Create crosshair lines if needed
     void ensureCrosshairCreated();
@@ -91,6 +94,9 @@ private:
 
     // Each graph can have its own tracer. We'll create them on demand.
     QMap<QCPGraph*, QCPItemTracer*> m_tracers;
+
+    // Keep track of which sessions have visible tracers
+    QSet<QString> m_currentlyTracedSessionIds;
 };
 
 } // namespace FlySight

@@ -1,6 +1,7 @@
 #include "setgroundtool.h"
 #include "mainwindow.h"               // for currentXAxisKey()
 #include "../plotwidget.h"
+#include "../crosshairmanager.h"
 #include "../qcustomplot/qcustomplot.h"
 
 #include <QMouseEvent>
@@ -67,17 +68,20 @@ bool SetGroundTool::mousePressEvent(QMouseEvent *event)
     // 1) pixel → data coordinate
     double xCoord = m_plot->xAxis->pixelToCoord(event->pos().x());
 
-    // 2) if hovering over exactly one session, set its ground elev
-    const QString hovered = m_model->hoveredSessionId();
-    if (!hovered.isEmpty()) {
-        int row = m_model->getSessionRow(hovered);
+    // 2) Get traced sessions from CrosshairManager via PlotWidget
+    CrosshairManager* crosshairMgr = m_widget->crosshairManager();
+    if (!crosshairMgr) return false; // Safety check
+
+    QSet<QString> tracedIds = crosshairMgr->getTracedSessionIds();
+
+    for (const QString& sessionId : tracedIds) {
+        int row = m_model->getSessionRow(sessionId);
         if (row >= 0) {
             SessionData &session = m_model->sessionRef(row);
             double newElev = computeGroundElevation(session, xCoord);
-            m_model->updateAttribute(hovered, SessionKeys::GroundElev, newElev);
+            m_model->updateAttribute(sessionId, SessionKeys::GroundElev, newElev);
         }
     }
-    // else: multi-session fallback could go here
 
     // 3) clean up
     m_widget->revertToPrimaryTool();

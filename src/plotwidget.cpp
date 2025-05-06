@@ -131,6 +131,11 @@ void PlotWidget::handleSessionsSelected(const QList<QString> &sessionIds)
     emit sessionsSelected(sessionIds);
 }
 
+CrosshairManager* PlotWidget::crosshairManager() const
+{
+    return m_crosshairManager.get();
+}
+
 // Slots
 void PlotWidget::updatePlot()
 {

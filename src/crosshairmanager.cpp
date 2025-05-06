@@ -50,6 +50,9 @@ void CrosshairManager::setEnabled(bool enabled)
         // Also clear hovered session
         if (m_model)
             m_model->setHoveredSessionId(QString());
+
+        // Clear traced IDs
+        m_currentlyTracedSessionIds.clear();
     } else {
         // if enabling, we won't do anything until the next mouseMove
     }
@@ -77,6 +80,9 @@ void CrosshairManager::handleMouseMove(const QPoint &pixelPos)
         // Clear hovered session
         if (m_model)
             m_model->setHoveredSessionId(QString());
+
+        // Clear traced IDs
+        m_currentlyTracedSessionIds.clear();
     }
 
     // If still over the plot, update crosshair and tracers
@@ -99,6 +105,9 @@ void CrosshairManager::handleMouseLeave()
         // Clear hovered session
         if (m_model)
             m_model->setHoveredSessionId(QString());
+
+        // Clear traced IDs
+        m_currentlyTracedSessionIds.clear();
     }
 }
 
@@ -178,6 +187,11 @@ void CrosshairManager::updateTracers(const QPoint &pixelPos)
     // single-tracer if nearest graph is within threshold
     double bestDist = 999999.0;
     QCPGraph *closest = findClosestGraph(pixelPos, bestDist);
+    double xPlot = m_plot->xAxis->pixelToCoord(pixelPos.x());
+
+    // Start Tracer Update
+    hideAllTracers();
+    m_currentlyTracedSessionIds.clear();
 
     // We'll assume single-tracer if dist < threshold, else multi-tracer
     if (closest && bestDist < m_pixelThreshold) {
@@ -204,6 +218,7 @@ void CrosshairManager::updateTracers(const QPoint &pixelPos)
             tr->setPen(it.value().defaultPen);
             tr->setBrush(it.value().defaultPen.color());
             tr->setVisible(true);
+            m_currentlyTracedSessionIds.insert(it.value().sessionId);
         }
     } else {
         if (m_model)
@@ -224,6 +239,7 @@ void CrosshairManager::updateTracers(const QPoint &pixelPos)
             tr->setPen(it.value().defaultPen);
             tr->setBrush(it.value().defaultPen.color());
             tr->setVisible(true);
+            m_currentlyTracedSessionIds.insert(it.value().sessionId);
         }
     }
 
@@ -280,6 +296,11 @@ QCPGraph* CrosshairManager::findClosestGraph(const QPoint &pixelPos, double &dis
         }
     }
     return closest;
+}
+
+QSet<QString> CrosshairManager::getTracedSessionIds() const
+{
+    return m_currentlyTracedSessionIds;
 }
 
 } // namespace FlySight

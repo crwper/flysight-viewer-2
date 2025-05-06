@@ -47,6 +47,7 @@ public:
     void revertToPrimaryTool();
     void setXAxisRange(double min, double max);
     void handleSessionsSelected(const QList<QString> &sessionIds);
+    CrosshairManager* crosshairManager() const;
 
     static double interpolateY(const QCPGraph* graph, double x);
 

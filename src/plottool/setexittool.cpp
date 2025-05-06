@@ -1,6 +1,7 @@
 #include "setexittool.h"
 #include "mainwindow.h"           // for currentXAxisKey()
 #include "../plotwidget.h"
+#include "../crosshairmanager.h"
 #include "../qcustomplot/qcustomplot.h"
 
 #include <QMouseEvent>
@@ -31,10 +32,14 @@ bool SetExitTool::mousePressEvent(QMouseEvent *event)
                                 ? mw->currentXAxisKey()
                                 : SessionKeys::TimeFromExit;  // fallback
 
-    // 3) if we’re over a single session, update its ExitTime
-    const QString hovered = m_model->hoveredSessionId();
-    if (!hovered.isEmpty()) {
-        int row = m_model->getSessionRow(hovered);
+    // 3) Get traced sessions from CrosshairManager via PlotWidget
+    CrosshairManager* crosshairMgr = m_widget->crosshairManager();
+    if (!crosshairMgr) return false; // Safety check
+
+    QSet<QString> tracedIds = crosshairMgr->getTracedSessionIds();
+
+    for (const QString& sessionId : tracedIds) {
+        int row = m_model->getSessionRow(sessionId);
         if (row >= 0) {
             SessionData &session = m_model->sessionRef(row);
             QVariant oldVar = session.getAttribute(SessionKeys::ExitTime);
@@ -53,11 +58,10 @@ bool SetExitTool::mousePressEvent(QMouseEvent *event)
                         qint64(xCoord * 1000.0),
                         QTimeZone::utc());
                 }
-                m_model->updateAttribute(hovered, SessionKeys::ExitTime, newExit);
+                m_model->updateAttribute(sessionId, SessionKeys::ExitTime, newExit);
             }
         }
     }
-    // else: multi-session fallback could go here
 
     // 4) done — go back to your primary tool
     m_widget->revertToPrimaryTool();
