@@ -37,7 +37,7 @@ void register_sessiondata(py::module_ &m) {
                      // 1. Convert the time value to UTC
                      QDateTime utcDt = dt.toUTC();
                      // 2. Format the UTC time using the desired ISO format
-                     QString s = utcDt.toString(Qt::ISODate);
+                     QString s = utcDt.toString(Qt::ISODateWithMs);
                      return py::cast(s.toStdString());
                  }
                  // numeric?

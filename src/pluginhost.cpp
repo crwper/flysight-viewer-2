@@ -118,7 +118,7 @@ void PluginHost::initialise(const QString& pluginDir) {
                 if (py::isinstance<py::str>(out)) {
                     QString s = QString::fromStdString(out.cast<std::string>());
                     // try to parse an ISO timestamp into QDateTime
-                    QDateTime dt = QDateTime::fromString(s, Qt::ISODate);
+                    QDateTime dt = QDateTime::fromString(s, Qt::ISODateWithMs);
                     if (dt.isValid()) {
                         return QVariant::fromValue(dt);
                     } else {
