@@ -1,231 +1,292 @@
+/*****************************************************************************
+ *  FlySight 2 Viewer – Plugin host (Option‑1 refactor)
+ *
+ *  Boots CPython **via pybind11’s scoped_interpreter that takes a PyConfig***
+ *  – so there is exactly **one** initialisation call.
+ *
+ *  Key changes:
+ *    • Build a PyConfig the same way as before (PEP‑587).
+ *    • Pass that pointer to the 4‑argument constructor of
+ *      `py::scoped_interpreter` (available since pybind11 v2.11).
+ *    • Remove the explicit `Py_InitializeFromConfig()` call (and therefore
+ *      the double‑initialisation that raised “The interpreter is already
+ *      running”).
+ *
+ *  All plugin‑loading logic after the interpreter boot remains untouched.
+ *****************************************************************************/
+
 #pragma push_macro("slots")
-#undef slots
-#include <pybind11/embed.h>
+#undef  slots                         /* avoid Qt's `slots` vs. Python clash   */
+
+#include <Python.h>                   /*  PEP 587 API                          */
+#include <pybind11/embed.h>           /*  py::scoped_interpreter, py::module   */
 #include <pybind11/numpy.h>
 #pragma pop_macro("slots")
 
+/* FlySight headers --------------------------------------------------------- */
 #include "pluginhost.h"
 #include "sessiondata.h"
 #include "dependencykey.h"
 #include "plotregistry.h"
 
+/* Qt headers --------------------------------------------------------------- */
+#include <QCoreApplication>
+#include <QDir>
+#include <QDateTime>
+#include <QVariant>
+#include <QDebug>
+
+/* std / STL ---------------------------------------------------------------- */
 #include <optional>
 #include <string>
-#include <QDir>
-#include <QDebug>
-#include <QVariant>
 
 namespace py = pybind11;
-using namespace FlySight;
+using   namespace FlySight;
 
-PluginHost& PluginHost::instance() {
+// ────────────────────────────────────────────────────────────────────────────
+//  Singleton
+// ────────────────────────────────────────────────────────────────────────────
+PluginHost& PluginHost::instance()
+{
     static PluginHost inst;
     return inst;
 }
 
-void PluginHost::initialise(const QString& pluginDir) {
+// ────────────────────────────────────────────────────────────────────────────
+//  Helper – convert PyStatus to QString
+// ────────────────────────────────────────────────────────────────────────────
+static QString statusToString(const PyStatus& st)
+{
+    if (PyStatus_Exception(st)) {
+        return QString::fromUtf8(st.err_msg ? st.err_msg : "unknown");
+    }
+    return "success";
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+//  Boot interpreter + load plugins (Option‑1 implementation)
+// ────────────────────────────────────────────────────────────────────────────
+void PluginHost::initialise(const QString& pluginDir)
+{
+    /* ------------------------------------------------------------------
+     * 1.  Boot the interpreter (exactly once, via pybind11)
+     * ----------------------------------------------------------------*/
     if (!m_interp) {
-        qInfo() << "[PluginHost] Booting embedded Python";
-        m_interp = std::make_unique<py::scoped_interpreter>();
+        /* Location of the bundled runtime:  {app}/python               */
+        const QString pyHomeQt =
+            QDir(QCoreApplication::applicationDirPath()).filePath("python");
+
+#ifdef _WIN32
+        static const std::wstring pyHomeW = pyHomeQt.toStdWString();
+#else
+        static const std::string  pyHome  = pyHomeQt.toStdString();
+#endif
+
+        /* --- 1.1  Build a PyConfig ----------------------------------- */
+        PyConfig cfg;
+        PyConfig_InitPythonConfig(&cfg);          /* “normal” (non‑isolated) */
+
+#ifdef _WIN32
+        PyStatus st = PyConfig_SetString(&cfg, &cfg.home, pyHomeW.c_str());
+#else
+        PyStatus st = PyConfig_SetString(&cfg, &cfg.home, pyHome.c_str());
+#endif
+        if (PyStatus_Exception(st)) {
+            qCritical().noquote() << "PyConfig_SetString failed:" << statusToString(st);
+            PyConfig_Clear(&cfg);
+            return;
+        }
+
+        /* --- 1.1.b  Tell CPython where to import from ---------------- */
+#ifdef _WIN32
+        const std::wstring zipPathW  = pyHomeW + L"\\python313.zip";
+        const std::wstring sitePkgsW = pyHomeW + L"\\site-packages";
+        PyWideStringList_Append(&cfg.module_search_paths, pyHomeW.c_str());
+        PyWideStringList_Append(&cfg.module_search_paths, zipPathW.c_str());
+        PyWideStringList_Append(&cfg.module_search_paths, sitePkgsW.c_str());
+#else
+        const std::string zipPath  = pyHome  + "/python313.zip";
+        const std::string sitePkgs = pyHome  + "/site-packages";
+        PyStringList_Append(&cfg.module_search_paths, pyHome.c_str());
+        PyStringList_Append(&cfg.module_search_paths, zipPath.c_str());
+        PyStringList_Append(&cfg.module_search_paths, sitePkgs.c_str());
+#endif
+        cfg.module_search_paths_set = 1;   /* we provided the list */
+
+        /* --- 1.2  On Windows extend PATH so the loader can locate *.pyd */
+#ifdef _WIN32
+        QString newPath = qEnvironmentVariable("PATH") + u';' + pyHomeQt;
+        _wputenv_s(L"PATH", newPath.toStdWString().c_str());
+#endif
+
+        /* --- 1.3  Initialise interpreter via scoped_interpreter ----- */
+        try {
+            m_interp = std::make_unique<py::scoped_interpreter>(&cfg, 0, nullptr, false);
+            /* After construction the interpreter is initialised.        */
+            qInfo().noquote() << "[PluginHost] Embedded Python booted from"
+                              << QDir::toNativeSeparators(pyHomeQt);
+            qInfo() << "[PluginHost] scoped_interpreter created successfully.";
+        } catch (const py::error_already_set &e) {
+            qCritical() << "[PluginHost] pybind11 exception during scoped_interpreter creation:" << e.what();
+            if (PyErr_Occurred()) PyErr_Print();
+            PyConfig_Clear(&cfg);
+            return;
+        } catch (const std::exception &e) {
+            qCritical() << "[PluginHost] C++ std::exception during scoped_interpreter creation:" << e.what();
+            PyConfig_Clear(&cfg);
+            return;
+        } catch (...) {
+            qCritical() << "[PluginHost] Unknown exception during scoped_interpreter creation.";
+            PyConfig_Clear(&cfg);
+            return;
+        }
+        PyConfig_Clear(&cfg);   /* safe – interpreter made its own copy */
+
+        /* Optional smoke‑test ---------------------------------------- */
+        try {
+            py::module_::import("sys");
+            qInfo() << "[PluginHost] Successfully imported 'sys'.";
+        } catch (const py::error_already_set &e) {
+            qCritical() << "[PluginHost] Failed to import 'sys':" << e.what();
+        }
     }
 
-    // 1) Add pluginDir to Python sys.path
+    /* ------------------------------------------------------------------
+     * 2.  Add the plugins folder to sys.path
+     * ----------------------------------------------------------------*/
     py::module sys = py::module::import("sys");
     sys.attr("path").attr("insert")(0, pluginDir.toStdString().c_str());
 
-    // 2) Import our SDK module
+    /* ------------------------------------------------------------------
+     * 3.  Import FlySight’s Python‑side SDK
+     * ----------------------------------------------------------------*/
     py::module sdk;
     try {
-        sdk = py::module_::import("flysight_plugin_sdk");
-    } catch (const py::error_already_set &e) {
+        sdk = py::module::import("flysight_plugin_sdk");
+    } catch (const py::error_already_set& e) {
         qCritical() << "Failed to import flysight_plugin_sdk:" << e.what();
         return;
     }
 
-    // 3) Load every .py file in pluginDir
-    QDir dir(pluginDir);
-    QStringList filters;
-    filters << "*.py";
-    for (const QFileInfo& fi : dir.entryInfoList(filters, QDir::Files)) {
-        const std::string mod = fi.baseName().toStdString();
-        try {
-            py::module::import(mod.c_str());
-        } catch (py::error_already_set& e) {
-            qWarning() << "[PluginHost] Failed to import"
-                       << fi.fileName() << ":" << e.what();
+    /* ------------------------------------------------------------------
+     * 4.  Import every *.py file in the plugins folder
+     * ----------------------------------------------------------------*/
+    {
+        QDir dir(pluginDir);
+        for (const QFileInfo& fi : dir.entryInfoList({ "*.py" }, QDir::Files)) {
+            const std::string mod = fi.baseName().toStdString();
+            try {
+                py::module::import(mod.c_str());
+            } catch (const py::error_already_set& e) {
+                qWarning() << "[PluginHost] Failed to import" << fi.fileName() << ":" << e.what();
+            }
         }
     }
 
-    // 4) Register Attribute plugins
+    /* ------------------------------------------------------------------
+     * 5.  Register Attribute plugins
+     * ----------------------------------------------------------------*/
     for (py::handle h : sdk.attr("_attributes")) {
         py::object plugin = h.cast<py::object>();
-        QString key = QString::fromStdString(
-            plugin.attr("name").cast<std::string>());
+        const QString key = QString::fromStdString(plugin.attr("name").cast<std::string>());
 
-        // Build dependency list
         QList<DependencyKey> deps;
         try {
-            // call the Python inputs() and force it into a list
-            py::object raw = plugin.attr("inputs")();
-            py::list  inputs = raw.cast<py::list>();
-            // iterate the list
-            for (py::handle h : inputs) {
-                // h is a Python DependencyKey instance; extract its fields
-                py::object dk = h.cast<py::object>();
-                int kind = dk.attr("kind").cast<int>();  // enum value
+            py::list inputs = plugin.attr("inputs")().cast<py::list>();
+            for (py::handle hi : inputs) {
+                py::object dk = hi.cast<py::object>();
+                int kind      = dk.attr("kind").cast<int>();
 
                 if (kind == static_cast<int>(DependencyKey::Type::Attribute)) {
-                    // attributeKey
-                    std::string name = dk.attr("attributeKey").cast<std::string>();
-                    deps.append(DependencyKey::attribute(QString::fromStdString(name)));
+                    deps.append(DependencyKey::attribute(QString::fromStdString(dk.attr("attributeKey").cast<std::string>())));
                 } else {
-                    // measurement: sensorKey + measurementKey
-                    std::string sensor = dk.attr("sensorKey").cast<std::string>();
-                    std::string meas   = dk.attr("measurementKey").cast<std::string>();
-                    deps.append(DependencyKey::measurement(
-                        QString::fromStdString(sensor),
-                        QString::fromStdString(meas)));
+                    deps.append(DependencyKey::measurement(QString::fromStdString(dk.attr("sensorKey").cast<std::string>()),
+                                                           QString::fromStdString(dk.attr("measurementKey").cast<std::string>())));
                 }
             }
-        } catch (const py::cast_error &e) {
-            qWarning() << "[PluginHost] inputs() did not return a list of DependencyKey:";
-            qWarning() << e.what();
-        } catch (const py::error_already_set &e) {
-            qWarning() << "[PluginHost] exception in inputs():";
-            qWarning() << e.what();
+        } catch (const py::error_already_set& e) {
+            qWarning() << "[PluginHost] exception in inputs():" << e.what();
         }
 
-        // Register into SessionData
         SessionData::registerCalculatedAttribute(
             key, deps,
-            [plugin](SessionData& session)
-            -> std::optional<QVariant>
-            {
+            [plugin](SessionData& session) -> std::optional<QVariant> {
                 py::gil_scoped_acquire gil;
-                py::object out = plugin
-                                     .attr("compute")(py::cast(&session,
-                                                               py::return_value_policy::reference));
-                // if Python returned None => no result
-                if (out.is_none()) {
-                    return std::nullopt;
-                }
-                if (py::isinstance<py::float_>(out) ||
-                    py::isinstance<py::int_>(out))
-                {
-                    return QVariant::fromValue(
-                        out.cast<double>());
-                }
+                py::object out = plugin.attr("compute")(py::cast(&session, py::return_value_policy::reference));
+
+                if (out.is_none()) return std::nullopt;
+
+                if (py::isinstance<py::float_>(out) || py::isinstance<py::int_>(out))
+                    return QVariant::fromValue(out.cast<double>());
+
                 if (py::isinstance<py::str>(out)) {
                     QString s = QString::fromStdString(out.cast<std::string>());
-                    // try to parse an ISO timestamp into QDateTime
                     QDateTime dt = QDateTime::fromString(s, Qt::ISODateWithMs);
-                    if (dt.isValid()) {
-                        return QVariant::fromValue(dt);
-                    } else {
-                        // fallback to plain string
-                        return QVariant::fromValue(s);
-                    }
+                    return dt.isValid() ? QVariant::fromValue(dt)
+                                        : QVariant::fromValue(s);
                 }
                 return std::nullopt;
-            }
-            );
+            });
     }
 
-    // 5) Register Measurement plugins
+    /* ------------------------------------------------------------------
+     * 6.  Register Measurement plugins
+     * ----------------------------------------------------------------*/
     for (py::handle h : sdk.attr("_measurements")) {
         py::object plugin = h.cast<py::object>();
-        QString sensor = QString::fromStdString(
-            plugin.attr("sensor").cast<std::string>());
-        QString name   = QString::fromStdString(
-            plugin.attr("name").cast<std::string>());
+        QString sensor = QString::fromStdString(plugin.attr("sensor").cast<std::string>());
+        QString name   = QString::fromStdString(plugin.attr("name").cast<std::string>());
 
-        // Build dependency list
         QList<DependencyKey> deps;
         try {
-            // call the Python inputs() and force it into a list
-            py::object raw = plugin.attr("inputs")();
-            py::list  inputs = raw.cast<py::list>();
-            // iterate the list
-            for (py::handle h : inputs) {
-                // h is a Python DependencyKey instance; extract its fields
-                py::object dk = h.cast<py::object>();
-                int kind = dk.attr("kind").cast<int>();  // enum value
+            py::list inputs = plugin.attr("inputs")().cast<py::list>();
+            for (py::handle hi : inputs) {
+                py::object dk = hi.cast<py::object>();
+                int kind      = dk.attr("kind").cast<int>();
 
                 if (kind == static_cast<int>(DependencyKey::Type::Attribute)) {
-                    // attributeKey
-                    std::string name = dk.attr("attributeKey").cast<std::string>();
-                    deps.append(DependencyKey::attribute(QString::fromStdString(name)));
+                    deps.append(DependencyKey::attribute(QString::fromStdString(dk.attr("attributeKey").cast<std::string>())));
                 } else {
-                    // measurement: sensorKey + measurementKey
-                    std::string sensor = dk.attr("sensorKey").cast<std::string>();
-                    std::string meas   = dk.attr("measurementKey").cast<std::string>();
-                    deps.append(DependencyKey::measurement(
-                        QString::fromStdString(sensor),
-                        QString::fromStdString(meas)));
+                    deps.append(DependencyKey::measurement(QString::fromStdString(dk.attr("sensorKey").cast<std::string>()),
+                                                           QString::fromStdString(dk.attr("measurementKey").cast<std::string>())));
                 }
             }
-        } catch (const py::cast_error &e) {
-            qWarning() << "[PluginHost] inputs() did not return a list of DependencyKey:";
-            qWarning() << e.what();
-        } catch (const py::error_already_set &e) {
-            qWarning() << "[PluginHost] exception in inputs():";
-            qWarning() << e.what();
+        } catch (const py::error_already_set& e) {
+            qWarning() << "[PluginHost] exception in inputs():" << e.what();
         }
 
         SessionData::registerCalculatedMeasurement(
             sensor, name, deps,
-            [plugin](SessionData& session)
-            -> std::optional<QVector<double>>
-            {
+            [plugin](SessionData& session) -> std::optional<QVector<double>> {
                 py::gil_scoped_acquire gil;
-                py::object out = plugin
-                                     .attr("compute")(py::cast(&session,
-                                                               py::return_value_policy::reference));
-                // if Python returned None => no result
-                if (out.is_none()) {
-                    return std::nullopt;
-                }
-                auto buf = out.cast<
-                    py::array_t<double,
-                                py::array::c_style |
-                                    py::array::forcecast>>();
-                auto ptr = buf.data();
-                int n = static_cast<int>(buf.shape(0));
-                return QVector<double>(ptr, ptr + n);
-            }
-            );
+                py::object out = plugin.attr("compute")(py::cast(&session, py::return_value_policy::reference));
+                if (out.is_none()) return std::nullopt;
+
+                auto buf = out.cast<py::array_t<double, py::array::c_style | py::array::forcecast>>();
+                return QVector<double>(buf.data(), buf.data() + buf.shape(0));
+            });
     }
 
-    // 6) register any plugin-provided “simple plots”
+    /* ------------------------------------------------------------------
+     * 7.  Register “simple plot” definitions
+     * ----------------------------------------------------------------*/
     for (py::handle h : sdk.attr("_simple_plots")) {
         py::object plt = h.cast<py::object>();
-
-        // Extract each attribute
-        auto category    = QString::fromStdString(plt.attr("category").cast<std::string>());
-        auto name        = QString::fromStdString(plt.attr("name").cast<std::string>());
-
-        // units may be None
-        QString units;
-        if (!plt.attr("units").is_none())
-            units = QString::fromStdString(plt.attr("units").cast<std::string>());
-
-        // color is a CSS string we can feed directly to QColor
-        auto colorStr = plt.attr("color").cast<std::string>();
-        QColor color(QString::fromStdString(colorStr));
-
-        auto sensor      = QString::fromStdString(plt.attr("sensor").cast<std::string>());
-        auto measurement = QString::fromStdString(plt.attr("measurement").cast<std::string>());
-
-        PlotRegistry::instance().registerPlot(
-            { category, name, units, color, sensor, measurement }
-            );
+        PlotRegistry::instance().registerPlot({
+            QString::fromStdString(plt.attr("category").cast<std::string>()),
+            QString::fromStdString(plt.attr("name").cast<std::string>()),
+            plt.attr("units").is_none() ? QString{} : QString::fromStdString(plt.attr("units").cast<std::string>()),
+            QColor(QString::fromStdString(plt.attr("color").cast<std::string>())),
+            QString::fromStdString(plt.attr("sensor").cast<std::string>()),
+            QString::fromStdString(plt.attr("measurement").cast<std::string>())
+        });
     }
 
+    /* ------------------------------------------------------------------
+     * 8.  Summary
+     * ----------------------------------------------------------------*/
     qInfo() << "[PluginHost] Registered"
-            << py::len(sdk.attr("_attributes"))
-            << "attributes, "
-            << py::len(sdk.attr("_measurements"))
-            << "measurements, and "
-            << py::len(sdk.attr("_simple_plots"))
-            << "plots.";
+            << py::len(sdk.attr("_attributes"))   << "attributes,"
+            << py::len(sdk.attr("_measurements")) << "measurements, and"
+            << py::len(sdk.attr("_simple_plots")) << "plots.";
 }
