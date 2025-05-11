@@ -51,8 +51,7 @@ public:
 
     static double interpolateY(const QCPGraph* graph, double x);
 
-    // View management
-    void setXAxisKey(const QString& key, const QString& label);
+    QString getXAxisKey() const;
 
 signals:
     void sessionsSelected(const QList<QString> &sessionIds);
@@ -61,6 +60,7 @@ signals:
 public slots:
     void updatePlot();
     void onXAxisRangeChanged(const QCPRange &newRange);
+    void onXAxisKeyChanged(const QString &newKey, const QString &newLabel);
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
@@ -110,6 +110,8 @@ private:
 
     QString m_xAxisKey   = SessionKeys::TimeFromExit;
     QString m_xAxisLabel = "Time from exit (s)";
+
+    void applyXAxisChange(const QString& key, const QString& label);
 };
 
 } // namespace FlySight

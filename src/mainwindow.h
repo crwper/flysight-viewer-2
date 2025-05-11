@@ -39,6 +39,7 @@ public:
 signals:
     void plotValueSelected(const QModelIndex &selectedIndex);
     void newTimeRange(double min, double max);
+    void xAxisKeyChanged(const QString &newKey, const QString &newLabel);
 
 private slots:
     void on_action_Import_triggered();
@@ -94,6 +95,9 @@ private:
     // Pointer to QActionGroup for tools
     QActionGroup *toolActionGroup;
 
+    QString m_currentXAxisKey;
+    QString m_currentXAxisLabel;
+
     // Helper functions for plot values
     static void registerBuiltInPlots();
     void setupPlotValues();
@@ -121,7 +125,7 @@ private:
     void setupPlotTools();
 
     // Accessors for persisting the current x-axis measurement key
-    void setXAxisKey(const QString &key);
+    void setXAxisKey(const QString &key, const QString &label);
 };
 
 } // namespace FlySight

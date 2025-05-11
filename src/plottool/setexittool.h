@@ -3,7 +3,6 @@
 
 #include "plottool.h"
 #include "../plotwidget.h"
-#include "../graphinfo.h"
 
 namespace FlySight {
 
@@ -25,7 +24,6 @@ public:
 private:
     PlotWidget* m_widget;
     QCustomPlot* m_plot;
-    QMap<QCPGraph*, GraphInfo>* m_graphMap;
     SessionModel* m_model;
 };
 
