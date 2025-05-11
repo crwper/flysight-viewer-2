@@ -18,6 +18,7 @@
 #include "sessiondata.h"
 #include "dependencykey.h"
 #include "plotregistry.h"
+#include "python_output_redirector.h"
 
 /* Qt headers */
 #include <QCoreApplication>
@@ -129,17 +130,75 @@ void PluginHost::initialise(const QString& pluginDir)
         return;
     }
 
+    // Declare sys module variable here to be used by both redirection and path modification
+    py::module_ sys;
+
+    // Import C++ bridge module FIRST
+    try {
+        qDebug() << "[PluginHost] Importing flysight_cpp_bridge from C++...";
+        py::module_::import("flysight_cpp_bridge"); // This initializes the module and registers types
+        qDebug() << "[PluginHost] flysight_cpp_bridge imported successfully by C++.";
+    } catch (const py::error_already_set& e) {
+        qCritical().noquote() << "[PluginHost] CRITICAL: Failed to import flysight_cpp_bridge from C++:" << e.what();
+        // ... (error handling) ...
+        return;
+    }
+
+    // Setup Python output redirection
+    try {
+        qDebug() << "[PluginHost] Attempting to import 'sys' module for redirection.";
+        sys = py::module_::import("sys");
+        qDebug() << "[PluginHost] 'sys' module imported. Creating redirector.";
+        // PythonOutputRedirector should now be a "known registered type" by pybind11
+        py::object redirector_instance = py::cast(new PythonOutputRedirector(), py::return_value_policy::take_ownership);
+        qDebug() << "[PluginHost] Redirector instance created. Assigning to sys.stdout/stderr.";
+        sys.attr("stdout") = redirector_instance;
+        sys.attr("stderr") = redirector_instance;
+        qInfo() << "[PluginHost] Python stdout/stderr redirected to qDebug().";
+    } catch (const py::error_already_set& e) {
+        qCritical().noquote() << "[PluginHost] Failed to redirect Python stdout/stderr (after bridge import):" << e.what();
+        if (Py_IsInitialized()) PyErr_Print();
+    }
+
     /* ------------------------------------------------------------------ */
     /* 2.  Put <plugins>/ on sys.path & import SDK                        */
     /* ------------------------------------------------------------------ */
-    py::module sys   = py::module::import("sys");
-    sys.attr("path").attr("insert")(0, pluginDir.toStdString().c_str());
+    qDebug() << "[PluginHost] Preparing to modify sys.path. Plugin dir:" << pluginDir;
+    if (pluginDir.isEmpty()) {
+        qWarning() << "[PluginHost] pluginDir is empty. Aborting further plugin loading.";
+        return;
+    }
+
+    if (!sys) { // Check if sys was successfully imported earlier
+        qCritical() << "[PluginHost] 'sys' module was not imported successfully earlier. Cannot modify sys.path.";
+        return;
+    }
+
+    try {
+        std::string pluginDirStd = pluginDir.toStdString();
+        qDebug() << "[PluginHost] Adding to sys.path:" << pluginDir;
+        sys.attr("path").attr("insert")(0, pluginDirStd.c_str()); // Use the 'sys' object obtained earlier
+        qDebug() << "[PluginHost] Successfully added" << pluginDir << "to sys.path.";
+    } catch (const py::error_already_set& e) {
+        qCritical().noquote() << "[PluginHost] Python error modifying sys.path with '" << pluginDir << "':" << e.what();
+        if (Py_IsInitialized()) PyErr_Print();
+        return;
+    } catch (const std::exception& e) {
+        qCritical().noquote() << "[PluginHost] C++ error modifying sys.path with '" << pluginDir << "':" << e.what();
+        return;
+    }
 
     py::module sdk;
     try {
+        qDebug() << "[PluginHost] Attempting to import flysight_plugin_sdk...";
         sdk = py::module::import("flysight_plugin_sdk");
+        qDebug() << "[PluginHost] flysight_plugin_sdk imported successfully.";
     } catch (const py::error_already_set& e) {
-        qCritical() << "[PluginHost] Cannot import flysight_plugin_sdk:" << e.what();
+        qCritical().noquote() << "[PluginHost] Python error importing flysight_plugin_sdk. Ensure it's in Python path ('" << pluginDir << "') and has no internal import errors (like flysight_cpp_bridge).";
+        if (Py_IsInitialized()) PyErr_Print();
+        return;
+    } catch (const std::exception& e) {
+        qCritical().noquote() << "[PluginHost] C++ error importing flysight_plugin_sdk:" << e.what();
         return;
     }
 

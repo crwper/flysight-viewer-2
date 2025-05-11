@@ -63,6 +63,7 @@ set(PROJECT_SOURCES
     pluginhost.h               pluginhost.cpp
     plotregistry.cpp           plotregistry.h
     imugnssekf.h               imugnssekf.cpp
+    python_output_redirector.h
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
