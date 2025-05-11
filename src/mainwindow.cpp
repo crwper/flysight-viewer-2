@@ -27,6 +27,8 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
     , model(new SessionModel(this))
     , plotModel (new QStandardItemModel(this))
+    , m_currentXAxisKey(m_settings->value("plot/xAxisKey", SessionKeys::TimeFromExit).toString())
+    , m_currentXAxisLabel(tr("Time from exit (s)"))
 {
     ui->setupUi(this);
 
@@ -77,6 +79,10 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Handle plot tool changes
     connect(plotWidget, &PlotWidget::toolChanged, this, &MainWindow::onPlotWidgetToolChanged);
+
+    // Handle x-axis changes
+    connect(this, &MainWindow::xAxisKeyChanged, plotWidget, &PlotWidget::onXAxisKeyChanged);
+    emit xAxisKeyChanged(m_currentXAxisKey, m_currentXAxisLabel);
 }
 
 MainWindow::~MainWindow()
@@ -1151,7 +1157,8 @@ void MainWindow::initializeCalculatedMeasurements()
 void MainWindow::initializeXAxisMenu()
 {
     // 1) pull in the saved key (default to TimeFromExit)
-    const QString savedKey = currentXAxisKey();
+    const QString activeKeyInSettings = m_settings->value("plot/xAxisKey", SessionKeys::TimeFromExit).toString();
+    m_currentXAxisKey = activeKeyInSettings; // Sync internal with settings initially
 
     // 2) define all of your possible axes in one place
     struct AxisChoice {
@@ -1160,7 +1167,7 @@ void MainWindow::initializeXAxisMenu()
         QString        key;
         QString        axisLabel;
     };
-    const AxisChoice choices[] = {
+    const QVector<AxisChoice> choices = {
         { tr("Time from Exit"),
          QKeySequence(Qt::CTRL | Qt::Key_1),
          SessionKeys::TimeFromExit,
@@ -1173,6 +1180,7 @@ void MainWindow::initializeXAxisMenu()
 
     // 3) create the submenu and an exclusive group
     QMenu* plotsMenu = ui->menuPlots;
+    Q_ASSERT(plotsMenu);
     QMenu* xAxisMenu = plotsMenu->addMenu(tr("Horizontal Axis"));
     plotsMenu->addSeparator();
 
@@ -1180,31 +1188,35 @@ void MainWindow::initializeXAxisMenu()
     axisGroup->setExclusive(true);
 
     // 4) build each QAction in a loop
+    bool initialActionSet = false;
     for (const AxisChoice& ch : choices) {
         QAction* a = xAxisMenu->addAction(ch.menuText);
         a->setCheckable(true);
         a->setShortcut(ch.shortcut);
-        a->setChecked(ch.key == savedKey);
-
-        // stash key & label so we can grab them later
         a->setData(ch.key);
         a->setProperty("axisLabel", ch.axisLabel);
-
         axisGroup->addAction(a);
 
-        connect(a, &QAction::triggered, this, [=]{
-            const QString key   = a->data().toString();
-            const QString label = a->property("axisLabel").toString();
-            plotWidget->setXAxisKey(key, label);
-            setXAxisKey(key);
+        if (ch.key == m_currentXAxisKey) {
+            a->setChecked(true);
+            m_currentXAxisLabel = ch.axisLabel; // Set the correct initial label
+            initialActionSet = true;
+        }
+
+        connect(a, &QAction::triggered, this, [this, a_captured = a]{
+            const QString keyFromAction   = a_captured->data().toString();
+            const QString labelFromAction = a_captured->property("axisLabel").toString();
+            this->setXAxisKey(keyFromAction, labelFromAction);
         });
     }
 
     // 5) finally, apply the saved choice now that the menu is built
-    if (QAction* init = axisGroup->checkedAction()) {
-        const QString key   = init->data().toString();
-        const QString label = init->property("axisLabel").toString();
-        plotWidget->setXAxisKey(key, label);
+    if (!initialActionSet && !choices.isEmpty() && !axisGroup->actions().isEmpty()) {
+        QAction* firstAction = axisGroup->actions().first();
+        firstAction->setChecked(true);
+        // Update internal state and settings to reflect this default
+        setXAxisKey(firstAction->data().toString(), firstAction->property("axisLabel").toString());
+        qWarning() << "MainWindow: No saved X-axis key matched choices, defaulted to:" << m_currentXAxisKey;
     }
 }
 
@@ -1371,8 +1383,14 @@ QString MainWindow::currentXAxisKey() const {
         .toString();
 }
 
-void MainWindow::setXAxisKey(const QString &key) {
-    m_settings->setValue("plot/xAxisKey", key);
+void MainWindow::setXAxisKey(const QString &key, const QString &label) {
+    if (m_currentXAxisKey != key || m_currentXAxisLabel != label) {
+        m_currentXAxisKey = key;
+        m_currentXAxisLabel = label;
+        m_settings->setValue("plot/xAxisKey", key); // Save preference
+        qDebug() << "MainWindow: X-axis key changing to" << key << "with label" << label;
+        emit xAxisKeyChanged(key, label); // Emit the signal
+    }
 }
 
 } // namespace FlySight

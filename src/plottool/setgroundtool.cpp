@@ -1,5 +1,4 @@
 #include "setgroundtool.h"
-#include "mainwindow.h"               // for currentXAxisKey()
 #include "../plotwidget.h"
 #include "../crosshairmanager.h"
 #include "../qcustomplot/qcustomplot.h"
@@ -18,11 +17,12 @@ SetGroundTool::SetGroundTool(const PlotWidget::PlotContext &ctx)
 
 double SetGroundTool::computeGroundElevation(SessionData &session, double xCoord) const
 {
-    // 1) fetch the current time-measurement key from MainWindow
-    auto *mw = qobject_cast<MainWindow*>(m_widget->parentWidget());
-    const QString timeKey = mw
-                                ? mw->currentXAxisKey()
-                                : SessionKeys::TimeFromExit;  // safe fallback
+    // 1) fetch the current time-measurement key from PlotWidget
+    const QString timeKey = m_widget->getXAxisKey();
+    if (timeKey.isEmpty()){
+        qWarning() << "SetGroundTool::computeGroundElevation: PlotWidget returned empty X-axis key.";
+        return std::numeric_limits<double>::quiet_NaN();
+    }
 
     constexpr char sensor[] = "GNSS";
     constexpr char measH[]  = "hMSL";

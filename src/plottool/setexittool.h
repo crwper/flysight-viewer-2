@@ -3,7 +3,6 @@
 
 #include "plottool.h"
 #include "../plotwidget.h"
-#include "../graphinfo.h"
 
 namespace FlySight {
 

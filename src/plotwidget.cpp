@@ -23,6 +23,8 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
     , customPlot(new QCustomPlot(this))
     , model(model)
     , plotModel(plotModel)
+    , m_xAxisKey(SessionKeys::TimeFromExit)
+    , m_xAxisLabel(tr("Time from exit (s)"))
 {
     // set up the layout with the custom plot
     QVBoxLayout *layout = new QVBoxLayout(this);
@@ -134,6 +136,11 @@ void PlotWidget::handleSessionsSelected(const QList<QString> &sessionIds)
 CrosshairManager* PlotWidget::crosshairManager() const
 {
     return m_crosshairManager.get();
+}
+
+QString PlotWidget::getXAxisKey() const
+{
+    return m_xAxisKey;
 }
 
 // Slots
@@ -278,6 +285,15 @@ void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
     m_updatingYAxis = false;
 }
 
+void PlotWidget::onXAxisKeyChanged(const QString &newKey, const QString &newLabel)
+{
+    qDebug() << "PlotWidget::onXAxisKeyAndLabelChanged - Key:" << newKey << "Label:" << newLabel;
+    if (m_xAxisKey == newKey && m_xAxisLabel == newLabel) {
+        return; // No change
+    }
+    applyXAxisChange(newKey, newLabel);
+}
+
 void PlotWidget::onHoveredSessionChanged(const QString &sessionId)
 {
     // update graph appearance based on the hovered session
@@ -332,7 +348,7 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 void PlotWidget::setupPlot()
 {
     // configure basic plot settings
-    customPlot->xAxis->setLabel("Time from exit (s)");
+    customPlot->xAxis->setLabel(m_xAxisLabel);
     customPlot->yAxis->setVisible(false);
 
     // enable interactions for range dragging and zooming
@@ -444,10 +460,12 @@ QCPRange PlotWidget::keyRangeOf(const SessionData& s,
     return QCPRange(*minIt, *maxIt);
 }
 
-void PlotWidget::setXAxisKey(const QString& key, const QString& label)
+void PlotWidget::applyXAxisChange(const QString& key, const QString& label)
 {
     if (key == m_xAxisKey)           // already on this scale
         return;
+
+    qDebug() << "PlotWidget::applyXAxisChange - Applying Key:" << key << "Label:" << label;
 
     /* 1. keep a copy of the current window (old scale) */
     QCPRange oldRange = customPlot->xAxis->range();
@@ -471,6 +489,9 @@ void PlotWidget::setXAxisKey(const QString& key, const QString& label)
     m_xAxisLabel = label;
     customPlot->xAxis->setLabel(label);
     customPlot->xAxis->setRange(newRange);
+
+    /* 5. Update x-axis ticker */
+    updateXAxisTicker();
 
     updatePlot();                 // rebuild graphs with new x‑values
     customPlot->replot();

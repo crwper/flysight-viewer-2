@@ -1,5 +1,4 @@
 #include "setexittool.h"
-#include "mainwindow.h"           // for currentXAxisKey()
 #include "../plotwidget.h"
 #include "../crosshairmanager.h"
 #include "../qcustomplot/qcustomplot.h"
@@ -25,11 +24,12 @@ bool SetExitTool::mousePressEvent(QMouseEvent *event)
     // 1) pixel → axis coordinate (could be seconds-from-exit or epoch secs)
     double xCoord = m_plot->xAxis->pixelToCoord(event->pos().x());
 
-    // 2) lookup current mode from MainWindow
-    auto *mw = qobject_cast<MainWindow*>(m_widget->parentWidget());
-    const QString axisKey = mw
-                                ? mw->currentXAxisKey()
-                                : SessionKeys::TimeFromExit;  // fallback
+    // 2) lookup current mode from PlotWidget
+    const QString axisKey = m_widget->getXAxisKey();
+    if (axisKey.isEmpty()) {
+        qWarning() << "SetExitTool: PlotWidget returned empty X-axis key. Aborting.";
+        return false; // Or use a fallback, but ideally PlotWidget always has a valid one
+    }
 
     // 3) Get traced sessions from CrosshairManager via PlotWidget
     CrosshairManager* crosshairMgr = m_widget->crosshairManager();
