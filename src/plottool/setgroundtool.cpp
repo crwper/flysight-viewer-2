@@ -12,7 +12,6 @@ namespace FlySight {
 SetGroundTool::SetGroundTool(const PlotWidget::PlotContext &ctx)
     : m_widget(ctx.widget)
     , m_plot(ctx.plot)
-    , m_graphMap(ctx.graphMap)
     , m_model(ctx.model)
 {
 }

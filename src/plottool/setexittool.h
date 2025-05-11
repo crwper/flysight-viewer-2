@@ -25,7 +25,6 @@ public:
 private:
     PlotWidget* m_widget;
     QCustomPlot* m_plot;
-    QMap<QCPGraph*, GraphInfo>* m_graphMap;
     SessionModel* m_model;
 };
 
