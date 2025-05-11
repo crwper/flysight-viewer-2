@@ -1,11 +1,11 @@
 import numpy as np
 import math
-import os # For environment variable
-from typing import Optional, Dict, Tuple
+import os
+from typing import Optional, Dict, Tuple, List
+from flysight_plugin_sdk import DefaultTime
 
 # --- Debug Flag ---
-# Read from environment variable, defaulting to False if not set or invalid
-FLYSIGHT_DEBUG_ALLAN_STR = os.environ.get("FLYSIGHT_DEBUG_ALLAN", "False")
+FLYSIGHT_DEBUG_ALLAN_STR = os.environ.get("FLYSIGHT_DEBUG_ALLAN", "True")
 DEBUG_ALLAN = FLYSIGHT_DEBUG_ALLAN_STR.lower() in ("true", "1", "t", "yes")
 
 if DEBUG_ALLAN:
@@ -17,12 +17,8 @@ try:
     if DEBUG_ALLAN:
         print(f"[allan_variance_plugin.py] allantools library version: {allantools.__version__}")
 except ImportError:
-    print(
-        "[allan_variance_plugin.py] WARNING: allantools library not found. "
-        "Allan deviation calculations will not be available. "
-        "Please install it (e.g., 'pip install allantools')."
-    )
-    allantools = None # So we can check its existence later
+    print("[allan_variance_plugin.py] WARNING: allantools library not found...")
+    allantools = None
 
 from flysight_plugin_sdk import (
     MeasurementPlugin,
@@ -32,176 +28,232 @@ from flysight_plugin_sdk import (
     meas
 )
 
-# --- Configuration (largely the same) ---
+# --- Configuration ---
 ALLAN_SENSOR_KEY = "ALLAN_ADEV"
 IMU_SENSOR_KEY = "IMU"
-IMU_TIME_KEY = "_time" # Make sure this matches the actual key in SessionData for IMU timestamps
+IMU_TIME_KEY = "_time"
+COMMON_TAUS_MEASUREMENT_NAME = "common_taus" # The single name for our tau array
 
-ACCEL_UNIT_CONVERSION: Dict[str, float] = {
-    "ax": 9.80665, "ay": 9.80665, "az": 9.80665,
-}
-GYRO_UNIT_CONVERSION: Dict[str, float] = {
-    "wx": math.pi / 180.0, "wy": math.pi / 180.0, "wz": math.pi / 180.0,
-}
+ACCEL_UNIT_CONVERSION: Dict[str, float] = {"ax": 9.80665, "ay": 9.80665, "az": 9.80665}
+GYRO_UNIT_CONVERSION: Dict[str, float] = {"wx": math.pi / 180.0, "wy": math.pi / 180.0, "wz": math.pi / 180.0}
 MIN_DATA_SAMPLES_FOR_AVAR = 2000
 
-# Cache for _compute_allan_data to avoid redundant heavy computation
-# Key: (session_id_str, imu_input_key_str), Value: (taus_array, adevs_array)
-_internal_adev_cache: Dict[Tuple[str, str], Tuple[np.ndarray, np.ndarray]] = {}
+# --- Python-level Caches ---
+# Cache for common taus: Key: session_id_str -> Value: Optional[np.ndarray]
+_COMMON_TAUS_CACHE: Dict[str, Optional[np.ndarray]] = {}
 
-def _clear_internal_adev_cache():
-    """ Call this if sessions are reloaded or data fundamentally changes. """
-    global _internal_adev_cache
-    if DEBUG_ALLAN:
-        print("[allan_variance_plugin.py] Clearing internal ADEV cache.")
-    _internal_adev_cache.clear()
+# Cache for ADEV values: Key: (session_id_str, original_imu_key_str) -> Value: Optional[np.ndarray]
+_ADEV_VALUES_CACHE: Dict[Tuple[str, str], Optional[np.ndarray]] = {}
 
-# --- Base Plugin for ADEV Calculation using allantools ---
-class AllanDeviationAxis(MeasurementPlugin):
-    sensor = ALLAN_SENSOR_KEY
-    # ... (init remains similar) ...
-    def __init__(self, imu_input_key: str, output_measurement_key_base: str,
-                 unit_conversion_factor: float, output_adev_units_str: str):
-        self.imu_input_key = imu_input_key
-        self.output_key_base = output_measurement_key_base
-        self.unit_conversion = unit_conversion_factor
-        self.output_units = output_adev_units_str
-        self.name = f"{self.output_key_base}_y"
-        self.units = self.output_units
-        if DEBUG_ALLAN:
-            print(f"[allan_variance_plugin.py] AllanDeviationAxis initialized for {self.name} (IMU key: {self.imu_input_key})")
+def _clear_internal_adev_caches():
+    global _COMMON_TAUS_CACHE, _ADEV_VALUES_CACHE
+    if DEBUG_ALLAN: print("[allan_variance_plugin.py] Clearing internal Allan caches (taus and adevs).")
+    _COMMON_TAUS_CACHE.clear()
+    _ADEV_VALUES_CACHE.clear()
 
-
-    def inputs(self):
-        return [
-            meas(IMU_SENSOR_KEY, self.imu_input_key),
-            meas(IMU_SENSOR_KEY, IMU_TIME_KEY),
-        ]
-
-    def _compute_allan_data(self, session) -> Optional[Tuple[np.ndarray, np.ndarray]]:
-        if not allantools:
-            if DEBUG_ALLAN:
-                print(f"[allan_variance_plugin.py] _compute_allan_data for {self.imu_input_key}: allantools not available.")
-            return None
-
-        session_id_qvariant = session.getAttribute("SESSION_ID")
-        session_id_str = str(session_id_qvariant) if session_id_qvariant is not None else "unknown_session"
-
-        cache_key = (session_id_str, self.imu_input_key)
-        if cache_key in _internal_adev_cache:
-            if DEBUG_ALLAN:
-                print(f"[allan_variance_plugin.py] Returning cached ADEV data for {self.imu_input_key} in session {session_id_str}")
-            return _internal_adev_cache[cache_key]
-
-        if DEBUG_ALLAN:
-            print(f"[allan_variance_plugin.py] _compute_allan_data for {self.imu_input_key} (Session: {session_id_str})")
-
-        imu_raw_axis_data = session.getMeasurement(IMU_SENSOR_KEY, self.imu_input_key)
-        imu_time_data = session.getMeasurement(IMU_SENSOR_KEY, IMU_TIME_KEY)
-
-        if imu_raw_axis_data is None or imu_time_data is None:
-            if DEBUG_ALLAN:
-                print(f"[allan_variance_plugin.py] Missing raw IMU data or time data for {self.imu_input_key}.")
-            return None
-
-        data_axis_raw = np.array(imu_raw_axis_data, dtype=float)
-        time_axis = np.array(imu_time_data, dtype=float)
-
-        if DEBUG_ALLAN:
-            print(f"[allan_variance_plugin.py]   Raw data samples: {data_axis_raw.size}, Time samples: {time_axis.size}")
-
-        if data_axis_raw.size < MIN_DATA_SAMPLES_FOR_AVAR or time_axis.size != data_axis_raw.size:
-            if DEBUG_ALLAN:
-                print(f"[allan_variance_plugin.py]   Insufficient data or mismatched array sizes.")
-            return None
-        
-        data_axis_converted = data_axis_raw * self.unit_conversion
-
-        if len(time_axis) < 2:
-            if DEBUG_ALLAN:
-                print(f"[allan_variance_plugin.py]   Not enough time samples to calculate rate (<2).")
-            return None
-            
-        time_span = time_axis[-1] - time_axis[0]
-        if time_span == 0:
-            if DEBUG_ALLAN:
-                print(f"[allan_variance_plugin.py]   Time span is zero, cannot calculate rate.")
-            return None
-            
-        rate = float(len(time_axis) -1) / time_span # More robust rate calc
-        if rate <= 0:
-            if DEBUG_ALLAN:
-                print(f"[allan_variance_plugin.py]   Calculated rate is <= 0 ({rate}). Cannot compute ADEV.")
-            return None
-        
-        if DEBUG_ALLAN:
-            print(f"[allan_variance_plugin.py]   Calculated sample rate: {rate:.2f} Hz")
-            print(f"[allan_variance_plugin.py]   Unit conversion factor: {self.unit_conversion}")
-            if data_axis_converted.size > 0:
-                print(f"[allan_variance_plugin.py]   First 3 converted data points: {data_axis_converted[:3]}")
-
-
-        try:
-            if DEBUG_ALLAN:
-                print(f"[allan_variance_plugin.py]   Calling allantools.adev for {self.imu_input_key}...")
-            (taus_out, adevs_out, adev_errors, ns) = allantools.adev(
-                data_axis_converted,
-                rate=rate,
-                data_type="freq", 
-                taus="octave"
-            )
-            if DEBUG_ALLAN:
-                print(f"[allan_variance_plugin.py]   allantools.adev successful for {self.imu_input_key}.")
-                print(f"[allan_variance_plugin.py]   taus_out (len {len(taus_out)}): {taus_out[:5]}...")
-                print(f"[allan_variance_plugin.py]   adevs_out (len {len(adevs_out)}): {adevs_out[:5]}...")
-            
-            computed_result = (taus_out, adevs_out)
-            _internal_adev_cache[cache_key] = computed_result # Cache the result
-            return computed_result
-            
-        except Exception as e:
-            print(f"[allan_variance_plugin.py] Error during allantools.adev for {self.imu_input_key}: {e}")
-            if DEBUG_ALLAN:
-                import traceback
-                traceback.print_exc() # This will go to the C++ redirected stderr (qDebug)
-            return None
-
-    def compute(self, session) -> Optional[np.ndarray]:
-        # This plugin instance is for ADEV values (_y)
-        computed_data = self._compute_allan_data(session)
-        if computed_data:
-            _taus, adevs = computed_data
-            return adevs
+def _get_imu_sampling_rate(session) -> Optional[float]:
+    """Helper to get the sampling rate from IMU/_time."""
+    imu_time_data_list = session.getMeasurement(IMU_SENSOR_KEY, IMU_TIME_KEY)
+    if imu_time_data_list is None:
+        if DEBUG_ALLAN: print("[_get_imu_sampling_rate] IMU time data not found.")
+        return None
+    
+    time_axis = np.array(imu_time_data_list, dtype=float)
+    if time_axis.size < MIN_DATA_SAMPLES_FOR_AVAR : # Or just < 2 for rate calculation
+        if DEBUG_ALLAN: print(f"[_get_imu_sampling_rate] Not enough time samples ({time_axis.size}).")
         return None
 
-class AllanTauAxis(MeasurementPlugin):
+    time_span = time_axis[-1] - time_axis[0]
+    if abs(time_span) < 1e-9:
+        if DEBUG_ALLAN: print("[_get_imu_sampling_rate] Time span is zero.")
+        return None
+            
+    rate = float(len(time_axis) - 1) / time_span
+    if rate <= 0:
+        if DEBUG_ALLAN: print(f"[_get_imu_sampling_rate] Calculated rate <= 0 ({rate}).")
+        return None
+    return rate
+
+class AllanCommonTausPlugin(MeasurementPlugin):
+    """
+    Computes and provides the common Tau values (x-axis for ADEV plots)
+    based on the IMU sensor's time data.
+    """
     sensor = ALLAN_SENSOR_KEY
+    name = COMMON_TAUS_MEASUREMENT_NAME # e.g., "ALLAN_ADEV/common_taus"
     units = "s"
 
-    def __init__(self, imu_input_key_for_cache_logic: str, output_tau_key_base: str):
-        self.imu_input_key_for_cache = imu_input_key_for_cache_logic
-        self.name = f"{output_tau_key_base}_x"
-        # This instance is only used to call _compute_allan_data.
-        # It shares the same imu_input_key, so the caching in _compute_allan_data will be effective.
-        self._adev_computer = AllanDeviationAxis(imu_input_key_for_cache_logic, "", 1.0, "")
+    def __init__(self):
         if DEBUG_ALLAN:
-            print(f"[allan_variance_plugin.py] AllanTauAxis initialized for {self.name} (IMU key: {self.imu_input_key_for_cache})")
+            print(f"[allan_variance_plugin.py] AllanCommonTausPlugin initialized for: {self.sensor}/{self.name}")
 
-    def inputs(self):
+    def inputs(self) -> List[Dict]:
+        # Depends only on the IMU time channel to determine sampling rate and tau range
+        return [meas(IMU_SENSOR_KEY, IMU_TIME_KEY)]
+
+    def compute(self, session) -> Optional[np.ndarray]:
+        if not allantools:
+            if DEBUG_ALLAN: print(f"[{self.name}.compute] Allantools not available.")
+            return None
+
+        session_id_str = str(session.getAttribute("SESSION_ID")) # Assuming SESSION_ID
+        if session_id_str in _COMMON_TAUS_CACHE:
+            if DEBUG_ALLAN: print(f"[{self.name}.compute] Returning cached common_taus for session {session_id_str}")
+            return _COMMON_TAUS_CACHE[session_id_str]
+
+        if DEBUG_ALLAN: print(f"[{self.name}.compute] Computing common_taus for session {session_id_str}")
+
+        rate = _get_imu_sampling_rate(session)
+        if rate is None:
+            _COMMON_TAUS_CACHE[session_id_str] = None
+            return None
+
+        # We need some data to pass to allantools.adev to get taus.
+        # It doesn't matter what the data is, as long as it's the correct length
+        # and rate is provided. We use a dummy array.
+        # Alternatively, if one of the IMU axes is guaranteed to exist, use that.
+        # For simplicity, create a dummy array reflecting the number of samples.
+        imu_time_data_list = session.getMeasurement(IMU_SENSOR_KEY, IMU_TIME_KEY)
+        num_samples = len(imu_time_data_list) if imu_time_data_list else 0
+        
+        if num_samples < MIN_DATA_SAMPLES_FOR_AVAR: # Or MIN_DATA_SAMPLES_FOR_AVAR
+            if DEBUG_ALLAN: print(f"[{self.name}.compute] Not enough samples ({num_samples}) for dummy data for tau calculation.")
+            _COMMON_TAUS_CACHE[session_id_str] = None
+            return None
+
+        dummy_data = np.zeros(num_samples)
+
+        try:
+            if DEBUG_ALLAN: print(f"[{self.name}.compute] Calling allantools.adev with dummy data to get taus (rate: {rate:.2f} Hz)...")
+            (taus_out, _, _, _) = allantools.adev(
+                dummy_data, rate=rate, data_type="freq", taus="octave"
+            )
+            taus_array = np.array(taus_out, dtype=float)
+            if DEBUG_ALLAN: print(f"[{self.name}.compute]   taus_out (len {len(taus_array)}): {taus_array[:min(5, len(taus_array))]}...")
+            
+            _COMMON_TAUS_CACHE[session_id_str] = taus_array
+            return taus_array
+        except Exception as e:
+            print(f"[allan_variance_plugin.py] Error during allantools.adev for common_taus: {e}")
+            if DEBUG_ALLAN:
+                import traceback
+                traceback.print_exc()
+            _COMMON_TAUS_CACHE[session_id_str] = None
+            return None
+
+class AllanAdevValuePlugin(MeasurementPlugin):
+    """
+    Computes and provides the ADEV values (y-axis) for a specific IMU data channel.
+    It will also ensure that the common_taus for this session are computed and cached
+    in SessionData C++ side if this is the first ADEV value being requested for this session.
+    """
+    sensor = ALLAN_SENSOR_KEY # All ADEV outputs go under this sensor key
+
+    def __init__(self, original_imu_key: str,
+                 unit_conversion_factor: float, 
+                 adev_display_units: str):
+        self.original_imu_key = original_imu_key # e.g., "ax"
+        self._unit_conversion_factor = unit_conversion_factor
+        self.units = adev_display_units # e.g., "m/s^2"
+        self.name = f"adev_{self.original_imu_key}" # e.g., "ALLAN_ADEV/adev_ax"
+
+        if DEBUG_ALLAN:
+            print(f"[allan_variance_plugin.py] AllanAdevValuePlugin initialized for: {self.sensor}/{self.name}")
+
+    def inputs(self) -> List[Dict]:
+        # Depends on the specific raw IMU data axis and the common IMU time channel
         return [
-            meas(IMU_SENSOR_KEY, self._adev_computer.imu_input_key),
+            meas(IMU_SENSOR_KEY, self.original_imu_key),
             meas(IMU_SENSOR_KEY, IMU_TIME_KEY),
+            meas(ALLAN_SENSOR_KEY, COMMON_TAUS_MEASUREMENT_NAME) # Declare dependency on common taus
         ]
 
     def compute(self, session) -> Optional[np.ndarray]:
-        computed_data = self._adev_computer._compute_allan_data(session) # This will use the cache
-        if computed_data:
-            taus, _adevs = computed_data
-            return taus
-        return None
+        if not allantools:
+            if DEBUG_ALLAN: print(f"[{self.name}.compute] Allantools not available.")
+            return None
 
-# --- Register ADEV plugins and plots ---
-# ... (IMU_AXES_CONFIG remains the same) ...
+        session_id_str = str(session.getAttribute("SESSION_ID"))
+        cache_key = (session_id_str, self.original_imu_key)
+
+        if cache_key in _ADEV_VALUES_CACHE:
+            if DEBUG_ALLAN: print(f"[{self.name}.compute] Returning cached ADEV values for {self.original_imu_key}, session {session_id_str}")
+            return _ADEV_VALUES_CACHE[cache_key]
+
+        if DEBUG_ALLAN: print(f"[{self.name}.compute] Computing ADEV values for {self.original_imu_key}, session {session_id_str}")
+
+        # Get common taus first (this will trigger its computation if not already done)
+        # This also ensures that if this is the first adev plugin called, the common_taus
+        # gets into the C++ cache via its own plugin mechanism.
+        common_taus_array = session.getMeasurement(ALLAN_SENSOR_KEY, COMMON_TAUS_MEASUREMENT_NAME)
+        if common_taus_array is None: # Should be np.array if successful
+             if DEBUG_ALLAN: print(f"[{self.name}.compute] Failed to get common_taus for session {session_id_str}. Cannot compute ADEV for {self.original_imu_key}.")
+             _ADEV_VALUES_CACHE[cache_key] = None
+             return None
+        common_taus_array_np = np.array(common_taus_array, dtype=float)
+
+
+        imu_raw_axis_data_list = session.getMeasurement(IMU_SENSOR_KEY, self.original_imu_key)
+        if imu_raw_axis_data_list is None:
+            if DEBUG_ALLAN: print(f"[{self.name}.compute] Missing raw IMU data for {self.original_imu_key}.")
+            _ADEV_VALUES_CACHE[cache_key] = None
+            return None
+
+        data_axis_raw = np.array(imu_raw_axis_data_list, dtype=float)
+        
+        if data_axis_raw.size < MIN_DATA_SAMPLES_FOR_AVAR:
+            if DEBUG_ALLAN: print(f"[{self.name}.compute] Insufficient data samples ({data_axis_raw.size}) for {self.original_imu_key}.")
+            _ADEV_VALUES_CACHE[cache_key] = None
+            return None
+
+        data_axis_converted = data_axis_raw * self._unit_conversion_factor
+        
+        rate = _get_imu_sampling_rate(session) # Re-fetch rate, or pass from common_taus plugin if it also stored it
+        if rate is None:
+            _ADEV_VALUES_CACHE[cache_key] = None
+            return None
+
+        if DEBUG_ALLAN:
+            print(f"[{self.name}.compute]   For {self.original_imu_key}: Rate={rate:.2f} Hz, Conversion={self._unit_conversion_factor}")
+            if data_axis_converted.size > 0: print(f"[{self.name}.compute]   Converted data (first 3): {data_axis_converted[:3]}")
+
+        try:
+            if DEBUG_ALLAN: print(f"[{self.name}.compute]   Calling allantools.adev for {self.original_imu_key} using pre-defined taus if possible...")
+            
+            # Use the common_taus_array_np if the allantools version supports passing taus directly.
+            # Many versions expect `taus` to be a string like "octave", "decade", "all", or an actual array.
+            # If passing an array directly:
+            (taus_out, adevs_out, _, _) = allantools.adev(
+                data_axis_converted,
+                rate=rate,
+                data_type="freq",
+                taus=common_taus_array_np # Pass the pre-calculated common taus
+            )
+            # If the above `taus=common_taus_array_np` doesn't work or gives inconsistent taus_out,
+            # revert to `taus="octave"` and rely on the rate being the same.
+            # (taus_out, adevs_out, _, _) = allantools.adev(
+            #     data_axis_converted, rate=rate, data_type="freq", taus="octave"
+            # )
+
+            # We primarily care about adevs_out here. taus_out should match common_taus_array_np.
+            if DEBUG_ALLAN:
+                print(f"[{self.name}.compute]   allantools.adev successful for {self.original_imu_key}.")
+                # print(f"[{self.name}.compute]   taus_out (len {len(taus_out)}): {taus_out[:min(5, len(taus_out))]}...") # Should match common_taus
+                print(f"[{self.name}.compute]   adevs_out (len {len(adevs_out)}): {adevs_out[:min(5, len(adevs_out))]}...")
+
+            adevs_array = np.array(adevs_out, dtype=float)
+            _ADEV_VALUES_CACHE[cache_key] = adevs_array
+            return adevs_array
+            
+        except Exception as e:
+            print(f"[allan_variance_plugin.py] Error during allantools.adev for {self.original_imu_key}: {e}")
+            if DEBUG_ALLAN:
+                import traceback
+                traceback.print_exc()
+            _ADEV_VALUES_CACHE[cache_key] = None
+            return None
+
+# --- Axes Configuration (IMU input keys and their plot properties) ---
 IMU_AXES_CONFIG = {
     "ax": ("Accel X", ACCEL_UNIT_CONVERSION.get("ax", 1.0), "m/s²", "#FF6347"),
     "ay": ("Accel Y", ACCEL_UNIT_CONVERSION.get("ay", 1.0), "m/s²", "#32CD32"),
@@ -211,38 +263,38 @@ IMU_AXES_CONFIG = {
     "wz": ("Gyro Z", GYRO_UNIT_CONVERSION.get("wz", 1.0), "rad/s", "#00CED1"),
 }
 
+# --- Register ADEV plugins and plots ---
 if allantools:
-    for imu_key, (plot_name_suffix, conv_factor, adev_units, plot_color) in IMU_AXES_CONFIG.items():
-        output_key_base = f"adev_{imu_key}"
+    # Register the single common taus plugin first
+    common_taus_plugin = AllanCommonTausPlugin()
+    register_measurement(common_taus_plugin)
+    if DEBUG_ALLAN:
+        print(f"[allan_variance_plugin.py] Registered common taus plugin: {common_taus_plugin.sensor}/{common_taus_plugin.name}")
 
-        adev_plugin = AllanDeviationAxis(
-            imu_input_key=imu_key,
-            output_measurement_key_base=output_key_base,
-            unit_conversion_factor=conv_factor,
-            output_adev_units_str=adev_units
-        )
-        register_measurement(adev_plugin)
-
-        tau_plugin = AllanTauAxis(
-            imu_input_key_for_cache_logic=imu_key,
-            output_tau_key_base=output_key_base
-        )
-        register_measurement(tau_plugin)
+    # Register an ADEV value plugin and its plot for each IMU axis
+    for original_imu_key, (plot_name_suffix, conv_factor, adev_units_str, plot_color) in IMU_AXES_CONFIG.items():
         
-        category_group = "Accelerometer" if "a" in imu_key else "Gyroscope"
+        adev_value_plugin = AllanAdevValuePlugin(
+            original_imu_key=original_imu_key,
+            unit_conversion_factor=conv_factor,
+            adev_display_units=adev_units_str
+        )
+        register_measurement(adev_value_plugin)
+        if DEBUG_ALLAN:
+            print(f"[allan_variance_plugin.py] Registered ADEV value plugin: {adev_value_plugin.sensor}/{adev_value_plugin.name}")
+
+        category_group = "Accelerometer" if "a" in original_imu_key else "Gyroscope"
         register_plot(SimplePlot(
             category=f"Allan Deviation ({category_group})",
             name=f"ADEV {plot_name_suffix}",
-            units=adev_units,
+            units=adev_units_str,
             color=plot_color,
-            sensor=ALLAN_SENSOR_KEY,
-            measurement=f"{output_key_base}_y"
-            # The C++ side needs to handle using "{output_key_base}_x" from ALLAN_SENSOR_KEY for the X-axis values
-            # This implies your plotting mechanism can source X and Y from different measurement keys.
+            sensor=ALLAN_SENSOR_KEY, # Y-data comes from this sensor
+            measurement=f"adev_{original_imu_key}"  # Y-values (e.g., "adev_ax")
+            # PlotWidget will need to be configured to use ALLAN_SENSOR_KEY/COMMON_TAUS_MEASUREMENT_NAME
+            # as the X-axis for any plot whose sensor is ALLAN_SENSOR_KEY and measurement starts with "adev_".
         ))
-    print(f"[allan_variance_plugin.py] Registered Allan Deviation plugins (using allantools) and plots for {ALLAN_SENSOR_KEY}.")
-    if DEBUG_ALLAN:
-        print(f"[allan_variance_plugin.py] To see debug output from this script, ensure FLYSIGHT_DEBUG_ALLAN environment variable is set to 'true'.")
-
+        
+    print(f"[allan_variance_plugin.py] Registered all Allan Deviation plugins and plots for sensor '{ALLAN_SENSOR_KEY}'.")
 else:
-    print("[allan_variance_plugin.py] allantools not available. Skipping ADEV plugin registration.")
+    print("[allan_variance_plugin.py] allantools library not available. Skipping ADEV plugin registration.")
