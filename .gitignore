@@ -40,3 +40,7 @@ secrets.h
 
 # Python plugin cache
 plugins/__pycache__/
+
+# Installed third-party libraries
+third-party/GTSAM-install/
+third-party/oneTBB-install/
