@@ -6,21 +6,7 @@
  *  • Otherwise               → fall back to the developer’s system Python.
  *****************************************************************************/
 
-#pragma push_macro("slots")
-#undef  slots                    // avoid Qt's `slots` macro clash
-#include <Python.h>              // PEP-587 API
-#include <pybind11/embed.h>
-#include <pybind11/numpy.h>
-#pragma pop_macro("slots")
-
-/* FlySight headers */
-#include "pluginhost.h"
-#include "sessiondata.h"
-#include "dependencykey.h"
-#include "plotregistry.h"
-#include "python_output_redirector.h"
-
-/* Qt headers */
+/* Qt headers – compile with _DEBUG still defined */
 #include <QCoreApplication>
 #include <QDir>
 #include <QDateTime>
@@ -31,6 +17,30 @@
 #include <memory>
 #include <optional>
 #include <string>
+
+#pragma push_macro("slots")
+#undef  slots                    // avoid Qt's `slots` macro clash
+
+/* Python headers */
+#if defined(_MSC_VER)            // mask _DEBUG only while including Python.h
+#  pragma push_macro("_DEBUG")
+#  undef  _DEBUG
+#endif
+#include <Python.h>              // PEP-587 API (needs release mode)
+#if defined(_MSC_VER)
+#  pragma pop_macro("_DEBUG")
+#endif
+
+#include <pybind11/embed.h>      // pybind11 does its own _DEBUG masking
+#include <pybind11/numpy.h>
+#pragma pop_macro("slots")
+
+/* FlySight headers */
+#include "pluginhost.h"
+#include "sessiondata.h"
+#include "dependencykey.h"
+#include "plotregistry.h"
+#include "python_output_redirector.h"
 
 namespace py = pybind11;
 using   namespace FlySight;

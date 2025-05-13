@@ -17,14 +17,15 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
         CACHE PATH "Install path prefix." FORCE)
 endif()
 
-# Let CMake find extra helper modules (e.g. DownloadEmbeddablePython.cmake)
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
-
 # ───────────────────────────────  Qt & third-party
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
 find_package(Qt${QT_VERSION_MAJOR}        REQUIRED COMPONENTS Core)
 find_package(Qt${QT_VERSION_MAJOR}        REQUIRED COMPONENTS Widgets)
 find_package(Qt${QT_VERSION_MAJOR}        REQUIRED COMPONENTS PrintSupport)
+
+# Find a full Python installation on the system for linking
+# Request components needed by pybind11 targets
+find_package(Python 3.8 REQUIRED COMPONENTS Interpreter Development Development.Embed) # Adjust version if needed
 
 # pybind11 (submodule)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../third-party/pybind11"
@@ -85,6 +86,24 @@ target_link_libraries(FlySightViewer
     PRIVATE Qt${QT_VERSION_MAJOR}::PrintSupport
     PRIVATE pybind11::embed
 )
+
+# ───────────────────────────────  MSVC Debug: ignore phantom pythonXXX_d.lib
+# CPython’s headers auto-link pythonXY_d.lib when _DEBUG is defined, but the
+# standard Windows installer ships only the release import lib.  Tell the
+# linker to skip the non-existent debug import library and still link the
+# release one so symbols resolve.
+if (MSVC)
+    # Construct the name: e.g. python313_d.lib
+    set(_py_debug_lib "python${Python_VERSION_MAJOR}${Python_VERSION_MINOR}_d.lib")
+
+    # 1) Ask the linker to ignore that default library in Debug builds
+    target_link_options(FlySightViewer
+        PRIVATE $<$<CONFIG:Debug>:/NODEFAULTLIB:${_py_debug_lib}>)
+
+    # 2) Explicitly add the release import library back for Debug
+    target_link_libraries(FlySightViewer
+        PRIVATE $<$<CONFIG:Debug>:${Python_LIBRARIES}>)
+endif()
 
 target_include_directories(FlySightViewer PRIVATE
     ${CMAKE_SOURCE_DIR}/../third-party/QCustomPlot
@@ -173,12 +192,6 @@ install(TARGETS flysight_cpp_bridge
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/../python_src/"
         DESTINATION python/Lib/site-packages
         PATTERN "__pycache__" EXCLUDE)
-
-# Optional embedded CPython bundle
-option(FLYSIGHT_BUNDLE_PYTHON "Bundle embeddable Python runtime" ON)
-if(FLYSIGHT_BUNDLE_PYTHON)
-    include(DownloadEmbeddablePython)      # provided in cmake/ below
-endif()
 
 if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(FlySightViewer)
