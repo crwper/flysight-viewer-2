@@ -180,17 +180,6 @@ if(FLYSIGHT_BUNDLE_PYTHON)
     include(DownloadEmbeddablePython)      # provided in cmake/ below
 endif()
 
-# Deploy Qt runtime into the install tree (Qt ≥ 6)
-if(QT_VERSION_MAJOR GREATER_EQUAL 6)
-    include("${QT_DEPLOY_SUPPORT}")
-    qt_generate_deploy_app_script(
-        TARGET        FlySightViewer
-        OUTPUT_SCRIPT FlySightDeployScript
-        NO_UNSUPPORTED_PLATFORM_ERROR
-    )
-    install(SCRIPT "${FlySightDeployScript}")
-endif()
-
 if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(FlySightViewer)
 endif()
