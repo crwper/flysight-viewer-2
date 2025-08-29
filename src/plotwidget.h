@@ -69,6 +69,7 @@ protected:
 
 private slots:
     void onHoveredSessionChanged(const QString& sessionId);
+    void positionLegend();
 
 private:
     // Initialization

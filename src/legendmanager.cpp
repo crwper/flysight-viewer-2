@@ -68,12 +68,6 @@ void LegendManager::setVisible(bool visible)
 
     if (m_legendLayout)
         m_legendLayout->setVisible(visible);
-
-    if (visible) {
-        updateLegendPosition();
-    }
-
-    m_plot->replot(QCustomPlot::rpQueuedReplot);
 }
 
 void LegendManager::setMode(Mode mode)
@@ -136,8 +130,6 @@ void LegendManager::rebuildLegend()
 
         m_dataElements << row;
     }
-
-    updateLegendPosition();
 }
 
 void LegendManager::collectVisibleSeries()
@@ -174,7 +166,7 @@ void LegendManager::collectVisibleSeries()
 
 bool LegendManager::updatePointData(double xCoord, const QString& targetSessionId)
 {
-    if (!m_visible || m_mode != PointDataMode)
+    if (m_mode != PointDataMode)
         return false;
 
     clearDataRows();
@@ -205,14 +197,12 @@ bool LegendManager::updatePointData(double xCoord, const QString& targetSessionI
         }
     }
 
-    updateLegendPosition();
-    m_plot->replot(QCustomPlot::rpQueuedReplot);
     return hasData;
 }
 
 bool LegendManager::updateRangeStats(double xCoord)
 {
-    if (!m_visible || m_mode != RangeStatsMode)
+    if (m_mode != RangeStatsMode)
         return false;
 
     clearDataRows();
@@ -258,8 +248,6 @@ bool LegendManager::updateRangeStats(double xCoord)
         }
     }
 
-    updateLegendPosition();
-    m_plot->replot(QCustomPlot::rpQueuedReplot);
     return hasData;
 }
 
@@ -325,9 +313,6 @@ void LegendManager::updateLegendPosition()
 {
     if (!m_legendLayout || !m_backgroundRect || !m_visible)
         return;
-
-    // Force layout update first to ensure text element positions are current
-    m_plot->replot(QCustomPlot::rpQueuedReplot);
 
     // Calculate the actual bounds of the legend content in pixels
     double minX = std::numeric_limits<double>::max();

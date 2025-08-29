@@ -40,6 +40,8 @@ public:
     // Call when graphs change to rebuild legend structure
     void rebuildLegend();
 
+    void updateLegendPosition();
+
 private:
     struct SeriesInfo {
         QString name;
@@ -67,7 +69,6 @@ private:
     // Helper methods
     void createLegendStructure();
     void clearLegendElements();
-    void updateLegendPosition();
     void collectVisibleSeries();
 
     // Data calculation helpers

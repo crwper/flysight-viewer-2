@@ -80,6 +80,7 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
     connect(plotModel, &QStandardItemModel::modelReset, this, &PlotWidget::updatePlot);
     connect(customPlot->xAxis, QOverload<const QCPRange &>::of(&QCPAxis::rangeChanged), this, &PlotWidget::onXAxisRangeChanged);
     connect(model, &SessionModel::hoveredSessionChanged, this, &PlotWidget::onHoveredSessionChanged);
+    connect(customPlot, &QCustomPlot::afterLayout, this, &PlotWidget::positionLegend);
 
     // update the plot with initial data
     updatePlot();
@@ -322,6 +323,13 @@ void PlotWidget::onHoveredSessionChanged(const QString &sessionId)
     customPlot->replot();
 }
 
+void PlotWidget::positionLegend()
+{
+    if (m_legendManager && m_legendManager->isVisible()) {
+        m_legendManager->updateLegendPosition();
+    }
+}
+
 // Protected Methods
 bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 {
@@ -534,17 +542,12 @@ void PlotWidget::updateLegend()
     QPoint localPos = customPlot->mapFromGlobal(QCursor::pos());
     bool inPlotArea = customPlot->axisRect()->rect().contains(localPos);
 
-    if (!inPlotArea) {
-        m_legendManager->setVisible(false);
-        return;
-    }
-
     // Get the set of sessions currently being traced
     QSet<QString> tracedSessions = m_crosshairManager->getTracedSessionIds();
 
-    // Hide legend if no sessions are traced
-    if (tracedSessions.isEmpty()) {
+    if (!inPlotArea || tracedSessions.isEmpty()) {
         m_legendManager->setVisible(false);
+        customPlot->replot(QCustomPlot::rpQueuedReplot);
         return;
     }
 
@@ -555,26 +558,23 @@ void PlotWidget::updateLegend()
     if (tracedSessions.size() == 1) {
         // Exactly one session - show point statistics
         m_legendManager->setMode(LegendManager::PointDataMode);
-        m_legendManager->setVisible(true);
 
         // Pass the single traced session ID
         QString singleSessionId = *tracedSessions.begin();
-        m_legendManager->updatePointData(xCoord, singleSessionId);
-
         shouldBeVisible = m_legendManager->updatePointData(xCoord, singleSessionId);
     } else {
         // Multiple sessions - show range statistics
         m_legendManager->setMode(LegendManager::RangeStatsMode);
-        m_legendManager->setVisible(true);
 
         // Pass the cursor position to calculate stats from marked values
-        m_legendManager->updateRangeStats(xCoord);
-
         shouldBeVisible = m_legendManager->updateRangeStats(xCoord);
     }
 
     // Set visibility based on whether data was found
     m_legendManager->setVisible(shouldBeVisible);
+
+    // Trigger a single replot now
+    customPlot->replot(QCustomPlot::rpQueuedReplot);
 }
 
 } // namespace FlySight
