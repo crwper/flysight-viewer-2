@@ -225,7 +225,11 @@ void PlotWidget::updatePlot()
                     info.sessionId = session.getAttribute(SessionKeys::SessionId).toString();
                     info.sensorId = sensorID;
                     info.measurementId = measurementID;
-                    info.displayName = plotName + " (" + plotUnits + ")";
+                    if (!plotUnits.isEmpty()) {
+                        info.displayName = QString("%1 (%2)").arg(plotName).arg(plotUnits);
+                    } else {
+                        info.displayName = plotName;
+                    }
                     info.defaultPen = QPen(QColor(color));
 
                     QCPGraph *graph = customPlot->addGraph(customPlot->xAxis, assignedYAxis);
@@ -559,10 +563,21 @@ void PlotWidget::updateLegend()
     if (tracedSessions.size() == 1) {
         // Exactly one session - show point statistics
         m_legendManager->setMode(LegendManager::PointDataMode);
-
-        // Pass the single traced session ID
         QString singleSessionId = *tracedSessions.begin();
-        shouldBeVisible = m_legendManager->updatePointData(xCoord, singleSessionId);
+
+        // Fetch session description
+        QString sessionDesc;
+        const auto& allSessions = model->getAllSessions();
+        for (const auto& session : allSessions) {
+            if (session.getAttribute(SessionKeys::SessionId).toString() == singleSessionId) {
+                // ASSUMPTION: The description is stored with this key.
+                // Replace 'SessionKeys::Description' if it's different.
+                sessionDesc = session.getAttribute(SessionKeys::Description).toString();
+                break;
+            }
+        }
+
+        shouldBeVisible = m_legendManager->updatePointData(xCoord, singleSessionId, sessionDesc, m_xAxisKey);
     } else {
         // Multiple sessions - show range statistics
         m_legendManager->setMode(LegendManager::RangeStatsMode);

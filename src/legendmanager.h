@@ -31,7 +31,7 @@ public:
     bool isVisible() const { return m_visible; }
 
     // Update methods for different modes
-    bool updatePointData(double xCoord, const QString& hoveredSessionId);
+    bool updatePointData(double xCoord, const QString& targetSessionId, const QString& sessionDescription, const QString& xAxisKey);
     bool updateRangeStats(double xCoord);
 
     void setMode(Mode mode);
@@ -57,8 +57,16 @@ private:
     QMap<QCPGraph*, GraphInfo> *m_graphInfoMap;
 
     // Legend UI elements
-    QCPLayoutGrid *m_legendLayout;
+    QCPLayoutGrid *m_mainLayout;    // MODIFIED: This will be the main container
+    QCPLayoutGrid *m_tableLayout;   // MODIFIED: This will hold the tabular data
     QCPItemRect *m_backgroundRect;
+
+    // Header Info Elements
+    QCPTextElement *m_sessionDescElement;
+    QCPTextElement *m_utcElement;
+    QCPTextElement *m_coordsElement;
+    QCPItemLine *m_separatorLine;
+
     QVector<QCPTextElement*> m_headerElements;
     QVector<QVector<QCPTextElement*>> m_dataElements; // [row][col]
 
@@ -79,6 +87,8 @@ private:
     void setElementText(int row, int col, const QString& text,
                         const QColor& color = Qt::black);
     void clearDataRows();
+
+    double getRawValueAtX(const QString& sessionId, const QString& xAxisKey, double xCoord, const QString& sensorId, const QString& measurementId);
 };
 
 } // namespace FlySight

@@ -14,8 +14,13 @@ LegendManager::LegendManager(QCustomPlot *plot, SessionModel *model,
     , m_plot(plot)
     , m_model(model)
     , m_graphInfoMap(graphInfoMap)
-    , m_legendLayout(nullptr)
+    , m_mainLayout(nullptr)
+    , m_tableLayout(nullptr)
     , m_backgroundRect(nullptr)
+    , m_sessionDescElement(nullptr)
+    , m_utcElement(nullptr)
+    , m_coordsElement(nullptr)
+    , m_separatorLine(nullptr)
     , m_visible(false)
     , m_mode(PointDataMode)
 {
@@ -25,6 +30,7 @@ LegendManager::LegendManager(QCustomPlot *plot, SessionModel *model,
 LegendManager::~LegendManager()
 {
     clearLegendElements();
+
     if (m_backgroundRect) {
         m_plot->removeItem(m_backgroundRect);
     }
@@ -46,28 +52,33 @@ void LegendManager::createLegendStructure()
     m_backgroundRect->setClipAxisRect(m_plot->axisRect());
     m_backgroundRect->setVisible(false);
 
-    // Create layout grid in the inset layout of axis rect
+    // Create and configure the main layout and table layout
     QCPLayoutInset *insetLayout = m_plot->axisRect()->insetLayout();
-    m_legendLayout = new QCPLayoutGrid();
-    m_legendLayout->setMargins(QMargins(5, 5, 5, 5));
-    m_legendLayout->setRowSpacing(2);
-    m_legendLayout->setColumnSpacing(10);
+    m_mainLayout = new QCPLayoutGrid();
+    m_mainLayout->setMargins(QMargins(5, 5, 5, 5));
+    m_mainLayout->setRowSpacing(2);
+
+    m_tableLayout = new QCPLayoutGrid();
+    m_tableLayout->setRowSpacing(2);
+    m_tableLayout->setColumnSpacing(10);
 
     // Add to inset layout at top-right
-    insetLayout->addElement(m_legendLayout, Qt::AlignTop | Qt::AlignRight);
-
-    m_legendLayout->setVisible(false);
+    insetLayout->addElement(m_mainLayout, Qt::AlignTop | Qt::AlignRight);
+    m_mainLayout->setVisible(false);
 }
 
 void LegendManager::setVisible(bool visible)
 {
     m_visible = visible;
 
+    if (m_mainLayout)
+        m_mainLayout->setVisible(visible);
+
     if (m_backgroundRect)
         m_backgroundRect->setVisible(visible);
 
-    if (m_legendLayout)
-        m_legendLayout->setVisible(visible);
+    if (m_separatorLine)
+        m_separatorLine->setVisible(visible);
 }
 
 void LegendManager::setMode(Mode mode)
@@ -88,48 +99,79 @@ void LegendManager::rebuildLegend()
         return;
     }
 
-    // Create header row
-    m_headerElements.clear();
+    // Rebuild using the nested layout structure
+    int currentRow = 0;
 
     if (m_mode == PointDataMode) {
-        // Headers: Series | Value
+        // 1. Create header info elements and add to mainLayout
+        m_sessionDescElement = new QCPTextElement(m_plot, "", QFont("Arial", 8, QFont::Weight::Normal, true)); // CORRECTED: QFont::Italic
+        m_sessionDescElement->setLayer("overlay");
+        m_sessionDescElement->setTextFlags(Qt::AlignCenter);
+        m_mainLayout->addElement(currentRow++, 0, m_sessionDescElement);
+
+        m_utcElement = new QCPTextElement(m_plot, "", QFont("Arial", 8));
+        m_utcElement->setLayer("overlay");
+        m_utcElement->setTextFlags(Qt::AlignCenter);
+        m_mainLayout->addElement(currentRow++, 0, m_utcElement);
+
+        m_coordsElement = new QCPTextElement(m_plot, "", QFont("Arial", 8));
+        m_coordsElement->setLayer("overlay");
+        m_coordsElement->setTextFlags(Qt::AlignCenter);
+        m_mainLayout->addElement(currentRow++, 0, m_coordsElement);
+
+        // Create separator line (will be positioned later)
+        m_separatorLine = new QCPItemLine(m_plot);
+        m_separatorLine->setLayer("overlay");
+        m_separatorLine->setPen(QPen(QColor(180, 180, 180), 1));
+        m_separatorLine->setVisible(false); // Hide until positioned
+    }
+
+
+    // Create a NEW table layout and add it to the main layout.
+    m_tableLayout = new QCPLayoutGrid();
+    m_tableLayout->setRowSpacing(2);
+    m_tableLayout->setColumnSpacing(10);
+    m_mainLayout->addElement(currentRow++, 0, m_tableLayout);
+
+
+    // 3. Populate the tableLayout with headers and data
+    m_headerElements.clear();
+    if (m_mode == PointDataMode) {
+        auto* seriesHeader = new QCPTextElement(m_plot, "", QFont("Arial", 9, QFont::Bold));
+        seriesHeader->setLayer("overlay");
+        seriesHeader->setTextFlags(Qt::AlignLeft | Qt::AlignVCenter);
         auto* valueHeader = new QCPTextElement(m_plot, "Value", QFont("Arial", 9, QFont::Bold));
         valueHeader->setLayer("overlay");
-        m_legendLayout->addElement(0, 1, valueHeader);
-        m_headerElements << valueHeader;
+        valueHeader->setTextFlags(Qt::AlignRight | Qt::AlignVCenter);
+        m_tableLayout->addElement(0, 0, seriesHeader);
+        m_tableLayout->addElement(0, 1, valueHeader);
+        m_headerElements << seriesHeader << valueHeader;
     } else {
-        // Headers: Series | Min | Avg | Max (removed Value and Change)
-        QStringList headers = {"Min", "Avg", "Max"};
+        QStringList headers = {"", "Min", "Avg", "Max"};
         for (int i = 0; i < headers.size(); ++i) {
             auto* header = new QCPTextElement(m_plot, headers[i], QFont("Arial", 9, QFont::Bold));
             header->setLayer("overlay");
-            m_legendLayout->addElement(0, i + 1, header);
+            if (i == 0) header->setTextFlags(Qt::AlignLeft | Qt::AlignVCenter);
+            else header->setTextFlags(Qt::AlignRight | Qt::AlignVCenter);
+            m_tableLayout->addElement(0, i, header);
             m_headerElements << header;
         }
     }
 
-    // Create data rows for each series
     m_dataElements.clear();
     for (int i = 0; i < m_visibleSeries.size(); ++i) {
         QVector<QCPTextElement*> row;
-        int colCount = (m_mode == PointDataMode) ? 2 : 4; // Changed from 6 to 4 for range mode
-
+        int colCount = (m_mode == PointDataMode) ? 2 : 4;
         for (int j = 0; j < colCount; ++j) {
             auto* elem = new QCPTextElement(m_plot, "", QFont("Arial", 8));
             elem->setLayer("overlay");
-            if (j == 0) {
-                elem->setTextFlags(Qt::AlignLeft | Qt::AlignVCenter);
-            } else {
-                elem->setTextFlags(Qt::AlignHCenter | Qt::AlignVCenter);
-            }
-            m_legendLayout->addElement(i + 1, j, elem);
+            if (j == 0) elem->setTextFlags(Qt::AlignLeft | Qt::AlignVCenter);
+            else elem->setTextFlags(Qt::AlignRight | Qt::AlignVCenter);
+            m_tableLayout->addElement(i + 1, j, elem);
             row << elem;
         }
-
-        // Set series name and color
         row[0]->setText(m_visibleSeries[i].name);
         row[0]->setTextColor(m_visibleSeries[i].color);
-
         m_dataElements << row;
     }
 }
@@ -166,10 +208,39 @@ void LegendManager::collectVisibleSeries()
     m_visibleSeries = seriesMap.values().toVector();
 }
 
-bool LegendManager::updatePointData(double xCoord, const QString& targetSessionId)
+bool LegendManager::updatePointData(double xCoord, const QString& targetSessionId, const QString& sessionDescription, const QString& xAxisKey)
 {
     if (m_mode != PointDataMode)
         return false;
+
+    // Update header info for single session
+    m_sessionDescElement->setText(sessionDescription);
+    m_sessionDescElement->setVisible(true);
+
+    // Get absolute time from raw data, not from x-axis
+    double utcSecs = getRawValueAtX(targetSessionId, xAxisKey, xCoord, "GNSS", SessionKeys::Time);
+    if (!std::isnan(utcSecs)) {
+        QString utcText = QString("%1 UTC").arg(QDateTime::fromMSecsSinceEpoch(qint64(utcSecs * 1000.0), Qt::UTC).toString("yy-MM-dd HH:mm:ss.zzz"));
+        m_utcElement->setText(utcText);
+        m_utcElement->setVisible(true);
+    } else {
+        m_utcElement->setVisible(false);
+    }
+
+    // Get lat/lon/alt from raw data
+    double lat = getRawValueAtX(targetSessionId, xAxisKey, xCoord, "GNSS", "lat");
+    double lon = getRawValueAtX(targetSessionId, xAxisKey, xCoord, "GNSS", "lon");
+    double alt = getRawValueAtX(targetSessionId, xAxisKey, xCoord, "GNSS", "hMSL");
+
+    QString coordsText;
+    if (!std::isnan(lat) && !std::isnan(lon) && !std::isnan(alt)) {
+        coordsText = QString("(%1 deg, %2 deg, %3 m)")
+        .arg(lat, 0, 'f', 7)
+            .arg(lon, 0, 'f', 7)
+            .arg(alt, 0, 'f', 3);
+    }
+    m_coordsElement->setText(coordsText);
+    m_coordsElement->setVisible(!coordsText.isEmpty());
 
     clearDataRows();
     bool hasData = false;
@@ -207,6 +278,7 @@ bool LegendManager::updateRangeStats(double xCoord)
     if (m_mode != RangeStatsMode)
         return false;
 
+    // No need to hide session-specific info as it's not created in this mode
     clearDataRows();
     bool hasData = false;
 
@@ -297,76 +369,114 @@ void LegendManager::clearDataRows()
 
 void LegendManager::clearLegendElements()
 {
-    // Clear text elements
-    for (auto* elem : m_headerElements) {
-        m_legendLayout->remove(elem);
+    // First, remove the QCPItemLine, which is not part of a layout.
+    if (m_separatorLine) {
+        m_plot->removeItem(m_separatorLine); // removeItem also deletes the object
+        m_separatorLine = nullptr;
     }
-    m_headerElements.clear();
 
-    for (const auto& row : m_dataElements) {
-        for (auto* elem : row) {
-            m_legendLayout->remove(elem);
-        }
+    // Now, clearing the main layout will recursively delete all its children,
+    // including all text elements AND the old m_tableLayout.
+    if (m_mainLayout) {
+        m_mainLayout->clear();
     }
+
+    // The old elements are now deleted. We must clear our pointers to avoid dangling pointers.
+    m_tableLayout = nullptr; // VERY IMPORTANT!
+    m_sessionDescElement = nullptr;
+    m_utcElement = nullptr;
+    m_coordsElement = nullptr;
+    m_headerElements.clear();
     m_dataElements.clear();
 }
 
 void LegendManager::updateLegendPosition()
 {
-    if (!m_legendLayout || !m_backgroundRect || !m_visible)
+    if (!m_mainLayout || !m_backgroundRect || !m_visible)
         return;
 
-    // Calculate the actual bounds of the legend content in pixels
-    double minX = std::numeric_limits<double>::max();
-    double minY = std::numeric_limits<double>::max();
-    double maxX = std::numeric_limits<double>::lowest();
-    double maxY = std::numeric_limits<double>::lowest();
-
-    bool hasElements = false;
-    auto updateBounds = [&](QCPLayoutElement* elem) {
-        if (elem && elem->visible()) {
-            QRectF elemRect = elem->outerRect();
-            if (!elemRect.isEmpty()) {
-                minX = qMin(minX, elemRect.left());
-                minY = qMin(minY, elemRect.top());
-                maxX = qMax(maxX, elemRect.right());
-                maxY = qMax(maxY, elemRect.bottom());
-                hasElements = true;
-            }
-        }
-    };
-
-    // Find the actual bounds of all text elements
-    for (auto* elem : m_headerElements) {
-        updateBounds(elem);
-    }
-
-    for (const auto& row : m_dataElements) {
-        for (auto* elem : row) {
-            updateBounds(elem);
-        }
-    }
-
-    if (hasElements) {
-        // Add padding around the text
-        const int padding = 5;
-        minX -= padding;
-        minY -= padding;
-        maxX += padding;
-        maxY += padding;
-
-        // Set background rectangle position using absolute pixel coordinates
-        m_backgroundRect->topLeft->setType(QCPItemPosition::ptAbsolute);
-        m_backgroundRect->bottomRight->setType(QCPItemPosition::ptAbsolute);
-
-        // Use the calculated pixel coordinates directly
-        m_backgroundRect->topLeft->setCoords(minX, minY);
-        m_backgroundRect->bottomRight->setCoords(maxX, maxY);
-
-        m_backgroundRect->setVisible(true);
-    } else {
+    // Calculate the actual bounds of the main layout, which now contains everything
+    QRectF layoutRect = m_mainLayout->outerRect();
+    if (layoutRect.isEmpty()) {
         m_backgroundRect->setVisible(false);
+        if (m_separatorLine) m_separatorLine->setVisible(false);
+        return;
     }
+
+    double minX = layoutRect.left();
+    double minY = layoutRect.top();
+    double maxX = layoutRect.right();
+    double maxY = layoutRect.bottom();
+
+    m_backgroundRect->topLeft->setType(QCPItemPosition::ptAbsolute);
+    m_backgroundRect->bottomRight->setType(QCPItemPosition::ptAbsolute);
+    m_backgroundRect->topLeft->setCoords(minX, minY);
+    m_backgroundRect->bottomRight->setCoords(maxX, maxY);
+    m_backgroundRect->setVisible(true);
+
+    // Position the separator line
+    if (m_separatorLine && m_tableLayout->elementCount() > 0) {
+        QRectF tableRect = m_tableLayout->outerRect();
+        const int separatorPadding = 2;
+        double yPos = tableRect.top() - separatorPadding;
+
+        m_separatorLine->start->setType(QCPItemPosition::ptAbsolute);
+        m_separatorLine->end->setType(QCPItemPosition::ptAbsolute);
+        m_separatorLine->start->setCoords(minX + 5, yPos);
+        m_separatorLine->end->setCoords(maxX - 5, yPos);
+
+        // Show separator only if there's header text visible
+        bool headerVisible = (m_sessionDescElement && m_sessionDescElement->visible()) ||
+                             (m_utcElement && m_utcElement->visible()) ||
+                             (m_coordsElement && m_coordsElement->visible());
+        m_separatorLine->setVisible(headerVisible);
+    } else if (m_separatorLine) {
+        m_separatorLine->setVisible(false);
+    }
+}
+
+double LegendManager::getRawValueAtX(const QString& sessionId, const QString& xAxisKey, double xCoord, const QString& sensorId, const QString& measurementId)
+{
+    if (!m_model) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    int row = m_model->getSessionRow(sessionId);
+    if (row < 0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    // Get non-const reference to session to allow lazy calculation of values
+    SessionData& session = m_model->sessionRef(row);
+
+    QVector<double> xData = session.getMeasurement(sensorId, xAxisKey);
+    QVector<double> yData = session.getMeasurement(sensorId, measurementId);
+
+    if (xData.isEmpty() || xData.size() != yData.size()) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    // Find the closest data points for interpolation
+    auto itLower = std::lower_bound(xData.cbegin(), xData.cend(), xCoord);
+
+    if (itLower == xData.cbegin() || itLower == xData.cend()) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+
+    int index = std::distance(xData.cbegin(), itLower);
+
+    double x1 = xData[index - 1];
+    double y1 = yData[index - 1];
+    double x2 = xData[index];
+    double y2 = yData[index];
+
+    if (x2 == x1) {
+        // Avoid division by zero
+        return y1;
+    }
+
+    // Linear interpolation
+    return y1 + (y2 - y1) * (xCoord - x1) / (x2 - x1);
 }
 
 } // namespace FlySight
