@@ -93,20 +93,17 @@ void LegendManager::rebuildLegend()
 
     if (m_mode == PointDataMode) {
         // Headers: Series | Value
-        auto* seriesHeader = new QCPTextElement(m_plot, "Series", QFont("Arial", 9, QFont::Bold));
-        seriesHeader->setLayer("overlay");
         auto* valueHeader = new QCPTextElement(m_plot, "Value", QFont("Arial", 9, QFont::Bold));
         valueHeader->setLayer("overlay");
-        m_legendLayout->addElement(0, 0, seriesHeader);
         m_legendLayout->addElement(0, 1, valueHeader);
-        m_headerElements << seriesHeader << valueHeader;
+        m_headerElements << valueHeader;
     } else {
         // Headers: Series | Min | Avg | Max (removed Value and Change)
-        QStringList headers = {"Series", "Min", "Avg", "Max"};
+        QStringList headers = {"Min", "Avg", "Max"};
         for (int i = 0; i < headers.size(); ++i) {
             auto* header = new QCPTextElement(m_plot, headers[i], QFont("Arial", 9, QFont::Bold));
             header->setLayer("overlay");
-            m_legendLayout->addElement(0, i, header);
+            m_legendLayout->addElement(0, i + 1, header);
             m_headerElements << header;
         }
     }
