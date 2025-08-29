@@ -225,6 +225,7 @@ void PlotWidget::updatePlot()
                     info.sessionId = session.getAttribute(SessionKeys::SessionId).toString();
                     info.sensorId = sensorID;
                     info.measurementId = measurementID;
+                    info.displayName = plotName + " (" + plotUnits + ")";
                     info.defaultPen = QPen(QColor(color));
 
                     QCPGraph *graph = customPlot->addGraph(customPlot->xAxis, assignedYAxis);

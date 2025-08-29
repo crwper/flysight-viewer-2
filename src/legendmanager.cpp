@@ -117,6 +117,11 @@ void LegendManager::rebuildLegend()
         for (int j = 0; j < colCount; ++j) {
             auto* elem = new QCPTextElement(m_plot, "", QFont("Arial", 8));
             elem->setLayer("overlay");
+            if (j == 0) {
+                elem->setTextFlags(Qt::AlignLeft | Qt::AlignVCenter);
+            } else {
+                elem->setTextFlags(Qt::AlignHCenter | Qt::AlignVCenter);
+            }
             m_legendLayout->addElement(i + 1, j, elem);
             row << elem;
         }
@@ -149,7 +154,7 @@ void LegendManager::collectVisibleSeries()
         QString key = info.sensorId + "/" + info.measurementId;
         if (!seriesMap.contains(key)) {
             SeriesInfo si;
-            si.name = info.measurementId;
+            si.name = info.displayName;
             si.color = info.defaultPen.color();
             si.sensorId = info.sensorId;
             si.measurementId = info.measurementId;
