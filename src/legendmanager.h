@@ -32,7 +32,7 @@ public:
 
     // Update methods for different modes
     void updatePointData(double xCoord, const QString& hoveredSessionId);
-    void updateRangeStats(double xStart, double xEnd);
+    void updateRangeStats(double xCoord);
 
     void setMode(Mode mode);
     Mode mode() const { return m_mode; }

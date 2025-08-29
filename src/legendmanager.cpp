@@ -101,8 +101,8 @@ void LegendManager::rebuildLegend()
         m_legendLayout->addElement(0, 1, valueHeader);
         m_headerElements << seriesHeader << valueHeader;
     } else {
-        // Headers: Series | Value | Change | Min | Avg | Max
-        QStringList headers = {"Series", "Value", "Change", "Min", "Avg", "Max"};
+        // Headers: Series | Min | Avg | Max (removed Value and Change)
+        QStringList headers = {"Series", "Min", "Avg", "Max"};
         for (int i = 0; i < headers.size(); ++i) {
             auto* header = new QCPTextElement(m_plot, headers[i], QFont("Arial", 9, QFont::Bold));
             m_legendLayout->addElement(0, i, header);
@@ -114,7 +114,7 @@ void LegendManager::rebuildLegend()
     m_dataElements.clear();
     for (int i = 0; i < m_visibleSeries.size(); ++i) {
         QVector<QCPTextElement*> row;
-        int colCount = (m_mode == PointDataMode) ? 2 : 6;
+        int colCount = (m_mode == PointDataMode) ? 2 : 4; // Changed from 6 to 4 for range mode
 
         for (int j = 0; j < colCount; ++j) {
             auto* elem = new QCPTextElement(m_plot, "", QFont("Arial", 8));
@@ -197,7 +197,7 @@ void LegendManager::updatePointData(double xCoord, const QString& targetSessionI
     m_plot->replot(QCustomPlot::rpQueuedReplot);
 }
 
-void LegendManager::updateRangeStats(double xStart, double xEnd)
+void LegendManager::updateRangeStats(double xCoord)
 {
     if (!m_visible || m_mode != RangeStatsMode)
         return;
@@ -205,24 +205,42 @@ void LegendManager::updateRangeStats(double xStart, double xEnd)
     clearDataRows();
 
     for (int i = 0; i < m_visibleSeries.size(); ++i) {
-        // Use first available graph for this measurement type
-        QCPGraph* graph = m_visibleSeries[i].graph;
-        if (!graph)
-            continue;
+        // Collect interpolated values at cursor position for this measurement type
+        QVector<double> valuesAtCursor;
 
-        double startVal = interpolateValueAtX(graph, xStart);
-        double endVal = interpolateValueAtX(graph, xEnd);
-        double change = endVal - startVal;
+        // Iterate through all graphs to find those matching this measurement type
+        for (auto it = m_graphInfoMap->constBegin(); it != m_graphInfoMap->constEnd(); ++it) {
+            QCPGraph* graph = it.key();
+            const GraphInfo& info = it.value();
 
-        double minVal, avgVal, maxVal;
-        calculateRangeStats(graph, xStart, xEnd, minVal, avgVal, maxVal);
+            // Check if this graph matches the current series and is visible
+            if (info.sensorId == m_visibleSeries[i].sensorId &&
+                info.measurementId == m_visibleSeries[i].measurementId &&
+                graph->visible()) {
 
-        // Set values in columns: Series | Value | Change | Min | Avg | Max
-        setElementText(i + 1, 1, formatValue(endVal, m_visibleSeries[i].measurementId));
-        setElementText(i + 1, 2, formatValue(change, m_visibleSeries[i].measurementId));
-        setElementText(i + 1, 3, formatValue(minVal, m_visibleSeries[i].measurementId));
-        setElementText(i + 1, 4, formatValue(avgVal, m_visibleSeries[i].measurementId));
-        setElementText(i + 1, 5, formatValue(maxVal, m_visibleSeries[i].measurementId));
+                // Get the interpolated value at the cursor position
+                double value = interpolateValueAtX(graph, xCoord);
+                if (!std::isnan(value)) {
+                    valuesAtCursor.append(value);
+                }
+            }
+        }
+
+        // Calculate min/max/average from the collected values
+        if (!valuesAtCursor.isEmpty()) {
+            double minVal = *std::min_element(valuesAtCursor.begin(), valuesAtCursor.end());
+            double maxVal = *std::max_element(valuesAtCursor.begin(), valuesAtCursor.end());
+            double avgVal = std::accumulate(valuesAtCursor.begin(), valuesAtCursor.end(), 0.0) / valuesAtCursor.size();
+
+            // Set values in columns: Series | Min | Avg | Max
+            setElementText(i + 1, 1, formatValue(minVal, m_visibleSeries[i].measurementId));
+            setElementText(i + 1, 2, formatValue(avgVal, m_visibleSeries[i].measurementId));
+            setElementText(i + 1, 3, formatValue(maxVal, m_visibleSeries[i].measurementId));
+        } else {
+            setElementText(i + 1, 1, "--");
+            setElementText(i + 1, 2, "--");
+            setElementText(i + 1, 3, "--");
+        }
     }
 
     updateLegendPosition();

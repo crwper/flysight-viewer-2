@@ -564,9 +564,8 @@ void PlotWidget::updateLegend()
         m_legendManager->setMode(LegendManager::RangeStatsMode);
         m_legendManager->setVisible(true);
 
-        // For range stats, use from x-axis start to cursor position
-        double xStart = customPlot->xAxis->range().lower;
-        m_legendManager->updateRangeStats(xStart, xCoord);
+        // Pass the cursor position to calculate stats from marked values
+        m_legendManager->updateRangeStats(xCoord);
     }
 }
 
