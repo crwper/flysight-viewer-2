@@ -527,25 +527,46 @@ LegendManager* PlotWidget::legendManager() const
 
 void PlotWidget::updateLegend()
 {
-    if (!m_legendManager)
+    if (!m_legendManager || !m_crosshairManager)
         return;
 
     // Check if cursor is in plot area
     QPoint localPos = customPlot->mapFromGlobal(QCursor::pos());
     bool inPlotArea = customPlot->axisRect()->rect().contains(localPos);
 
-    if (inPlotArea) {
-        double xCoord = customPlot->xAxis->pixelToCoord(localPos.x());
-        QString hoveredId = model->hoveredSessionId();
+    if (!inPlotArea) {
+        m_legendManager->setVisible(false);
+        return;
+    }
 
+    // Get the set of sessions currently being traced
+    QSet<QString> tracedSessions = m_crosshairManager->getTracedSessionIds();
+
+    // Hide legend if no sessions are traced
+    if (tracedSessions.isEmpty()) {
+        m_legendManager->setVisible(false);
+        return;
+    }
+
+    double xCoord = customPlot->xAxis->pixelToCoord(localPos.x());
+
+    // Determine mode based on number of traced sessions
+    if (tracedSessions.size() == 1) {
+        // Exactly one session - show point statistics
+        m_legendManager->setMode(LegendManager::PointDataMode);
         m_legendManager->setVisible(true);
 
-        if (m_legendManager->mode() == LegendManager::PointDataMode) {
-            m_legendManager->updatePointData(xCoord, hoveredId);
-        }
-        // RangeStatsMode updates are handled by onSelectionChanged
+        // Pass the single traced session ID
+        QString singleSessionId = *tracedSessions.begin();
+        m_legendManager->updatePointData(xCoord, singleSessionId);
     } else {
-        m_legendManager->setVisible(false);
+        // Multiple sessions - show range statistics
+        m_legendManager->setMode(LegendManager::RangeStatsMode);
+        m_legendManager->setVisible(true);
+
+        // For range stats, use from x-axis start to cursor position
+        double xStart = customPlot->xAxis->range().lower;
+        m_legendManager->updateRangeStats(xStart, xCoord);
     }
 }
 

@@ -164,74 +164,32 @@ void LegendManager::collectVisibleSeries()
     m_visibleSeries = seriesMap.values().toVector();
 }
 
-void LegendManager::updatePointData(double xCoord, const QString& hoveredSessionId)
+void LegendManager::updatePointData(double xCoord, const QString& targetSessionId)
 {
     if (!m_visible || m_mode != PointDataMode)
         return;
 
     clearDataRows();
 
-    if (!hoveredSessionId.isEmpty()) {
-        // Single track mode - show values for hovered session only
-        for (int i = 0; i < m_visibleSeries.size(); ++i) {
-            // Find the graph for this series and hovered session
-            QCPGraph* targetGraph = nullptr;
-            for (auto it = m_graphInfoMap->constBegin(); it != m_graphInfoMap->constEnd(); ++it) {
-                const GraphInfo& info = it.value();
-                if (info.sessionId == hoveredSessionId &&
-                    info.sensorId == m_visibleSeries[i].sensorId &&
-                    info.measurementId == m_visibleSeries[i].measurementId) {
-                    targetGraph = it.key();
-                    break;
-                }
-            }
-
-            if (targetGraph) {
-                double value = interpolateValueAtX(targetGraph, xCoord);
-                setElementText(i + 1, 1, formatValue(value, m_visibleSeries[i].measurementId));
-            } else {
-                setElementText(i + 1, 1, "--");
+    // Single session mode - show values for the target session
+    for (int i = 0; i < m_visibleSeries.size(); ++i) {
+        // Find the graph for this series and target session
+        QCPGraph* targetGraph = nullptr;
+        for (auto it = m_graphInfoMap->constBegin(); it != m_graphInfoMap->constEnd(); ++it) {
+            const GraphInfo& info = it.value();
+            if (info.sessionId == targetSessionId &&
+                info.sensorId == m_visibleSeries[i].sensorId &&
+                info.measurementId == m_visibleSeries[i].measurementId) {
+                targetGraph = it.key();
+                break;
             }
         }
-    } else {
-        // Multi-track mode - show aggregate stats from x-axis start to cursor
-        double xStart = m_plot->xAxis->range().lower;
 
-        for (int i = 0; i < m_visibleSeries.size(); ++i) {
-            double minVal = std::numeric_limits<double>::max();
-            double maxVal = std::numeric_limits<double>::lowest();
-            double sumVal = 0;
-            int count = 0;
-
-            // Calculate stats across all graphs of this measurement type
-            for (auto it = m_graphInfoMap->constBegin(); it != m_graphInfoMap->constEnd(); ++it) {
-                QCPGraph* graph = it.key();
-                const GraphInfo& info = it.value();
-
-                if (info.sensorId == m_visibleSeries[i].sensorId &&
-                    info.measurementId == m_visibleSeries[i].measurementId &&
-                    graph->visible()) {
-
-                    double min, avg, max;
-                    calculateRangeStats(graph, xStart, xCoord, min, avg, max);
-                    if (!std::isnan(min)) {
-                        minVal = std::min(minVal, min);
-                        maxVal = std::max(maxVal, max);
-                        sumVal += avg;
-                        count++;
-                    }
-                }
-            }
-
-            if (count > 0) {
-                QString statText = QString("Min:%1 Avg:%2 Max:%3")
-                .arg(formatValue(minVal, m_visibleSeries[i].measurementId))
-                    .arg(formatValue(sumVal/count, m_visibleSeries[i].measurementId))
-                    .arg(formatValue(maxVal, m_visibleSeries[i].measurementId));
-                setElementText(i + 1, 1, statText);
-            } else {
-                setElementText(i + 1, 1, "--");
-            }
+        if (targetGraph && targetGraph->visible()) {
+            double value = interpolateValueAtX(targetGraph, xCoord);
+            setElementText(i + 1, 1, formatValue(value, m_visibleSeries[i].measurementId));
+        } else {
+            setElementText(i + 1, 1, "--");
         }
     }
 
