@@ -31,8 +31,8 @@ public:
     bool isVisible() const { return m_visible; }
 
     // Update methods for different modes
-    void updatePointData(double xCoord, const QString& hoveredSessionId);
-    void updateRangeStats(double xCoord);
+    bool updatePointData(double xCoord, const QString& hoveredSessionId);
+    bool updateRangeStats(double xCoord);
 
     void setMode(Mode mode);
     Mode mode() const { return m_mode; }
@@ -72,8 +72,6 @@ private:
 
     // Data calculation helpers
     double interpolateValueAtX(QCPGraph* graph, double x) const;
-    void calculateRangeStats(QCPGraph* graph, double xStart, double xEnd,
-                             double& minVal, double& avgVal, double& maxVal) const;
     QString formatValue(double value, const QString& measurementId) const;
 
     // Layout helpers

@@ -37,6 +37,7 @@ void LegendManager::createLegendStructure()
 
     // Create background rectangle in a layer above the main plot but below the axes
     m_backgroundRect = new QCPItemRect(m_plot);
+    m_backgroundRect->setLayer("overlay");
     m_backgroundRect->setPen(QPen(QColor(100, 100, 100), 1));
     m_backgroundRect->setBrush(QBrush(QColor(255, 255, 255)));
 
@@ -61,6 +62,9 @@ void LegendManager::createLegendStructure()
 void LegendManager::setVisible(bool visible)
 {
     m_visible = visible;
+
+    if (m_backgroundRect)
+        m_backgroundRect->setVisible(visible);
 
     if (m_legendLayout)
         m_legendLayout->setVisible(visible);
@@ -96,7 +100,9 @@ void LegendManager::rebuildLegend()
     if (m_mode == PointDataMode) {
         // Headers: Series | Value
         auto* seriesHeader = new QCPTextElement(m_plot, "Series", QFont("Arial", 9, QFont::Bold));
+        seriesHeader->setLayer("overlay");
         auto* valueHeader = new QCPTextElement(m_plot, "Value", QFont("Arial", 9, QFont::Bold));
+        valueHeader->setLayer("overlay");
         m_legendLayout->addElement(0, 0, seriesHeader);
         m_legendLayout->addElement(0, 1, valueHeader);
         m_headerElements << seriesHeader << valueHeader;
@@ -105,6 +111,7 @@ void LegendManager::rebuildLegend()
         QStringList headers = {"Series", "Min", "Avg", "Max"};
         for (int i = 0; i < headers.size(); ++i) {
             auto* header = new QCPTextElement(m_plot, headers[i], QFont("Arial", 9, QFont::Bold));
+            header->setLayer("overlay");
             m_legendLayout->addElement(0, i, header);
             m_headerElements << header;
         }
@@ -118,6 +125,7 @@ void LegendManager::rebuildLegend()
 
         for (int j = 0; j < colCount; ++j) {
             auto* elem = new QCPTextElement(m_plot, "", QFont("Arial", 8));
+            elem->setLayer("overlay");
             m_legendLayout->addElement(i + 1, j, elem);
             row << elem;
         }
@@ -164,12 +172,13 @@ void LegendManager::collectVisibleSeries()
     m_visibleSeries = seriesMap.values().toVector();
 }
 
-void LegendManager::updatePointData(double xCoord, const QString& targetSessionId)
+bool LegendManager::updatePointData(double xCoord, const QString& targetSessionId)
 {
     if (!m_visible || m_mode != PointDataMode)
-        return;
+        return false;
 
     clearDataRows();
+    bool hasData = false;
 
     // Single session mode - show values for the target session
     for (int i = 0; i < m_visibleSeries.size(); ++i) {
@@ -187,6 +196,9 @@ void LegendManager::updatePointData(double xCoord, const QString& targetSessionI
 
         if (targetGraph && targetGraph->visible()) {
             double value = interpolateValueAtX(targetGraph, xCoord);
+            if (!std::isnan(value)) {
+                hasData = true;
+            }
             setElementText(i + 1, 1, formatValue(value, m_visibleSeries[i].measurementId));
         } else {
             setElementText(i + 1, 1, "--");
@@ -195,14 +207,16 @@ void LegendManager::updatePointData(double xCoord, const QString& targetSessionI
 
     updateLegendPosition();
     m_plot->replot(QCustomPlot::rpQueuedReplot);
+    return hasData;
 }
 
-void LegendManager::updateRangeStats(double xCoord)
+bool LegendManager::updateRangeStats(double xCoord)
 {
     if (!m_visible || m_mode != RangeStatsMode)
-        return;
+        return false;
 
     clearDataRows();
+    bool hasData = false;
 
     for (int i = 0; i < m_visibleSeries.size(); ++i) {
         // Collect interpolated values at cursor position for this measurement type
@@ -228,6 +242,7 @@ void LegendManager::updateRangeStats(double xCoord)
 
         // Calculate min/max/average from the collected values
         if (!valuesAtCursor.isEmpty()) {
+            hasData = true;
             double minVal = *std::min_element(valuesAtCursor.begin(), valuesAtCursor.end());
             double maxVal = *std::max_element(valuesAtCursor.begin(), valuesAtCursor.end());
             double avgVal = std::accumulate(valuesAtCursor.begin(), valuesAtCursor.end(), 0.0) / valuesAtCursor.size();
@@ -245,6 +260,7 @@ void LegendManager::updateRangeStats(double xCoord)
 
     updateLegendPosition();
     m_plot->replot(QCustomPlot::rpQueuedReplot);
+    return hasData;
 }
 
 double LegendManager::interpolateValueAtX(QCPGraph* graph, double x) const
@@ -253,45 +269,6 @@ double LegendManager::interpolateValueAtX(QCPGraph* graph, double x) const
         return std::numeric_limits<double>::quiet_NaN();
 
     return PlotWidget::interpolateY(graph, x);
-}
-
-void LegendManager::calculateRangeStats(QCPGraph* graph, double xStart, double xEnd,
-                                        double& minVal, double& avgVal, double& maxVal) const
-{
-    if (!graph || graph->data()->isEmpty()) {
-        minVal = avgVal = maxVal = std::numeric_limits<double>::quiet_NaN();
-        return;
-    }
-
-    auto data = graph->data();
-    auto itStart = data->findBegin(xStart, false);
-    auto itEnd = data->findEnd(xEnd, false);
-
-    if (itStart == itEnd) {
-        minVal = avgVal = maxVal = std::numeric_limits<double>::quiet_NaN();
-        return;
-    }
-
-    minVal = std::numeric_limits<double>::max();
-    maxVal = std::numeric_limits<double>::lowest();
-    double sum = 0;
-    int count = 0;
-
-    for (auto it = itStart; it != itEnd; ++it) {
-        double val = it->value;
-        if (!std::isnan(val)) {
-            minVal = std::min(minVal, val);
-            maxVal = std::max(maxVal, val);
-            sum += val;
-            count++;
-        }
-    }
-
-    if (count > 0) {
-        avgVal = sum / count;
-    } else {
-        minVal = avgVal = maxVal = std::numeric_limits<double>::quiet_NaN();
-    }
 }
 
 QString LegendManager::formatValue(double value, const QString& measurementId) const
@@ -346,21 +323,20 @@ void LegendManager::clearLegendElements()
 
 void LegendManager::updateLegendPosition()
 {
-    if (!m_legendLayout || !m_backgroundRect)
+    if (!m_legendLayout || !m_backgroundRect || !m_visible)
         return;
 
-    // Force layout update first
+    // Force layout update first to ensure text element positions are current
     m_plot->replot(QCustomPlot::rpQueuedReplot);
 
-    // Calculate the actual bounds of the legend content
-    double minX = m_plot->axisRect()->right();
-    double minY = m_plot->axisRect()->top();
-    double maxX = m_plot->axisRect()->left();
-    double maxY = m_plot->axisRect()->bottom();
+    // Calculate the actual bounds of the legend content in pixels
+    double minX = std::numeric_limits<double>::max();
+    double minY = std::numeric_limits<double>::max();
+    double maxX = std::numeric_limits<double>::lowest();
+    double maxY = std::numeric_limits<double>::lowest();
 
-    // Find the actual bounds of all text elements
     bool hasElements = false;
-    for (auto* elem : m_headerElements) {
+    auto updateBounds = [&](QCPLayoutElement* elem) {
         if (elem && elem->visible()) {
             QRectF elemRect = elem->outerRect();
             if (!elemRect.isEmpty()) {
@@ -371,42 +347,38 @@ void LegendManager::updateLegendPosition()
                 hasElements = true;
             }
         }
+    };
+
+    // Find the actual bounds of all text elements
+    for (auto* elem : m_headerElements) {
+        updateBounds(elem);
     }
 
     for (const auto& row : m_dataElements) {
         for (auto* elem : row) {
-            if (elem && elem->visible()) {
-                QRectF elemRect = elem->outerRect();
-                if (!elemRect.isEmpty()) {
-                    minX = qMin(minX, elemRect.left());
-                    minY = qMin(minY, elemRect.top());
-                    maxX = qMax(maxX, elemRect.right());
-                    maxY = qMax(maxY, elemRect.bottom());
-                    hasElements = true;
-                }
-            }
+            updateBounds(elem);
         }
     }
 
     if (hasElements) {
         // Add padding around the text
-        minX -= 5;
-        minY -= 5;
-        maxX += 5;
-        maxY += 5;
+        const int padding = 5;
+        minX -= padding;
+        minY -= padding;
+        maxX += padding;
+        maxY += padding;
 
-        // Set background rectangle position using plot coordinates
-        m_backgroundRect->topLeft->setType(QCPItemPosition::ptPlotCoords);
-        m_backgroundRect->bottomRight->setType(QCPItemPosition::ptPlotCoords);
+        // Set background rectangle position using absolute pixel coordinates
+        m_backgroundRect->topLeft->setType(QCPItemPosition::ptAbsolute);
+        m_backgroundRect->bottomRight->setType(QCPItemPosition::ptAbsolute);
 
-        // Convert pixel positions to plot coordinates
-        double x1 = m_plot->xAxis->pixelToCoord(minX);
-        double y1 = m_plot->yAxis->pixelToCoord(minY);
-        double x2 = m_plot->xAxis->pixelToCoord(maxX);
-        double y2 = m_plot->yAxis->pixelToCoord(maxY);
+        // Use the calculated pixel coordinates directly
+        m_backgroundRect->topLeft->setCoords(minX, minY);
+        m_backgroundRect->bottomRight->setCoords(maxX, maxY);
 
-        m_backgroundRect->topLeft->setCoords(x1, y1);
-        m_backgroundRect->bottomRight->setCoords(x2, y2);
+        m_backgroundRect->setVisible(true);
+    } else {
+        m_backgroundRect->setVisible(false);
     }
 }
 

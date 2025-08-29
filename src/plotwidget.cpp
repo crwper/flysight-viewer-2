@@ -549,6 +549,7 @@ void PlotWidget::updateLegend()
     }
 
     double xCoord = customPlot->xAxis->pixelToCoord(localPos.x());
+    bool shouldBeVisible = false;
 
     // Determine mode based on number of traced sessions
     if (tracedSessions.size() == 1) {
@@ -559,6 +560,8 @@ void PlotWidget::updateLegend()
         // Pass the single traced session ID
         QString singleSessionId = *tracedSessions.begin();
         m_legendManager->updatePointData(xCoord, singleSessionId);
+
+        shouldBeVisible = m_legendManager->updatePointData(xCoord, singleSessionId);
     } else {
         // Multiple sessions - show range statistics
         m_legendManager->setMode(LegendManager::RangeStatsMode);
@@ -566,7 +569,12 @@ void PlotWidget::updateLegend()
 
         // Pass the cursor position to calculate stats from marked values
         m_legendManager->updateRangeStats(xCoord);
+
+        shouldBeVisible = m_legendManager->updateRangeStats(xCoord);
     }
+
+    // Set visibility based on whether data was found
+    m_legendManager->setVisible(shouldBeVisible);
 }
 
 } // namespace FlySight
