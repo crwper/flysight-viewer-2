@@ -63,6 +63,7 @@ set(PROJECT_SOURCES
     graphinfo.h
     pluginhost.h               pluginhost.cpp
     plotregistry.cpp           plotregistry.h
+    legendmanager.cpp          legendmanager.h
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
@@ -126,7 +127,6 @@ endif()
 
 # Deploy Qt runtime into the install tree (Qt ≥ 6)
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
-    include("${QT_DEPLOY_SUPPORT}")
     qt_generate_deploy_app_script(
         TARGET        FlySightViewer
         OUTPUT_SCRIPT FlySightDeployScript

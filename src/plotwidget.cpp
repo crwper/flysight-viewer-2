@@ -1,5 +1,6 @@
 #include "plotwidget.h"
 #include "mainwindow.h"
+#include "legendmanager.h"
 
 #include <QVBoxLayout>
 #include <QMouseEvent>
@@ -59,6 +60,14 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
         customPlot,
         model,
         &m_graphInfoMap, // existing QMap<QCPGraph*, GraphInfo>
+        this
+        );
+
+    // create legend manager
+    m_legendManager = std::make_unique<LegendManager>(
+        customPlot,
+        model,
+        &m_graphInfoMap,
         this
         );
 
@@ -232,6 +241,11 @@ void PlotWidget::updatePlot()
 
     // Adjust y-axis ranges based on the updated x-axis range
     onXAxisRangeChanged(customPlot->xAxis->range());
+
+    // Rebuild legend
+    if (m_legendManager) {
+        m_legendManager->rebuildLegend();
+    }
 }
 
 void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
@@ -315,10 +329,15 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
         switch (event->type()) {
         case QEvent::MouseMove: {
             auto me = static_cast<QMouseEvent*>(event);
+
             // forward to crosshairManager if desired:
             if (m_crosshairManager) {
                 m_crosshairManager->handleMouseMove(me->pos());
             }
+
+            // update legend
+            updateLegend();
+
             // also forward to the current tool
             return m_currentTool->mouseMoveEvent(me);
         }
@@ -333,6 +352,9 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
         case QEvent::Leave:
             if (m_crosshairManager) {
                 m_crosshairManager->handleMouseLeave();
+            }
+            if (m_legendManager) {
+                m_legendManager->setVisible(false);
             }
             m_currentTool->leaveEvent(event);
             return false;
@@ -497,6 +519,34 @@ void PlotWidget::applyXAxisChange(const QString& key, const QString& label)
     customPlot->replot();
 
     updateXAxisTicker();
+}
+LegendManager* PlotWidget::legendManager() const
+{
+    return m_legendManager.get();
+}
+
+void PlotWidget::updateLegend()
+{
+    if (!m_legendManager)
+        return;
+
+    // Check if cursor is in plot area
+    QPoint localPos = customPlot->mapFromGlobal(QCursor::pos());
+    bool inPlotArea = customPlot->axisRect()->rect().contains(localPos);
+
+    if (inPlotArea) {
+        double xCoord = customPlot->xAxis->pixelToCoord(localPos.x());
+        QString hoveredId = model->hoveredSessionId();
+
+        m_legendManager->setVisible(true);
+
+        if (m_legendManager->mode() == LegendManager::PointDataMode) {
+            m_legendManager->updatePointData(xCoord, hoveredId);
+        }
+        // RangeStatsMode updates are handled by onSelectionChanged
+    } else {
+        m_legendManager->setVisible(false);
+    }
 }
 
 } // namespace FlySight
