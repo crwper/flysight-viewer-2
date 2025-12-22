@@ -87,7 +87,7 @@ private:
     SessionModel *model;
 
     // Plot value selection components
-    KDDockWidgets::QtWidgets::DockWidget *plotDock;
+    KDDockWidgets::QtWidgets::DockWidget *plotSelectionDock;
     QTreeView *plotTreeView;
     QStandardItemModel *plotModel;
     LogbookView *logbookView;

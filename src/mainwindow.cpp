@@ -26,7 +26,6 @@ MainWindow::MainWindow(QWidget *parent)
     : KDDockWidgets::QtWidgets::MainWindow(
           QStringLiteral("MainWindow"),
           KDDockWidgets::MainWindowOptions{
-              KDDockWidgets::MainWindowOption_HasCentralWidget,
               KDDockWidgets::MainWindowOption_ManualInit
           },
           parent)
@@ -65,9 +64,11 @@ MainWindow::MainWindow(QWidget *parent)
     connect(logbookView, &LogbookView::hideOthersRequested, this, &MainWindow::on_action_HideOthers_triggered);
     connect(logbookView, &LogbookView::deleteRequested, this, &MainWindow::on_action_Delete_triggered);
 
-    // Add plot widget
+    // Add plot view
+    auto *plotDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Plots"));
     plotWidget = new PlotWidget(model, plotModel, this);
-    setPersistentCentralWidget(plotWidget);
+    plotDock->setWidget(plotWidget);
+    addDockWidget(plotDock, KDDockWidgets::Location_OnLeft);
 
     // Connect the newTimeRange signal to PlotWidget's setXAxisRange slot
     connect(this, &MainWindow::newTimeRange, plotWidget, &PlotWidget::setXAxisRange);
@@ -568,10 +569,10 @@ void MainWindow::registerBuiltInPlots()
 void MainWindow::setupPlotValues()
 {
     // Create the dock widget
-    plotDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Plot Selection"));
-    plotTreeView = new QTreeView(plotDock);
-    plotDock->setWidget(plotTreeView);
-    addDockWidget(plotDock, KDDockWidgets::Location_OnLeft);
+    plotSelectionDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Plot Selection"));
+    plotTreeView = new QTreeView(plotSelectionDock);
+    plotSelectionDock->setWidget(plotTreeView);
+    addDockWidget(plotSelectionDock, KDDockWidgets::Location_OnLeft);
 
     // Attach the model
     plotTreeView->setModel(plotModel);
@@ -1434,7 +1435,7 @@ void MainWindow::initializePlotsMenu()
     plotsMenu->addSeparator();
 
     // Create the "Show Plot Selection" action
-    QAction *showPlotSelectionAction = plotDock->toggleAction();
+    QAction *showPlotSelectionAction = plotSelectionDock->toggleAction();
     showPlotSelectionAction->setText(tr("Show Plot Selection"));
     plotsMenu->addAction(showPlotSelectionAction);
 }
@@ -1454,8 +1455,8 @@ void MainWindow::togglePlot(const QString &sensorID, const QString &measurementI
                 plotItem->setCheckState(newState);
 
                 // Ensure the plot selection view is visible
-                if(!plotDock->isVisible()){
-                    plotDock->show();
+                if(!plotSelectionDock->isVisible()){
+                    plotSelectionDock->show();
                 }
 
                 // Emit modelChanged to update the plots
