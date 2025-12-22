@@ -26,6 +26,10 @@ set(QCUSTOMPLOT_ROOT "${THIRD_PARTY_DIR}/QCustomPlot"         CACHE PATH "QCusto
 set(QCUSTOMPLOT_DIR  "${QCUSTOMPLOT_ROOT}/QCustomPlot"        CACHE PATH "QCustomPlot sources dir")
 set(GTSAM_ROOT     "${THIRD_PARTY_DIR}/GTSAM-install"         CACHE PATH "GTSAM install prefix")
 set(TBB_ROOT       "${THIRD_PARTY_DIR}/oneTBB-install"        CACHE PATH "oneTBB install prefix")
+set(KDDW_ROOT      "${THIRD_PARTY_DIR}/KDDockWidgets-install" CACHE PATH "KDDockWidgets install prefix")
+
+# Make KDDW discoverable by find_package() without requiring external -DCMAKE_PREFIX_PATH=...
+list(PREPEND CMAKE_PREFIX_PATH "${KDDW_ROOT}")
 
 # Boost root (editable)
 set(BOOST_ROOT "C:/Program Files/Boost/boost_1_87_0"
@@ -154,6 +158,9 @@ set(Boost_USE_STATIC_RUNTIME OFF)
 
 find_package(Boost REQUIRED COMPONENTS serialization timer chrono system)
 
+# KDDockWidgets (KDDW)
+find_package(KDDockWidgets-qt6 CONFIG REQUIRED)
+
 # ─────────────────────────────── C++ model library
 add_library(flysight_model STATIC
   sessiondata.cpp            sessiondata.h
@@ -202,6 +209,8 @@ target_link_libraries(FlySightViewer PRIVATE
   qcustomplot
   flysight_gtsam
   flysight_tbb
+
+  KDAB::kddockwidgets
 
   Qt${QT_VERSION_MAJOR}::Widgets
   Qt${QT_VERSION_MAJOR}::PrintSupport
