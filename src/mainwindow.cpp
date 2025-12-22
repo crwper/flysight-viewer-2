@@ -1,7 +1,6 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 
-#include <QDockWidget>
 #include <QStandardItem>
 #include <QTreeView>
 #include <QFileDialog>
@@ -24,7 +23,13 @@
 namespace FlySight {
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent)
+    : KDDockWidgets::QtWidgets::MainWindow(
+          QStringLiteral("MainWindow"),
+          KDDockWidgets::MainWindowOptions{
+              KDDockWidgets::MainWindowOption_HasCentralWidget,
+              KDDockWidgets::MainWindowOption_ManualInit
+          },
+          parent)
     , m_settings(new QSettings("FlySight", "Viewer", this))
     , ui(new Ui::MainWindow)
     , model(new SessionModel(this))
@@ -33,6 +38,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_currentXAxisLabel(tr("Time from exit (s)"))
 {
     ui->setupUi(this);
+    manualInit();
 
     // Initialize preferences
     initializePreferences();
@@ -49,10 +55,10 @@ MainWindow::MainWindow(QWidget *parent)
     PluginHost::instance().initialise(pluginDir);
 
     // Add logbook view
-    QDockWidget *logbookDock = new QDockWidget(tr("Logbook"), this);
+    auto *logbookDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Logbook"));
     logbookView = new LogbookView(model, this);
     logbookDock->setWidget(logbookView);
-    addDockWidget(Qt::RightDockWidgetArea, logbookDock);
+    addDockWidget(logbookDock, KDDockWidgets::Location_OnRight);
 
     connect(logbookView, &LogbookView::showSelectedRequested, this, &MainWindow::on_action_ShowSelected_triggered);
     connect(logbookView, &LogbookView::hideSelectedRequested, this, &MainWindow::on_action_HideSelected_triggered);
@@ -61,7 +67,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Add plot widget
     plotWidget = new PlotWidget(model, plotModel, this);
-    setCentralWidget(plotWidget);
+    setPersistentCentralWidget(plotWidget);
 
     // Connect the newTimeRange signal to PlotWidget's setXAxisRange slot
     connect(this, &MainWindow::newTimeRange, plotWidget, &PlotWidget::setXAxisRange);
@@ -562,10 +568,10 @@ void MainWindow::registerBuiltInPlots()
 void MainWindow::setupPlotValues()
 {
     // Create the dock widget
-    plotDock = new QDockWidget(tr("Plot Selection"), this);
+    plotDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Plot Selection"));
     plotTreeView = new QTreeView(plotDock);
     plotDock->setWidget(plotTreeView);
-    addDockWidget(Qt::LeftDockWidgetArea, plotDock);
+    addDockWidget(plotDock, KDDockWidgets::Location_OnLeft);
 
     // Attach the model
     plotTreeView->setModel(plotModel);
@@ -1428,20 +1434,8 @@ void MainWindow::initializePlotsMenu()
     plotsMenu->addSeparator();
 
     // Create the "Show Plot Selection" action
-    QAction *showPlotSelectionAction = new QAction(tr("Show Plot Selection"), this);
-    showPlotSelectionAction->setCheckable(true);
-    showPlotSelectionAction->setChecked(plotDock->isVisible());
-
-    // Connect the action to toggle plotDock visibility
-    connect(showPlotSelectionAction, &QAction::triggered, this, [this](bool checked){
-        plotDock->setVisible(checked);
-    });
-
-
-    // Synchronize the action's check state with plotDock's visibility changes
-    connect(plotDock, &QDockWidget::visibilityChanged, showPlotSelectionAction, &QAction::setChecked);
-
-    // Add the "Show Plot Selection" action to the 'Plots' menu
+    QAction *showPlotSelectionAction = plotDock->toggleAction();
+    showPlotSelectionAction->setText(tr("Show Plot Selection"));
     plotsMenu->addAction(showPlotSelectionAction);
 }
 

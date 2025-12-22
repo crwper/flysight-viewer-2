@@ -1,7 +1,8 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include <QMainWindow>
+#include <kddockwidgets/MainWindow.h>
+#include <kddockwidgets/DockWidget.h>
 #include <QSettings>
 #include <QStandardItemModel>
 #include <QTreeView>
@@ -18,7 +19,7 @@ QT_END_NAMESPACE
 
 namespace FlySight {
 
-class MainWindow : public QMainWindow
+class MainWindow : public KDDockWidgets::QtWidgets::MainWindow
 {
     Q_OBJECT
 
@@ -86,7 +87,7 @@ private:
     SessionModel *model;
 
     // Plot value selection components
-    QDockWidget *plotDock;
+    KDDockWidgets::QtWidgets::DockWidget *plotDock;
     QTreeView *plotTreeView;
     QStandardItemModel *plotModel;
     LogbookView *logbookView;
