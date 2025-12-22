@@ -195,6 +195,7 @@ set(PROJECT_SOURCES
   plotregistry.cpp           plotregistry.h
   imugnssekf.h               imugnssekf.cpp
   python_output_redirector.h
+  legendmanager.cpp          legendmanager.h
 )
 
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)

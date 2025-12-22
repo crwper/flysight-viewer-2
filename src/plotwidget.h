@@ -9,6 +9,7 @@
 #include "sessionmodel.h"
 #include "graphinfo.h"
 #include "crosshairmanager.h"
+#include "legendmanager.h"
 
 namespace FlySight {
 
@@ -48,6 +49,7 @@ public:
     void setXAxisRange(double min, double max);
     void handleSessionsSelected(const QList<QString> &sessionIds);
     CrosshairManager* crosshairManager() const;
+    LegendManager* legendManager() const;
 
     static double interpolateY(const QCPGraph* graph, double x);
 
@@ -67,6 +69,7 @@ protected:
 
 private slots:
     void onHoveredSessionChanged(const QString& sessionId);
+    void positionLegend();
 
 private:
     // Initialization
@@ -83,6 +86,9 @@ private:
     QCPRange keyRangeOf(const SessionData& s,
                         const QString& sensor,
                         const QString& meas) const;
+
+    // Legend management
+    void updateLegend();
 
     // Member Variables
     QCustomPlot *customPlot;
@@ -107,6 +113,7 @@ private:
     bool m_updatingYAxis = false;
 
     std::unique_ptr<CrosshairManager> m_crosshairManager;
+    std::unique_ptr<LegendManager> m_legendManager;
 
     QString m_xAxisKey   = SessionKeys::TimeFromExit;
     QString m_xAxisLabel = "Time from exit (s)";

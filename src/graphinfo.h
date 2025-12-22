@@ -14,6 +14,7 @@ struct GraphInfo
     QString sessionId;
     QString sensorId;
     QString measurementId;
+    QString displayName;
     QPen    defaultPen;
 };
 

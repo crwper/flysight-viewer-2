@@ -1,5 +1,6 @@
 #include "plotwidget.h"
 #include "mainwindow.h"
+#include "legendmanager.h"
 
 #include <QVBoxLayout>
 #include <QMouseEvent>
@@ -62,6 +63,14 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
         this
         );
 
+    // create legend manager
+    m_legendManager = std::make_unique<LegendManager>(
+        customPlot,
+        model,
+        &m_graphInfoMap,
+        this
+        );
+
     // For example, installing event filter:
     customPlot->installEventFilter(this);
 
@@ -71,6 +80,7 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
     connect(plotModel, &QStandardItemModel::modelReset, this, &PlotWidget::updatePlot);
     connect(customPlot->xAxis, QOverload<const QCPRange &>::of(&QCPAxis::rangeChanged), this, &PlotWidget::onXAxisRangeChanged);
     connect(model, &SessionModel::hoveredSessionChanged, this, &PlotWidget::onHoveredSessionChanged);
+    connect(customPlot, &QCustomPlot::afterLayout, this, &PlotWidget::positionLegend);
 
     // update the plot with initial data
     updatePlot();
@@ -215,6 +225,11 @@ void PlotWidget::updatePlot()
                     info.sessionId = session.getAttribute(SessionKeys::SessionId).toString();
                     info.sensorId = sensorID;
                     info.measurementId = measurementID;
+                    if (!plotUnits.isEmpty()) {
+                        info.displayName = QString("%1 (%2)").arg(plotName).arg(plotUnits);
+                    } else {
+                        info.displayName = plotName;
+                    }
                     info.defaultPen = QPen(QColor(color));
 
                     QCPGraph *graph = customPlot->addGraph(customPlot->xAxis, assignedYAxis);
@@ -232,6 +247,11 @@ void PlotWidget::updatePlot()
 
     // Adjust y-axis ranges based on the updated x-axis range
     onXAxisRangeChanged(customPlot->xAxis->range());
+
+    // Rebuild legend
+    if (m_legendManager) {
+        m_legendManager->rebuildLegend();
+    }
 }
 
 void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
@@ -308,6 +328,13 @@ void PlotWidget::onHoveredSessionChanged(const QString &sessionId)
     customPlot->replot();
 }
 
+void PlotWidget::positionLegend()
+{
+    if (m_legendManager && m_legendManager->isVisible()) {
+        m_legendManager->updateLegendPosition();
+    }
+}
+
 // Protected Methods
 bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 {
@@ -315,10 +342,15 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
         switch (event->type()) {
         case QEvent::MouseMove: {
             auto me = static_cast<QMouseEvent*>(event);
+
             // forward to crosshairManager if desired:
             if (m_crosshairManager) {
                 m_crosshairManager->handleMouseMove(me->pos());
             }
+
+            // update legend
+            updateLegend();
+
             // also forward to the current tool
             return m_currentTool->mouseMoveEvent(me);
         }
@@ -333,6 +365,9 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
         case QEvent::Leave:
             if (m_crosshairManager) {
                 m_crosshairManager->handleMouseLeave();
+            }
+            if (m_legendManager) {
+                m_legendManager->setVisible(false);
             }
             m_currentTool->leaveEvent(event);
             return false;
@@ -497,6 +532,65 @@ void PlotWidget::applyXAxisChange(const QString& key, const QString& label)
     customPlot->replot();
 
     updateXAxisTicker();
+}
+LegendManager* PlotWidget::legendManager() const
+{
+    return m_legendManager.get();
+}
+
+void PlotWidget::updateLegend()
+{
+    if (!m_legendManager || !m_crosshairManager)
+        return;
+
+    // Check if cursor is in plot area
+    QPoint localPos = customPlot->mapFromGlobal(QCursor::pos());
+    bool inPlotArea = customPlot->axisRect()->rect().contains(localPos);
+
+    // Get the set of sessions currently being traced
+    QSet<QString> tracedSessions = m_crosshairManager->getTracedSessionIds();
+
+    if (!inPlotArea || tracedSessions.isEmpty()) {
+        m_legendManager->setVisible(false);
+        customPlot->replot(QCustomPlot::rpQueuedReplot);
+        return;
+    }
+
+    double xCoord = customPlot->xAxis->pixelToCoord(localPos.x());
+    bool shouldBeVisible = false;
+
+    // Determine mode based on number of traced sessions
+    if (tracedSessions.size() == 1) {
+        // Exactly one session - show point statistics
+        m_legendManager->setMode(LegendManager::PointDataMode);
+        QString singleSessionId = *tracedSessions.begin();
+
+        // Fetch session description
+        QString sessionDesc;
+        const auto& allSessions = model->getAllSessions();
+        for (const auto& session : allSessions) {
+            if (session.getAttribute(SessionKeys::SessionId).toString() == singleSessionId) {
+                // ASSUMPTION: The description is stored with this key.
+                // Replace 'SessionKeys::Description' if it's different.
+                sessionDesc = session.getAttribute(SessionKeys::Description).toString();
+                break;
+            }
+        }
+
+        shouldBeVisible = m_legendManager->updatePointData(xCoord, singleSessionId, sessionDesc, m_xAxisKey);
+    } else {
+        // Multiple sessions - show range statistics
+        m_legendManager->setMode(LegendManager::RangeStatsMode);
+
+        // Pass the cursor position to calculate stats from marked values
+        shouldBeVisible = m_legendManager->updateRangeStats(xCoord);
+    }
+
+    // Set visibility based on whether data was found
+    m_legendManager->setVisible(shouldBeVisible);
+
+    // Trigger a single replot now
+    customPlot->replot(QCustomPlot::rpQueuedReplot);
 }
 
 } // namespace FlySight
