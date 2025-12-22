@@ -9,10 +9,8 @@ int main(int argc, char *argv[]) {
     // Initiallize KDDockWidgets front end
     KDDockWidgets::initFrontend(KDDockWidgets::FrontendType::QtWidgets);
 
-#ifdef Q_OS_WINDOWS
-    // Set the Windows Vista style only on Windows
-    app.setStyle(QStyleFactory::create("windowsvista"));
-#endif
+    // Fusion looks better in general
+    app.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
 
     FlySight::MainWindow mainWindow;
     mainWindow.show();
