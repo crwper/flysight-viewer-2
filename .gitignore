@@ -48,3 +48,5 @@ third-party/oneTBB/build/
 third-party/oneTBB-install/
 third-party/gtsam/build/
 third-party/gtsam-install/
+third-party/KDDockWidgets/build/
+third-party/KDDockWidgets-install/

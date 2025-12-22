@@ -8,3 +8,6 @@
 [submodule "third-party/oneTBB"]
 	path = third-party/oneTBB
 	url = https://github.com/uxlfoundation/oneTBB.git
+[submodule "third-party/KDDockWidgets"]
+	path = third-party/KDDockWidgets
+	url = https://github.com/KDAB/KDDockWidgets.git
