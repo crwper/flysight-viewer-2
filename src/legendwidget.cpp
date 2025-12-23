@@ -89,6 +89,42 @@ void LegendWidget::configureTableForMode(Mode mode)
     }
 }
 
+bool LegendWidget::headerAllowed() const
+{
+    return m_mode == PointDataMode;
+}
+
+void LegendWidget::updateHeaderVisibility() const
+{
+    if (!m_headerWidget || !m_sessionLabel || !m_utcLabel || !m_coordsLabel)
+        return;
+
+    const bool anyText =
+        !m_sessionLabel->text().isEmpty() ||
+        !m_utcLabel->text().isEmpty() ||
+        !m_coordsLabel->text().isEmpty();
+
+    // Single source of truth:
+    m_headerWidget->setVisible(headerAllowed() && anyText);
+}
+
+void LegendWidget::clearHeader()
+{
+    if (!m_sessionLabel || !m_utcLabel || !m_coordsLabel)
+        return;
+
+    m_sessionLabel->clear();
+    m_utcLabel->clear();
+    m_coordsLabel->clear();
+
+    // Keep label vis consistent (not strictly required if parent hides, but clean)
+    m_sessionLabel->setVisible(false);
+    m_utcLabel->setVisible(false);
+    m_coordsLabel->setVisible(false);
+
+    updateHeaderVisibility();
+}
+
 void LegendWidget::setMode(Mode mode)
 {
     if (m_mode == mode)
@@ -96,19 +132,16 @@ void LegendWidget::setMode(Mode mode)
 
     m_mode = mode;
     configureTableForMode(m_mode);
-}
 
-void LegendWidget::setHeaderVisible(bool visible)
-{
-    if (m_headerWidget)
-        m_headerWidget->setVisible(visible);
+    // Prevent stale header from ever reappearing
+    clearHeader();
 }
 
 void LegendWidget::setHeader(const QString &sessionDesc,
                              const QString &utcText,
                              const QString &coordsText)
 {
-    if (!m_sessionLabel || !m_utcLabel || !m_coordsLabel || !m_headerWidget)
+    if (!m_sessionLabel || !m_utcLabel || !m_coordsLabel)
         return;
 
     m_sessionLabel->setText(sessionDesc);
@@ -119,10 +152,8 @@ void LegendWidget::setHeader(const QString &sessionDesc,
     m_utcLabel->setVisible(!utcText.isEmpty());
     m_coordsLabel->setVisible(!coordsText.isEmpty());
 
-    const bool anyVisible =
-        m_sessionLabel->isVisible() || m_utcLabel->isVisible() || m_coordsLabel->isVisible();
-
-    m_headerWidget->setVisible(anyVisible);
+    // Centralized policy: mode + content
+    updateHeaderVisibility();
 }
 
 void LegendWidget::setRows(const QVector<Row> &rows)
@@ -149,13 +180,9 @@ void LegendWidget::setRows(const QVector<Row> &rows)
 
 void LegendWidget::clear()
 {
-    if (m_sessionLabel) m_sessionLabel->clear();
-    if (m_utcLabel)     m_utcLabel->clear();
-    if (m_coordsLabel)  m_coordsLabel->clear();
-
-    if (m_headerWidget) m_headerWidget->setVisible(false);
-
-    if (m_tableModel)   m_tableModel->clear();
+    clearHeader();
+    if (m_tableModel)
+        m_tableModel->clear();
 }
 
 } // namespace FlySight

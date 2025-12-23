@@ -63,11 +63,6 @@ void LegendManager::setMode(Mode mode)
 
     if (m_legendWidget) {
         m_legendWidget->setMode(toWidgetMode(m_mode));
-        if (m_mode != PointDataMode) {
-            // Avoid stale header from point mode
-            m_legendWidget->setHeader(QString(), QString(), QString());
-            m_legendWidget->setHeaderVisible(false);
-        }
     }
 }
 
@@ -205,9 +200,6 @@ bool LegendManager::updatePointData(double xCoord,
 
         m_legendWidget->setMode(LegendWidget::PointDataMode);
 
-        // Explicitly re-enable the header when entering point mode
-        m_legendWidget->setHeaderVisible(true);
-
         m_legendWidget->setHeader(headerSession, utcText, coordsText);
         m_legendWidget->setRows(rows);
     }
@@ -275,8 +267,6 @@ bool LegendManager::updateRangeStats(double xCoord)
 
     if (m_legendWidget) {
         m_legendWidget->setMode(LegendWidget::RangeStatsMode);
-        m_legendWidget->setHeader(QString(), QString(), QString());
-        m_legendWidget->setHeaderVisible(false);
         m_legendWidget->setRows(rows);
     }
 

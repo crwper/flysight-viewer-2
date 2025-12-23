@@ -39,7 +39,6 @@ public:
     void setMode(Mode mode);
     Mode mode() const { return m_mode; }
 
-    void setHeaderVisible(bool visible);
     void setHeader(const QString &sessionDesc,
                    const QString &utcText,
                    const QString &coordsText);
@@ -49,6 +48,10 @@ public:
 
 private:
     void configureTableForMode(Mode mode);
+
+    void clearHeader();
+    void updateHeaderVisibility() const;
+    bool headerAllowed() const;
 
     Mode m_mode = PointDataMode;
 
