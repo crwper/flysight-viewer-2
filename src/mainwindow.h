@@ -19,6 +19,8 @@ QT_END_NAMESPACE
 
 namespace FlySight {
 
+class LegendWidget;
+
 class MainWindow : public KDDockWidgets::QtWidgets::MainWindow
 {
     Q_OBJECT
@@ -92,6 +94,10 @@ private:
     QStandardItemModel *plotModel;
     LogbookView *logbookView;
     PlotWidget *plotWidget;
+
+    // Legend dock/widget (new)
+    KDDockWidgets::QtWidgets::DockWidget *legendDock = nullptr;
+    LegendWidget *legendWidget = nullptr;
 
     // Pointer to QActionGroup for tools
     QActionGroup *toolActionGroup;

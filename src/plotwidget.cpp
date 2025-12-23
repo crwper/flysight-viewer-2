@@ -19,7 +19,10 @@
 namespace FlySight {
 
 // Constructor
-PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidget *parent)
+PlotWidget::PlotWidget(SessionModel *model,
+                       QStandardItemModel *plotModel,
+                       LegendWidget *legendWidget,
+                       QWidget *parent)
     : QWidget(parent)
     , customPlot(new QCustomPlot(this))
     , model(model)
@@ -63,24 +66,23 @@ PlotWidget::PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidg
         this
         );
 
-    // create legend manager
+    // create legend manager (now renders into the dock LegendWidget)
     m_legendManager = std::make_unique<LegendManager>(
         customPlot,
         model,
         &m_graphInfoMap,
+        legendWidget,
         this
         );
 
     // For example, installing event filter:
     customPlot->installEventFilter(this);
 
-
     // connect signals to slots for updates and interactions
     connect(model, &SessionModel::modelChanged, this, &PlotWidget::updatePlot);
     connect(plotModel, &QStandardItemModel::modelReset, this, &PlotWidget::updatePlot);
     connect(customPlot->xAxis, QOverload<const QCPRange &>::of(&QCPAxis::rangeChanged), this, &PlotWidget::onXAxisRangeChanged);
     connect(model, &SessionModel::hoveredSessionChanged, this, &PlotWidget::onHoveredSessionChanged);
-    connect(customPlot, &QCustomPlot::afterLayout, this, &PlotWidget::positionLegend);
 
     // update the plot with initial data
     updatePlot();
@@ -248,7 +250,7 @@ void PlotWidget::updatePlot()
     // Adjust y-axis ranges based on the updated x-axis range
     onXAxisRangeChanged(customPlot->xAxis->range());
 
-    // Rebuild legend
+    // Rebuild legend series list (dock legend will update on next mouse move)
     if (m_legendManager) {
         m_legendManager->rebuildLegend();
     }
@@ -328,13 +330,6 @@ void PlotWidget::onHoveredSessionChanged(const QString &sessionId)
     customPlot->replot();
 }
 
-void PlotWidget::positionLegend()
-{
-    if (m_legendManager && m_legendManager->isVisible()) {
-        m_legendManager->updateLegendPosition();
-    }
-}
-
 // Protected Methods
 bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 {
@@ -348,7 +343,7 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                 m_crosshairManager->handleMouseMove(me->pos());
             }
 
-            // update legend
+            // update legend (dock legend)
             updateLegend();
 
             // also forward to the current tool
@@ -409,11 +404,11 @@ void PlotWidget::updateXAxisTicker()
         double span = customPlot->xAxis->range().size();
         if (span < 30)                   // < 30 s
             dtTicker->setDateTimeFormat("HH:mm:ss.z");
-        else if (span < 3600)            // < 1 h
+        else if (span < 3600)            // < 1 h
             dtTicker->setDateTimeFormat("HH:mm:ss");
-        else if (span < 86400)           // < 1 day
+        else if (span < 86400)           // < 1 day
             dtTicker->setDateTimeFormat("HH:mm");
-        else                             // ≥ 1 day
+        else                             // ≥ 1 day
             dtTicker->setDateTimeFormat("yyyy‑MM‑dd\nHH:mm");
 
         customPlot->xAxis->setTicker(dtTicker);
@@ -528,11 +523,12 @@ void PlotWidget::applyXAxisChange(const QString& key, const QString& label)
     /* 5. Update x-axis ticker */
     updateXAxisTicker();
 
-    updatePlot();                 // rebuild graphs with new x‑values
+    updatePlot();                 // rebuild graphs with new x-values
     customPlot->replot();
 
     updateXAxisTicker();
 }
+
 LegendManager* PlotWidget::legendManager() const
 {
     return m_legendManager.get();
@@ -552,7 +548,6 @@ void PlotWidget::updateLegend()
 
     if (!inPlotArea || tracedSessions.isEmpty()) {
         m_legendManager->setVisible(false);
-        customPlot->replot(QCustomPlot::rpQueuedReplot);
         return;
     }
 
@@ -570,8 +565,6 @@ void PlotWidget::updateLegend()
         const auto& allSessions = model->getAllSessions();
         for (const auto& session : allSessions) {
             if (session.getAttribute(SessionKeys::SessionId).toString() == singleSessionId) {
-                // ASSUMPTION: The description is stored with this key.
-                // Replace 'SessionKeys::Description' if it's different.
                 sessionDesc = session.getAttribute(SessionKeys::Description).toString();
                 break;
             }
@@ -581,16 +574,11 @@ void PlotWidget::updateLegend()
     } else {
         // Multiple sessions - show range statistics
         m_legendManager->setMode(LegendManager::RangeStatsMode);
-
-        // Pass the cursor position to calculate stats from marked values
         shouldBeVisible = m_legendManager->updateRangeStats(xCoord);
     }
 
-    // Set visibility based on whether data was found
+    // Clear legend when no usable data
     m_legendManager->setVisible(shouldBeVisible);
-
-    // Trigger a single replot now
-    customPlot->replot(QCustomPlot::rpQueuedReplot);
 }
 
 } // namespace FlySight

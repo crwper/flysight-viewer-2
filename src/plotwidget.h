@@ -5,6 +5,7 @@
 #include <QMap>
 #include <QPointer>
 #include <QSet>
+#include <memory>
 #include "qcustomplot/qcustomplot.h"
 #include "sessionmodel.h"
 #include "graphinfo.h"
@@ -19,6 +20,7 @@ class ZoomTool;
 class SelectTool;
 class SetExitTool;
 class SetGroundTool;
+class LegendWidget;
 
 class PlotWidget : public QWidget
 {
@@ -41,7 +43,10 @@ public:
     };
 
     // Constructor
-    PlotWidget(SessionModel *model, QStandardItemModel *plotModel, QWidget *parent = nullptr);
+    PlotWidget(SessionModel *model,
+               QStandardItemModel *plotModel,
+               LegendWidget *legendWidget,
+               QWidget *parent = nullptr);
 
     // Public Methods
     void setCurrentTool(Tool tool);
@@ -69,7 +74,6 @@ protected:
 
 private slots:
     void onHoveredSessionChanged(const QString& sessionId);
-    void positionLegend();
 
 private:
     // Initialization

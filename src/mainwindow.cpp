@@ -14,6 +14,7 @@
 #include "dataimporter.h"
 #include "dependencykey.h"
 #include "plotwidget.h"
+#include "legendwidget.h"
 #include "pluginhost.h"
 #include "preferences/preferencesdialog.h"
 #include "preferences/preferencesmanager.h"
@@ -64,9 +65,15 @@ MainWindow::MainWindow(QWidget *parent)
     connect(logbookView, &LogbookView::hideOthersRequested, this, &MainWindow::on_action_HideOthers_triggered);
     connect(logbookView, &LogbookView::deleteRequested, this, &MainWindow::on_action_Delete_triggered);
 
+    // Add legend view
+    legendDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Legend"));
+    legendWidget = new LegendWidget(legendDock);
+    legendDock->setWidget(legendWidget);
+    addDockWidget(legendDock, KDDockWidgets::Location_OnRight);
+
     // Add plot view
     auto *plotDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Plots"));
-    plotWidget = new PlotWidget(model, plotModel, this);
+    plotWidget = new PlotWidget(model, plotModel, legendWidget, this);
     plotDock->setWidget(plotWidget);
     addDockWidget(plotDock, KDDockWidgets::Location_OnLeft);
 
@@ -1431,13 +1438,20 @@ void MainWindow::initializePlotsMenu()
         plotsMenu->addAction(action);
     }
 
-    // Add a separator before the "Show Plot Selection" action
+    // Add a separator before the dock toggle actions
     plotsMenu->addSeparator();
 
     // Create the "Show Plot Selection" action
     QAction *showPlotSelectionAction = plotSelectionDock->toggleAction();
     showPlotSelectionAction->setText(tr("Show Plot Selection"));
     plotsMenu->addAction(showPlotSelectionAction);
+
+    // Create the "Show Legend" action
+    if (legendDock) {
+        QAction *showLegendAction = legendDock->toggleAction();
+        showLegendAction->setText(tr("Show Legend"));
+        plotsMenu->addAction(showLegendAction);
+    }
 }
 
 void MainWindow::togglePlot(const QString &sensorID, const QString &measurementID)
