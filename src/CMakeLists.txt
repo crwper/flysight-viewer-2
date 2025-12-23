@@ -197,12 +197,15 @@ set(PROJECT_SOURCES
   python_output_redirector.h
   legendmanager.cpp          legendmanager.h
   legendwidget.cpp           legendwidget.h
+  legendtablemodel.cpp       legendtablemodel.h
 )
 
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
   qt_add_executable(FlySightViewer MANUAL_FINALIZATION ${PROJECT_SOURCES}
     legendwidget.h
-    legendwidget.cpp)
+    legendwidget.cpp
+    legendtablemodel.h
+    legendtablemodel.cpp)
 else()
   add_executable(FlySightViewer ${PROJECT_SOURCES})
 endif()

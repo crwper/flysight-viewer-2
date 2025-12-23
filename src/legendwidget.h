@@ -3,12 +3,14 @@
 
 #include <QWidget>
 #include <QLabel>
-#include <QTableWidget>
+#include <QTableView>
 #include <QColor>
 #include <QVector>
 #include <QString>
 
 namespace FlySight {
+
+class LegendTableModel;
 
 class LegendWidget : public QWidget
 {
@@ -43,7 +45,6 @@ public:
                    const QString &coordsText);
 
     void setRows(const QVector<Row> &rows);
-
     void clear();
 
 private:
@@ -56,7 +57,8 @@ private:
     QLabel  *m_utcLabel     = nullptr;
     QLabel  *m_coordsLabel  = nullptr;
 
-    QTableWidget *m_table = nullptr;
+    QTableView       *m_table = nullptr;
+    LegendTableModel *m_tableModel = nullptr;
 };
 
 } // namespace FlySight
