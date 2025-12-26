@@ -176,6 +176,7 @@ set(PROJECT_SOURCES
   mainwindow.cpp             mainwindow.h          mainwindow.ui
   sessionmodel.h             sessionmodel.cpp
   plotwidget.h               plotwidget.cpp
+  plotviewsettingsmodel.cpp  plotviewsettingsmodel.h
   dataimporter.cpp           dataimporter.h
   logbookview.h              logbookview.cpp
   plottool/pantool.h

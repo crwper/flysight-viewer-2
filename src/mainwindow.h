@@ -20,6 +20,7 @@ QT_END_NAMESPACE
 namespace FlySight {
 
 class LegendWidget;
+class PlotViewSettingsModel;
 
 class MainWindow : public KDDockWidgets::QtWidgets::MainWindow
 {
@@ -104,6 +105,9 @@ private:
 
     QString m_currentXAxisKey;
     QString m_currentXAxisLabel;
+
+    // Plot view settings
+    PlotViewSettingsModel *m_plotViewSettingsModel;
 
     // Helper functions for plot values
     static void registerBuiltInPlots();

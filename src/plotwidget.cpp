@@ -1,6 +1,7 @@
 #include "plotwidget.h"
 #include "mainwindow.h"
 #include "legendmanager.h"
+#include "plotviewsettingsmodel.h"
 
 #include <QVBoxLayout>
 #include <QMouseEvent>
@@ -21,15 +22,25 @@ namespace FlySight {
 // Constructor
 PlotWidget::PlotWidget(SessionModel *model,
                        QStandardItemModel *plotModel,
+                       PlotViewSettingsModel *viewSettingsModel,
                        LegendWidget *legendWidget,
                        QWidget *parent)
     : QWidget(parent)
     , customPlot(new QCustomPlot(this))
     , model(model)
     , plotModel(plotModel)
+    , m_viewSettingsModel(viewSettingsModel)
     , m_xAxisKey(SessionKeys::TimeFromExit)
     , m_xAxisLabel(tr("Time from exit (s)"))
 {
+    if (m_viewSettingsModel) {
+        m_xAxisKey = m_viewSettingsModel->xAxisKey();
+        m_xAxisLabel = m_viewSettingsModel->xAxisLabel();
+
+        connect(m_viewSettingsModel, &PlotViewSettingsModel::xAxisChanged,
+                this, &PlotWidget::onXAxisKeyChanged);
+    }
+
     // set up the layout with the custom plot
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(customPlot);
@@ -86,6 +97,9 @@ PlotWidget::PlotWidget(SessionModel *model,
 
     // update the plot with initial data
     updatePlot();
+
+    // Ensure ticker matches the initial x-axis mode (especially for UTC time)
+    updateXAxisTicker();
 }
 
 // Public Methods
