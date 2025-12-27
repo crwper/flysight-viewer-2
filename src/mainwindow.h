@@ -21,6 +21,7 @@ namespace FlySight {
 class LegendWidget;
 class PlotViewSettingsModel;
 class PlotModel;
+class CursorModel;
 
 class MainWindow : public KDDockWidgets::QtWidgets::MainWindow
 {
@@ -105,6 +106,9 @@ private:
 
     // Plot view settings
     PlotViewSettingsModel *m_plotViewSettingsModel;
+
+    // Cursor model
+    CursorModel *m_cursorModel = nullptr;
 
     // Helper functions for plot values
     static void registerBuiltInPlots();

@@ -23,6 +23,7 @@ class SetGroundTool;
 class LegendWidget;
 class PlotViewSettingsModel;
 class PlotModel;
+class CursorModel;
 
 class PlotWidget : public QWidget
 {
@@ -48,6 +49,7 @@ public:
     PlotWidget(SessionModel *model,
                PlotModel *plotModel,
                PlotViewSettingsModel *viewSettingsModel,
+               CursorModel *cursorModel,
                LegendWidget *legendWidget,
                QWidget *parent = nullptr);
 
@@ -102,6 +104,7 @@ private:
     SessionModel *model;
     PlotModel *plotModel;
     PlotViewSettingsModel* m_viewSettingsModel;
+    CursorModel* m_cursorModel = nullptr;
 
     // Tools
     PlotTool* m_currentTool = nullptr;

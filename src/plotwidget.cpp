@@ -2,6 +2,7 @@
 #include "plotmodel.h"
 #include "legendmanager.h"
 #include "plotviewsettingsmodel.h"
+#include "cursormodel.h"
 
 #include <QVBoxLayout>
 #include <QMouseEvent>
@@ -23,6 +24,7 @@ namespace FlySight {
 PlotWidget::PlotWidget(SessionModel *model,
                        PlotModel *plotModel,
                        PlotViewSettingsModel *viewSettingsModel,
+                       CursorModel *cursorModel,
                        LegendWidget *legendWidget,
                        QWidget *parent)
     : QWidget(parent)
@@ -30,6 +32,7 @@ PlotWidget::PlotWidget(SessionModel *model,
     , model(model)
     , plotModel(plotModel)
     , m_viewSettingsModel(viewSettingsModel)
+    , m_cursorModel(cursorModel)
     , m_xAxisKey(SessionKeys::TimeFromExit)
     , m_xAxisLabel(tr("Time from exit (s)"))
 {
@@ -366,7 +369,39 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                 m_crosshairManager->handleMouseMove(me->pos());
             }
 
-            // update legend (dock legend)
+            // Step 3: write mouse cursor state into CursorModel
+            if (m_cursorModel) {
+                const bool inPlotArea =
+                    customPlot->axisRect()->rect().contains(me->pos());
+
+                const QSet<QString> tracedSessions =
+                    m_crosshairManager ? m_crosshairManager->getTracedSessionIds()
+                                       : QSet<QString>{};
+
+                if (inPlotArea) {
+                    const double xCoord =
+                        customPlot->xAxis->pixelToCoord(me->pos().x());
+
+                    m_cursorModel->setCursorPositionPlotAxis(
+                        QStringLiteral("mouse"),
+                        m_xAxisKey,
+                        xCoord
+                    );
+                }
+
+                m_cursorModel->setCursorTargetsExplicit(
+                    QStringLiteral("mouse"),
+                    tracedSessions
+                );
+
+                // v1 semantics: mouse cursor is "usable" only when in plot AND has targets
+                m_cursorModel->setCursorActive(
+                    QStringLiteral("mouse"),
+                    inPlotArea && !tracedSessions.isEmpty()
+                );
+            }
+
+            // Keep existing legend behavior for now (Step 4 removes this dependency)
             updateLegend();
 
             // also forward to the current tool
@@ -384,9 +419,23 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
             if (m_crosshairManager) {
                 m_crosshairManager->handleMouseLeave();
             }
+
+            // Step 3: mark mouse cursor inactive and clear targets on leave
+            if (m_cursorModel) {
+                m_cursorModel->setCursorTargetsExplicit(
+                    QStringLiteral("mouse"),
+                    QSet<QString>{}
+                );
+                m_cursorModel->setCursorActive(
+                    QStringLiteral("mouse"),
+                    false
+                );
+            }
+
             if (m_legendManager) {
                 m_legendManager->setVisible(false);
             }
+
             m_currentTool->leaveEvent(event);
             return false;
         default:

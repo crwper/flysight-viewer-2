@@ -21,6 +21,7 @@
 #include "imugnssekf.h"
 #include "plotviewsettingsmodel.h"
 #include "plotmodel.h"
+#include "cursormodel.h"
 
 namespace FlySight {
 
@@ -33,6 +34,7 @@ MainWindow::MainWindow(QWidget *parent)
           parent)
     , m_settings(new QSettings("FlySight", "Viewer", this))
     , m_plotViewSettingsModel(new PlotViewSettingsModel(m_settings, this))
+    , m_cursorModel(new CursorModel(this))
     , ui(new Ui::MainWindow)
     , model(new SessionModel(this))
     , plotModel (new PlotModel(this))
@@ -71,9 +73,26 @@ MainWindow::MainWindow(QWidget *parent)
     legendDock->setWidget(legendWidget);
     addDockWidget(legendDock, KDDockWidgets::Location_OnRight);
 
+    // Initialize the "mouse" cursor entry
+    if (m_cursorModel) {
+        CursorModel::Cursor mouse;
+        mouse.id = QStringLiteral("mouse");
+        mouse.label = tr("Mouse");
+        mouse.type = CursorModel::CursorType::MouseHover;
+        mouse.active = false;
+        mouse.positionSpace = CursorModel::PositionSpace::PlotAxisCoord;
+        mouse.positionValue = 0.0;
+        mouse.axisKey = m_plotViewSettingsModel
+            ? m_plotViewSettingsModel->xAxisKey()
+            : SessionKeys::TimeFromExit;
+        mouse.targetPolicy = CursorModel::TargetPolicy::Explicit;
+
+        m_cursorModel->ensureCursor(mouse);
+    }
+
     // Add plot view
     auto *plotDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Plots"));
-    plotWidget = new PlotWidget(model, plotModel, m_plotViewSettingsModel, legendWidget, this);
+    plotWidget = new PlotWidget(model, plotModel, m_plotViewSettingsModel, m_cursorModel, legendWidget, this);
     plotDock->setWidget(plotWidget);
     addDockWidget(plotDock, KDDockWidgets::Location_OnLeft);
 

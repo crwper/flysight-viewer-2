@@ -200,6 +200,7 @@ set(PROJECT_SOURCES
   legendwidget.cpp           legendwidget.h
   legendtablemodel.cpp       legendtablemodel.h
   plotmodel.cpp              plotmodel.h
+  cursormodel.cpp            cursormodel.h
 )
 
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
