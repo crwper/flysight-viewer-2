@@ -196,7 +196,6 @@ set(PROJECT_SOURCES
   plotregistry.cpp           plotregistry.h
   imugnssekf.h               imugnssekf.cpp
   python_output_redirector.h
-  legendmanager.cpp          legendmanager.h
   legendwidget.cpp           legendwidget.h
   legendtablemodel.cpp       legendtablemodel.h
   plotmodel.cpp              plotmodel.h
