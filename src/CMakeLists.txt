@@ -199,6 +199,7 @@ set(PROJECT_SOURCES
   legendmanager.cpp          legendmanager.h
   legendwidget.cpp           legendwidget.h
   legendtablemodel.cpp       legendtablemodel.h
+  plotmodel.cpp              plotmodel.h
 )
 
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)

@@ -22,6 +22,7 @@ class SetExitTool;
 class SetGroundTool;
 class LegendWidget;
 class PlotViewSettingsModel;
+class PlotModel;
 
 class PlotWidget : public QWidget
 {
@@ -45,7 +46,7 @@ public:
 
     // Constructor
     PlotWidget(SessionModel *model,
-               QStandardItemModel *plotModel,
+               PlotModel *plotModel,
                PlotViewSettingsModel *viewSettingsModel,
                LegendWidget *legendWidget,
                QWidget *parent = nullptr);
@@ -99,7 +100,7 @@ private:
     // Member Variables
     QCustomPlot *customPlot;
     SessionModel *model;
-    QStandardItemModel *plotModel;
+    PlotModel *plotModel;
     PlotViewSettingsModel* m_viewSettingsModel;
 
     // Tools

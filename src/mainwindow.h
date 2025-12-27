@@ -4,7 +4,6 @@
 #include <kddockwidgets/MainWindow.h>
 #include <kddockwidgets/DockWidget.h>
 #include <QSettings>
-#include <QStandardItemModel>
 #include <QTreeView>
 #include "sessionmodel.h"
 #include "logbookview.h"
@@ -21,6 +20,7 @@ namespace FlySight {
 
 class LegendWidget;
 class PlotViewSettingsModel;
+class PlotModel;
 
 class MainWindow : public KDDockWidgets::QtWidgets::MainWindow
 {
@@ -92,7 +92,7 @@ private:
     // Plot value selection components
     KDDockWidgets::QtWidgets::DockWidget *plotSelectionDock;
     QTreeView *plotTreeView;
-    QStandardItemModel *plotModel;
+    PlotModel *plotModel;
     LogbookView *logbookView;
     PlotWidget *plotWidget;
 
@@ -103,16 +103,12 @@ private:
     // Pointer to QActionGroup for tools
     QActionGroup *toolActionGroup;
 
-    QString m_currentXAxisKey;
-    QString m_currentXAxisLabel;
-
     // Plot view settings
     PlotViewSettingsModel *m_plotViewSettingsModel;
 
     // Helper functions for plot values
     static void registerBuiltInPlots();
     void setupPlotValues();
-    void populatePlotModel(QStandardItemModel* plotModel, const QVector<PlotValue>& plotValues);
 
     // Helper function for importing files
     void importFiles(const QStringList &fileNames, bool showProgress, const QString &baseDir = QString());

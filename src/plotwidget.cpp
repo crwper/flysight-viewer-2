@@ -1,5 +1,5 @@
 #include "plotwidget.h"
-#include "mainwindow.h"
+#include "plotmodel.h"
 #include "legendmanager.h"
 #include "plotviewsettingsmodel.h"
 
@@ -21,7 +21,7 @@ namespace FlySight {
 
 // Constructor
 PlotWidget::PlotWidget(SessionModel *model,
-                       QStandardItemModel *plotModel,
+                       PlotModel *plotModel,
                        PlotViewSettingsModel *viewSettingsModel,
                        LegendWidget *legendWidget,
                        QWidget *parent)
@@ -91,9 +91,23 @@ PlotWidget::PlotWidget(SessionModel *model,
 
     // connect signals to slots for updates and interactions
     connect(model, &SessionModel::modelChanged, this, &PlotWidget::updatePlot);
-    connect(plotModel, &QStandardItemModel::modelReset, this, &PlotWidget::updatePlot);
-    connect(customPlot->xAxis, QOverload<const QCPRange &>::of(&QCPAxis::rangeChanged), this, &PlotWidget::onXAxisRangeChanged);
-    connect(model, &SessionModel::hoveredSessionChanged, this, &PlotWidget::onHoveredSessionChanged);
+
+    if (plotModel) {
+        connect(plotModel, &QAbstractItemModel::modelReset,
+                this, &PlotWidget::updatePlot);
+
+        connect(plotModel, &QAbstractItemModel::dataChanged,
+                this,
+                [this](const QModelIndex&, const QModelIndex&, const QVector<int>&) {
+                    updatePlot();
+                });
+    }
+
+    connect(customPlot->xAxis, QOverload<const QCPRange &>::of(&QCPAxis::rangeChanged),
+            this, &PlotWidget::onXAxisRangeChanged);
+
+    connect(model, &SessionModel::hoveredSessionChanged,
+            this, &PlotWidget::onHoveredSessionChanged);
 
     // update the plot with initial data
     updatePlot();
@@ -186,78 +200,73 @@ void PlotWidget::updatePlot()
     const QVector<SessionData> &sessions = model->getAllSessions();
     QString hoveredSessionId = model->hoveredSessionId(); // Retrieve hovered session ID
 
-    // Iterate over the plot model to add graphs for checked items
-    for (int row = 0; row < plotModel->rowCount(); ++row) {
-        QStandardItem *categoryItem = plotModel->item(row);
-        for (int col = 0; col < categoryItem->rowCount(); ++col) {
-            QStandardItem *plotItem = categoryItem->child(col);
-            if (plotItem->checkState() == Qt::Checked) {
-                // Retrieve metadata for the graph
-                QColor color = plotItem->data(MainWindow::DefaultColorRole).value<QColor>();
-                QString sensorID = plotItem->data(MainWindow::SensorIDRole).toString();
-                QString measurementID = plotItem->data(MainWindow::MeasurementIDRole).toString();
-                QString plotName = plotItem->data(Qt::DisplayRole).toString();
-                QString plotUnits = plotItem->data(MainWindow::PlotUnitsRole).toString();
+    // Add graphs for each enabled plot
+    const QVector<PlotValue> plots = plotModel ? plotModel->enabledPlots() : QVector<PlotValue>{};
+    for (const PlotValue &pv : plots) {
+        // Retrieve metadata for the graph
+        QColor color = pv.defaultColor;
+        QString sensorID = pv.sensorID;
+        QString measurementID = pv.measurementID;
+        QString plotName = pv.plotName;
+        QString plotUnits = pv.plotUnits;
 
-                QString plotValueID = sensorID + "/" + measurementID;
+        QString plotValueID = sensorID + "/" + measurementID;
 
-                // Create a new y-axis if one doesn't exist for this plot value
-                if (!m_plotValueAxes.contains(plotValueID)) {
-                    QCPAxis *newYAxis = customPlot->axisRect()->addAxis(QCPAxis::atLeft);
-                    if (!plotUnits.isEmpty()) {
-                        newYAxis->setLabel(plotName + " (" + plotUnits + ")");
-                    } else {
-                        newYAxis->setLabel(plotName);
-                    }
-                    newYAxis->setLabelColor(color);
-                    newYAxis->setTickLabelColor(color);
-                    newYAxis->setBasePen(QPen(color));
-                    newYAxis->setTickPen(QPen(color));
-                    newYAxis->setSubTickPen(QPen(color));
-                    m_plotValueAxes.insert(plotValueID, newYAxis);
-                }
-
-                QCPAxis *assignedYAxis = m_plotValueAxes.value(plotValueID);
-
-                // Add graphs for each visible session
-                for (const auto &session : sessions) {
-                    if (!session.isVisible()) {
-                        continue;
-                    }
-
-                    QVector<double> yData = const_cast<SessionData &>(session).getMeasurement(sensorID, measurementID);
-                    if (yData.isEmpty()) {
-                        qWarning() << "No data available for plot:" << plotName << "in session:" << session.getAttribute(SessionKeys::SessionId);
-                        continue;
-                    }
-
-                    QVector<double> xData = const_cast<SessionData &>(session).getMeasurement(sensorID, m_xAxisKey);
-                    if (xData.isEmpty() || xData.size() != yData.size()) {
-                        qWarning() << "Time and measurement data size mismatch for session:" << session.getAttribute(SessionKeys::SessionId);
-                        continue;
-                    }
-
-                    GraphInfo info;
-                    info.sessionId = session.getAttribute(SessionKeys::SessionId).toString();
-                    info.sensorId = sensorID;
-                    info.measurementId = measurementID;
-                    if (!plotUnits.isEmpty()) {
-                        info.displayName = QString("%1 (%2)").arg(plotName).arg(plotUnits);
-                    } else {
-                        info.displayName = plotName;
-                    }
-                    info.defaultPen = QPen(QColor(color));
-
-                    QCPGraph *graph = customPlot->addGraph(customPlot->xAxis, assignedYAxis);
-                    graph->setPen(determineGraphPen(info, hoveredSessionId));
-                    graph->setData(xData, yData);
-                    graph->setLineStyle(QCPGraph::lsLine);
-                    graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
-                    graph->setLayer(determineGraphLayer(info, hoveredSessionId));
-
-                    m_graphInfoMap.insert(graph, info);
-                }
+        // Create a new y-axis if one doesn't exist for this plot value
+        if (!m_plotValueAxes.contains(plotValueID)) {
+            QCPAxis *newYAxis = customPlot->axisRect()->addAxis(QCPAxis::atLeft);
+            if (!plotUnits.isEmpty()) {
+                newYAxis->setLabel(plotName + " (" + plotUnits + ")");
+            } else {
+                newYAxis->setLabel(plotName);
             }
+            newYAxis->setLabelColor(color);
+            newYAxis->setTickLabelColor(color);
+            newYAxis->setBasePen(QPen(color));
+            newYAxis->setTickPen(QPen(color));
+            newYAxis->setSubTickPen(QPen(color));
+            m_plotValueAxes.insert(plotValueID, newYAxis);
+        }
+
+        QCPAxis *assignedYAxis = m_plotValueAxes.value(plotValueID);
+
+        // Add graphs for each visible session
+        for (const auto &session : sessions) {
+            if (!session.isVisible()) {
+                continue;
+            }
+
+            QVector<double> yData = const_cast<SessionData &>(session).getMeasurement(sensorID, measurementID);
+            if (yData.isEmpty()) {
+                qWarning() << "No data available for plot:" << plotName << "in session:" << session.getAttribute(SessionKeys::SessionId);
+                continue;
+            }
+
+            QVector<double> xData = const_cast<SessionData &>(session).getMeasurement(sensorID, m_xAxisKey);
+            if (xData.isEmpty() || xData.size() != yData.size()) {
+                qWarning() << "Time and measurement data size mismatch for session:" << session.getAttribute(SessionKeys::SessionId);
+                continue;
+            }
+
+            GraphInfo info;
+            info.sessionId = session.getAttribute(SessionKeys::SessionId).toString();
+            info.sensorId = sensorID;
+            info.measurementId = measurementID;
+            if (!plotUnits.isEmpty()) {
+                info.displayName = QString("%1 (%2)").arg(plotName).arg(plotUnits);
+            } else {
+                info.displayName = plotName;
+            }
+            info.defaultPen = QPen(QColor(color));
+
+            QCPGraph *graph = customPlot->addGraph(customPlot->xAxis, assignedYAxis);
+            graph->setPen(determineGraphPen(info, hoveredSessionId));
+            graph->setData(xData, yData);
+            graph->setLineStyle(QCPGraph::lsLine);
+            graph->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
+            graph->setLayer(determineGraphLayer(info, hoveredSessionId));
+
+            m_graphInfoMap.insert(graph, info);
         }
     }
 

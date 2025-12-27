@@ -1,7 +1,6 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 
-#include <QStandardItem>
 #include <QTreeView>
 #include <QFileDialog>
 #include <QProgressDialog>
@@ -21,6 +20,7 @@
 #include "sessiondata.h"
 #include "imugnssekf.h"
 #include "plotviewsettingsmodel.h"
+#include "plotmodel.h"
 
 namespace FlySight {
 
@@ -35,9 +35,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_plotViewSettingsModel(new PlotViewSettingsModel(m_settings, this))
     , ui(new Ui::MainWindow)
     , model(new SessionModel(this))
-    , plotModel (new QStandardItemModel(this))
-    , m_currentXAxisKey(m_settings->value("plot/xAxisKey", SessionKeys::TimeFromExit).toString())
-    , m_currentXAxisLabel(tr("Time from exit (s)"))
+    , plotModel (new PlotModel(this))
 {
     ui->setupUi(this);
     manualInit();
@@ -584,68 +582,9 @@ void MainWindow::setupPlotValues()
     plotTreeView->setHeaderHidden(true);
     plotTreeView->setEditTriggers(QAbstractItemView::NoEditTriggers);
 
-    // Populate the model with plot values and track the first checked item
-    QVector<PlotValue> plotValues = PlotRegistry::instance().allPlots();
-    populatePlotModel(plotModel, plotValues);
-
-    // Connect to clicked signal to handle plot selection
-    connect(plotTreeView, &QTreeView::clicked, this, [this](const QModelIndex &index) {
-        if (!index.isValid())
-            return;
-        // Check if item is checkable
-        QVariant checkStateVar = plotModel->data(index, Qt::CheckStateRole);
-        if (!checkStateVar.isValid())
-            return;
-
-        Qt::CheckState state = static_cast<Qt::CheckState>(checkStateVar.toInt());
-        Qt::CheckState newState = (state == Qt::Checked) ? Qt::Unchecked : Qt::Checked;
-        plotModel->setData(index, newState, Qt::CheckStateRole);
-
-        // Update views
-        emit model->modelChanged();
-    });
-
-    // Emit the initial plot based on the checked items
-    emit model->modelChanged();
-}
-
-void MainWindow::populatePlotModel(
-    QStandardItemModel* plotModel,
-    const QVector<PlotValue>& plotValues)
-{
-    // Create a map to keep track of category items
-    QMap<QString, QStandardItem*> categoryItemsMap;
-
-    for (const PlotValue& pv : plotValues) {
-        // Check if the category already exists
-        if (!categoryItemsMap.contains(pv.category)) {
-            // Create a new category item
-            QStandardItem* categoryItem = new QStandardItem(pv.category);
-            categoryItem->setFlags(Qt::ItemIsEnabled); // Non-checkable
-
-            // Append the category to the model
-            plotModel->appendRow(categoryItem);
-
-            // Add to the map
-            categoryItemsMap.insert(pv.category, categoryItem);
-        }
-
-        // Create a new plot item
-        QStandardItem* plotItem = new QStandardItem(pv.plotName);
-        plotItem->setCheckable(true); // Make the plot checkable
-        plotItem->setCheckState(Qt::Unchecked);
-
-        plotItem->setFlags(plotItem->flags() & ~Qt::ItemIsEditable);
-        plotItem->setFlags(plotItem->flags() & ~Qt::ItemIsUserCheckable);
-
-        // Store data in the item
-        plotItem->setData(pv.defaultColor, DefaultColorRole);
-        plotItem->setData(pv.sensorID, SensorIDRole);
-        plotItem->setData(pv.measurementID, MeasurementIDRole);
-        plotItem->setData(pv.plotUnits, PlotUnitsRole);
-
-        // Append the plot item under its category
-        categoryItemsMap[pv.category]->appendRow(plotItem);
+    // Let PlotModel own the category/plot tree
+    if (plotModel) {
+        plotModel->setPlots(PlotRegistry::instance().allPlots());
     }
 }
 
@@ -1443,32 +1382,16 @@ void MainWindow::initializePlotsMenu()
 
 void MainWindow::togglePlot(const QString &sensorID, const QString &measurementID)
 {
-    // Iterate through the plotModel to find the matching plot
-    for(int row = 0; row < plotModel->rowCount(); ++row){
-        QStandardItem *categoryItem = plotModel->item(row);
-        for(int col = 0; col < categoryItem->rowCount(); ++col){
-            QStandardItem *plotItem = categoryItem->child(col);
-            if(plotItem->data(SensorIDRole).toString() == sensorID &&
-                plotItem->data(MeasurementIDRole).toString() == measurementID){
-                // Toggle the check state
-                Qt::CheckState currentState = plotItem->checkState();
-                Qt::CheckState newState = (currentState == Qt::Checked) ? Qt::Unchecked : Qt::Checked;
-                plotItem->setCheckState(newState);
-
-                // Ensure the plot selection view is visible
-                if(!plotSelectionDock->isVisible()){
-                    plotSelectionDock->show();
-                }
-
-                // Emit modelChanged to update the plots
-                emit model->modelChanged();
-
-                return;
-            }
-        }
+    if (!plotModel) {
+        return;
     }
 
-    qWarning() << "Plot not found for sensorID:" << sensorID << "measurementID:" << measurementID;
+    plotModel->togglePlot(sensorID, measurementID);
+
+    // Ensure the plot selection view is visible
+    if (!plotSelectionDock->isVisible()) {
+        plotSelectionDock->show();
+    }
 }
 
 void MainWindow::setSelectedTrackCheckState(Qt::CheckState state)
