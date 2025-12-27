@@ -1,6 +1,5 @@
 #include "plotwidget.h"
 #include "plotmodel.h"
-#include "legendmanager.h"
 #include "plotviewsettingsmodel.h"
 #include "cursormodel.h"
 
@@ -25,7 +24,6 @@ PlotWidget::PlotWidget(SessionModel *model,
                        PlotModel *plotModel,
                        PlotViewSettingsModel *viewSettingsModel,
                        CursorModel *cursorModel,
-                       LegendWidget *legendWidget,
                        QWidget *parent)
     : QWidget(parent)
     , customPlot(new QCustomPlot(this))
@@ -77,15 +75,6 @@ PlotWidget::PlotWidget(SessionModel *model,
         customPlot,
         model,
         &m_graphInfoMap, // existing QMap<QCPGraph*, GraphInfo>
-        this
-        );
-
-    // create legend manager (now renders into the dock LegendWidget)
-    m_legendManager = std::make_unique<LegendManager>(
-        customPlot,
-        model,
-        &m_graphInfoMap,
-        legendWidget,
         this
         );
 
@@ -275,11 +264,6 @@ void PlotWidget::updatePlot()
 
     // Adjust y-axis ranges based on the updated x-axis range
     onXAxisRangeChanged(customPlot->xAxis->range());
-
-    // Rebuild legend series list (dock legend will update on next mouse move)
-    if (m_legendManager) {
-        m_legendManager->rebuildLegend();
-    }
 }
 
 void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
@@ -401,9 +385,6 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                 );
             }
 
-            // Keep existing legend behavior for now (Step 4 removes this dependency)
-            updateLegend();
-
             // also forward to the current tool
             return m_currentTool->mouseMoveEvent(me);
         }
@@ -430,10 +411,6 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                     QStringLiteral("mouse"),
                     false
                 );
-            }
-
-            if (m_legendManager) {
-                m_legendManager->setVisible(false);
             }
 
             m_currentTool->leaveEvent(event);
@@ -599,58 +576,6 @@ void PlotWidget::applyXAxisChange(const QString& key, const QString& label)
     customPlot->replot();
 
     updateXAxisTicker();
-}
-
-LegendManager* PlotWidget::legendManager() const
-{
-    return m_legendManager.get();
-}
-
-void PlotWidget::updateLegend()
-{
-    if (!m_legendManager || !m_crosshairManager)
-        return;
-
-    // Check if cursor is in plot area
-    QPoint localPos = customPlot->mapFromGlobal(QCursor::pos());
-    bool inPlotArea = customPlot->axisRect()->rect().contains(localPos);
-
-    // Get the set of sessions currently being traced
-    QSet<QString> tracedSessions = m_crosshairManager->getTracedSessionIds();
-
-    if (!inPlotArea || tracedSessions.isEmpty()) {
-        m_legendManager->setVisible(false);
-        return;
-    }
-
-    double xCoord = customPlot->xAxis->pixelToCoord(localPos.x());
-    bool shouldBeVisible = false;
-
-    // Determine mode based on number of traced sessions
-    if (tracedSessions.size() == 1) {
-        // Exactly one session - show point statistics
-        m_legendManager->setMode(LegendManager::PointDataMode);
-        QString singleSessionId = *tracedSessions.begin();
-
-        // Fetch session description
-        QString sessionDesc;
-        const auto& allSessions = model->getAllSessions();
-        for (const auto& session : allSessions) {
-            if (session.getAttribute(SessionKeys::SessionId).toString() == singleSessionId) {
-                sessionDesc = session.getAttribute(SessionKeys::Description).toString();
-                break;
-            }
-        }
-
-        shouldBeVisible = m_legendManager->updatePointData(xCoord, singleSessionId, sessionDesc, m_xAxisKey);
-    } else {
-        // Multiple sessions - show range statistics
-        m_legendManager->setMode(LegendManager::RangeStatsMode);
-        shouldBeVisible = m_legendManager->updateRangeStats(xCoord);
-    }
-
-    // Clear legend when no usable data
-    m_legendManager->setVisible(shouldBeVisible);
 }
 
 } // namespace FlySight

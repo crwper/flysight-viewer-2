@@ -14,6 +14,7 @@
 #include "dependencykey.h"
 #include "plotwidget.h"
 #include "legendwidget.h"
+#include "legendpresenter.h"
 #include "pluginhost.h"
 #include "preferences/preferencesdialog.h"
 #include "preferences/preferencesmanager.h"
@@ -92,9 +93,17 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Add plot view
     auto *plotDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Plots"));
-    plotWidget = new PlotWidget(model, plotModel, m_plotViewSettingsModel, m_cursorModel, legendWidget, this);
+    plotWidget = new PlotWidget(model, plotModel, m_plotViewSettingsModel, m_cursorModel, this);
     plotDock->setWidget(plotWidget);
     addDockWidget(plotDock, KDDockWidgets::Location_OnLeft);
+
+    // Spec Step 4: LegendPresenter drives legend updates based on models + CursorModel
+    m_legendPresenter = new LegendPresenter(model,
+                                            plotModel,
+                                            m_cursorModel,
+                                            m_plotViewSettingsModel,
+                                            legendWidget,
+                                            this);
 
     // Connect the newTimeRange signal to PlotWidget's setXAxisRange slot
     connect(this, &MainWindow::newTimeRange, plotWidget, &PlotWidget::setXAxisRange);

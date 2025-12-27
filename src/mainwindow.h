@@ -19,6 +19,7 @@ QT_END_NAMESPACE
 namespace FlySight {
 
 class LegendWidget;
+class LegendPresenter;
 class PlotViewSettingsModel;
 class PlotModel;
 class CursorModel;
@@ -100,6 +101,9 @@ private:
     // Legend dock/widget (new)
     KDDockWidgets::QtWidgets::DockWidget *legendDock = nullptr;
     LegendWidget *legendWidget = nullptr;
+
+    // Drives LegendWidget content based on models + CursorModel
+    LegendPresenter *m_legendPresenter = nullptr;
 
     // Pointer to QActionGroup for tools
     QActionGroup *toolActionGroup;
