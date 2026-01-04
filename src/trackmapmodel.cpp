@@ -8,7 +8,7 @@
 
 namespace FlySight {
 
-static constexpr const char *kDefaultSensor = "GNSS";
+static constexpr const char *kDefaultSensor = "Simplified";
 static constexpr const char *kLatKey = "lat";
 static constexpr const char *kLonKey = "lon";
 
