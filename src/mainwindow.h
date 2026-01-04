@@ -23,6 +23,7 @@ class LegendPresenter;
 class PlotViewSettingsModel;
 class PlotModel;
 class CursorModel;
+class MapWidget;
 
 class MainWindow : public KDDockWidgets::QtWidgets::MainWindow
 {
@@ -101,6 +102,10 @@ private:
     // Legend dock/widget (new)
     KDDockWidgets::QtWidgets::DockWidget *legendDock = nullptr;
     LegendWidget *legendWidget = nullptr;
+
+    // Map dock/widget (Qt Location)
+    KDDockWidgets::QtWidgets::DockWidget *mapDock = nullptr;
+    MapWidget *mapWidget = nullptr;
 
     // Drives LegendWidget content based on models + CursorModel
     LegendPresenter *m_legendPresenter = nullptr;

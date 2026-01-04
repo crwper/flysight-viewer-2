@@ -37,7 +37,7 @@ set(BOOST_ROOT "C:/Program Files/Boost/boost_1_87_0"
 
 # ─────────────────────────────── Qt
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets PrintSupport)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets PrintSupport QuickWidgets Quick Qml Location Positioning)
 
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
   # Nice-to-have; safe to omit if you prefer older style
@@ -201,6 +201,9 @@ set(PROJECT_SOURCES
   plotmodel.cpp              plotmodel.h
   cursormodel.cpp            cursormodel.h
   legendpresenter.cpp        legendpresenter.h
+  mapwidget.cpp              mapwidget.h
+  trackmapmodel.cpp          trackmapmodel.h
+  resources.qrc
 )
 
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
@@ -224,6 +227,11 @@ target_link_libraries(FlySightViewer PRIVATE
 
   Qt${QT_VERSION_MAJOR}::Widgets
   Qt${QT_VERSION_MAJOR}::PrintSupport
+  Qt${QT_VERSION_MAJOR}::QuickWidgets
+  Qt${QT_VERSION_MAJOR}::Quick
+  Qt${QT_VERSION_MAJOR}::Qml
+  Qt${QT_VERSION_MAJOR}::Location
+  Qt${QT_VERSION_MAJOR}::Positioning
 
   pybind11::embed
   Boost::boost

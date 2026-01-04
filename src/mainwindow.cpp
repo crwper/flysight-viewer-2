@@ -15,6 +15,7 @@
 #include "plotwidget.h"
 #include "legendwidget.h"
 #include "legendpresenter.h"
+#include "mapwidget.h"
 #include "pluginhost.h"
 #include "preferences/preferencesdialog.h"
 #include "preferences/preferencesmanager.h"
@@ -97,7 +98,13 @@ MainWindow::MainWindow(QWidget *parent)
     plotDock->setWidget(plotWidget);
     addDockWidget(plotDock, KDDockWidgets::Location_OnLeft);
 
-    // Spec Step 4: LegendPresenter drives legend updates based on models + CursorModel
+    // Add map view (Qt Location)
+    mapDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Map"));
+    mapWidget = new MapWidget(model, mapDock);
+    mapDock->setWidget(mapWidget);
+    addDockWidget(mapDock, KDDockWidgets::Location_OnBottom);
+
+    // LegendPresenter drives legend updates based on models + CursorModel
     m_legendPresenter = new LegendPresenter(model,
                                             plotModel,
                                             m_cursorModel,
@@ -1405,6 +1412,13 @@ void MainWindow::initializePlotsMenu()
         QAction *showLegendAction = legendDock->toggleAction();
         showLegendAction->setText(tr("Show Legend"));
         plotsMenu->addAction(showLegendAction);
+    }
+
+    // Create the "Show Map" action
+    if (mapDock) {
+        QAction *showMapAction = mapDock->toggleAction();
+        showMapAction->setText(tr("Show Map"));
+        plotsMenu->addAction(showMapAction);
     }
 }
 
