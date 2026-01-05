@@ -8,6 +8,7 @@ namespace FlySight {
 class SessionModel;
 class TrackMapModel;
 class MapCursorDotModel;
+class MapCursorProxy;
 class CursorModel;
 
 /**
@@ -23,6 +24,7 @@ public:
 private:
     TrackMapModel *m_trackModel = nullptr;
     MapCursorDotModel *m_cursorDotModel = nullptr;
+    MapCursorProxy *m_cursorProxy = nullptr;
     CursorModel *m_cursorModel = nullptr;
 };
 
