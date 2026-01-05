@@ -111,6 +111,74 @@ void CrosshairManager::handleMouseLeave()
     }
 }
 
+void CrosshairManager::setExternalCursor(const QString &sessionId, double xPlot)
+{
+    if (!m_enabled || !m_plot || !m_graphInfoMap)
+        return;
+
+    if (sessionId.isEmpty()) {
+        clearExternalCursor();
+        return;
+    }
+
+    // Option 2 (matching plot feel): show a vertical crosshair at xPlot (no horizontal line).
+    ensureCrosshairCreated();
+    if (m_crosshairH)
+        m_crosshairH->setVisible(false);
+
+    if (m_crosshairV) {
+        const double yLower = m_plot->yAxis->range().lower;
+        const double yUpper = m_plot->yAxis->range().upper;
+        m_crosshairV->start->setCoords(xPlot, yLower);
+        m_crosshairV->end->setCoords(xPlot, yUpper);
+        m_crosshairV->setVisible(true);
+    }
+
+    // Tracers: only for graphs belonging to this sessionId.
+    hideAllTracers();
+    m_currentlyTracedSessionIds.clear();
+
+    for (auto it = m_graphInfoMap->begin(); it != m_graphInfoMap->end(); ++it) {
+        if (it.value().sessionId != sessionId)
+            continue;
+
+        QCPGraph* g = it.key();
+        if (!g || !g->visible())
+            continue;
+
+        const double yPlot = PlotWidget::interpolateY(g, xPlot);
+        if (std::isnan(yPlot))
+            continue;
+
+        QCPItemTracer *tr = getOrCreateTracer(g);
+        tr->position->setAxes(m_plot->xAxis, g->valueAxis());
+        tr->position->setCoords(xPlot, yPlot);
+        tr->setPen(it.value().defaultPen);
+        tr->setBrush(it.value().defaultPen.color());
+        tr->setVisible(true);
+
+        m_currentlyTracedSessionIds.insert(it.value().sessionId);
+    }
+
+    m_plot->replot(QCustomPlot::rpQueuedReplot);
+}
+
+void CrosshairManager::clearExternalCursor()
+{
+    if (!m_plot)
+        return;
+
+    hideAllTracers();
+    m_currentlyTracedSessionIds.clear();
+
+    if (m_crosshairH)
+        m_crosshairH->setVisible(false);
+    if (m_crosshairV)
+        m_crosshairV->setVisible(false);
+
+    m_plot->replot(QCustomPlot::rpQueuedReplot);
+}
+
 void CrosshairManager::updateIfOverPlotArea()
 {
     if (!m_isCursorOverPlot || !m_plot)

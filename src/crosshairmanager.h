@@ -48,6 +48,12 @@ public:
     //! to keep the crosshair lines in sync if needed
     void updateIfOverPlotArea();
 
+    //! Render externally-driven cursor (e.g., map hover) at xPlot for a single session.
+    void setExternalCursor(const QString &sessionId, double xPlot);
+
+    //! Clear externally-driven cursor visuals (tracers/crosshair) if shown.
+    void clearExternalCursor();
+
     //! Returns the set of session IDs currently marked by a visible tracer.
     QSet<QString> getTracedSessionIds() const;
 

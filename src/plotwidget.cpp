@@ -81,6 +81,11 @@ PlotWidget::PlotWidget(SessionModel *model,
     // For example, installing event filter:
     customPlot->installEventFilter(this);
 
+    if (m_cursorModel) {
+        connect(m_cursorModel, &CursorModel::cursorsChanged,
+                this, &PlotWidget::onCursorsChanged);
+    }
+
     // connect signals to slots for updates and interactions
     connect(model, &SessionModel::modelChanged, this, &PlotWidget::updatePlot);
 
@@ -340,6 +345,95 @@ void PlotWidget::onHoveredSessionChanged(const QString &sessionId)
     customPlot->replot();
 }
 
+void PlotWidget::onCursorsChanged()
+{
+    if (!m_cursorModel || !m_crosshairManager)
+        return;
+
+    // While the mouse is inside the plot area, PlotWidget owns cursor visuals.
+    if (m_mouseInPlotArea)
+        return;
+
+    if (!m_cursorModel->hasCursor(QStringLiteral("mouse"))) {
+        m_crosshairManager->clearExternalCursor();
+        return;
+    }
+
+    const CursorModel::Cursor c = m_cursorModel->cursorById(QStringLiteral("mouse"));
+
+    if (!c.active ||
+        c.targetPolicy != CursorModel::TargetPolicy::Explicit ||
+        c.targetSessions.isEmpty()) {
+        m_crosshairManager->clearExternalCursor();
+        return;
+    }
+
+    // Step 5 spec: map hover drives exactly one target session.
+    if (c.targetSessions.size() != 1) {
+        m_crosshairManager->clearExternalCursor();
+        return;
+    }
+
+    const QString sessionId = *c.targetSessions.constBegin();
+
+    const SessionData *sessionPtr = nullptr;
+    for (const auto &s : model->getAllSessions()) {
+        if (s.getAttribute(SessionKeys::SessionId).toString() == sessionId) {
+            sessionPtr = &s;
+            break;
+        }
+    }
+
+    if (!sessionPtr) {
+        m_crosshairManager->clearExternalCursor();
+        return;
+    }
+
+    auto tryExitTimeSeconds = [](const SessionData &s, double *outExitUtcSeconds) -> bool {
+        if (!outExitUtcSeconds)
+            return false;
+
+        QVariant v = s.getAttribute(SessionKeys::ExitTime);
+        if (!v.canConvert<QDateTime>())
+            return false;
+
+        QDateTime dt = v.toDateTime();
+        if (!dt.isValid())
+            return false;
+
+        *outExitUtcSeconds = dt.toMSecsSinceEpoch() / 1000.0;
+        return true;
+    };
+
+    double xPlot = 0.0;
+    bool haveXPlot = false;
+
+    if (c.positionSpace == CursorModel::PositionSpace::PlotAxisCoord) {
+        if (c.axisKey == m_xAxisKey) {
+            xPlot = c.positionValue;
+            haveXPlot = true;
+        }
+    } else if (c.positionSpace == CursorModel::PositionSpace::UtcSeconds) {
+        if (m_xAxisKey == SessionKeys::Time) {
+            xPlot = c.positionValue;
+            haveXPlot = true;
+        } else if (m_xAxisKey == SessionKeys::TimeFromExit) {
+            double exitUtc = 0.0;
+            if (tryExitTimeSeconds(*sessionPtr, &exitUtc)) {
+                xPlot = c.positionValue - exitUtc;
+                haveXPlot = true;
+            }
+        }
+    }
+
+    if (!haveXPlot) {
+        m_crosshairManager->clearExternalCursor();
+        return;
+    }
+
+    m_crosshairManager->setExternalCursor(sessionId, xPlot);
+}
+
 // Protected Methods
 bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 {
@@ -348,6 +442,10 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
         case QEvent::MouseMove: {
             auto me = static_cast<QMouseEvent*>(event);
 
+            const bool inPlotArea =
+                customPlot->axisRect()->rect().contains(me->pos());
+            m_mouseInPlotArea = inPlotArea;
+
             // forward to crosshairManager if desired:
             if (m_crosshairManager) {
                 m_crosshairManager->handleMouseMove(me->pos());
@@ -355,9 +453,6 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 
             // Step 3: write mouse cursor state into CursorModel
             if (m_cursorModel) {
-                const bool inPlotArea =
-                    customPlot->axisRect()->rect().contains(me->pos());
-
                 const QSet<QString> tracedSessions =
                     m_crosshairManager ? m_crosshairManager->getTracedSessionIds()
                                        : QSet<QString>{};
@@ -397,6 +492,8 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
             return m_currentTool->mouseReleaseEvent(me);
         }
         case QEvent::Leave:
+            m_mouseInPlotArea = false;
+
             if (m_crosshairManager) {
                 m_crosshairManager->handleMouseLeave();
             }

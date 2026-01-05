@@ -75,6 +75,7 @@ protected:
 
 private slots:
     void onHoveredSessionChanged(const QString& sessionId);
+    void onCursorsChanged();
 
 private:
     // Initialization
@@ -115,6 +116,7 @@ private:
 
     // State Management
     bool m_updatingYAxis = false;
+    bool m_mouseInPlotArea = false;
 
     std::unique_ptr<CrosshairManager> m_crosshairManager;
 
