@@ -203,6 +203,7 @@ set(PROJECT_SOURCES
   legendpresenter.cpp        legendpresenter.h
   mapwidget.cpp              mapwidget.h
   trackmapmodel.cpp          trackmapmodel.h
+  mapcursordotmodel.cpp      mapcursordotmodel.h
   resources.qrc
 )
 
