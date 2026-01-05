@@ -673,6 +673,9 @@ void PlotWidget::applyXAxisChange(const QString& key, const QString& label)
     customPlot->replot();
 
     updateXAxisTicker();
+
+    // If an external source (e.g., map hover) is driving the cursor, re-apply it under the new axis mode.
+    onCursorsChanged();
 }
 
 } // namespace FlySight
