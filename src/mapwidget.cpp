@@ -11,8 +11,9 @@
 
 namespace FlySight {
 
-MapWidget::MapWidget(SessionModel *sessionModel, QWidget *parent)
+MapWidget::MapWidget(SessionModel *sessionModel, CursorModel *cursorModel, QWidget *parent)
     : QWidget(parent)
+    , m_cursorModel(cursorModel)
 {
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);

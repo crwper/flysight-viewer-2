@@ -115,7 +115,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Add map view (Qt Location)
     mapDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Map"));
-    mapWidget = new MapWidget(model, mapDock);
+    mapWidget = new MapWidget(model, m_cursorModel, mapDock);
     mapDock->setWidget(mapWidget);
     addDockWidget(mapDock, KDDockWidgets::Location_OnBottom);
 
