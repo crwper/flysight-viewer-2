@@ -92,8 +92,10 @@ void TrackMapModel::rebuild()
                 session.getMeasurement(QString::fromLatin1(kDefaultSensor), QString::fromLatin1(kLatKey));
             const QVector<double> lon =
                 session.getMeasurement(QString::fromLatin1(kDefaultSensor), QString::fromLatin1(kLonKey));
+            const QVector<double> tUtc =
+                session.getMeasurement(QString::fromLatin1(kDefaultSensor), QString::fromLatin1(SessionKeys::Time));
 
-            const int n = qMin(lat.size(), lon.size());
+            const int n = qMin(tUtc.size(), qMin(lat.size(), lon.size()));
             if (n < 2)
                 continue;
 
@@ -103,8 +105,9 @@ void TrackMapModel::rebuild()
             for (int i = 0; i < n; ++i) {
                 const double la = lat[i];
                 const double lo = lon[i];
+                const double tt = tUtc[i];
 
-                if (!qIsFinite(la) || !qIsFinite(lo))
+                if (!qIsFinite(la) || !qIsFinite(lo) || !qIsFinite(tt))
                     continue;
                 if (la < -90.0 || la > 90.0 || lo < -180.0 || lo > 180.0)
                     continue;
@@ -112,6 +115,7 @@ void TrackMapModel::rebuild()
                 QVariantMap pt;
                 pt.insert(QStringLiteral("lat"), la);
                 pt.insert(QStringLiteral("lon"), lo);
+                pt.insert(QStringLiteral("t"), tt); // UTC seconds for QML hover interpolation
                 points.push_back(pt);
 
                 if (!haveBounds) {
