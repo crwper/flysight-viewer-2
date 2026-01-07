@@ -23,6 +23,15 @@ class PlotViewSettingsModel;
 class PlotModel;
 class CursorModel;
 
+struct ReferenceMoment
+{
+    QString sessionId;
+    double exitUtcSeconds = 0.0;
+
+    enum class Kind { Exit };
+    Kind kind = Kind::Exit;
+};
+
 class PlotWidget : public QWidget
 {
     Q_OBJECT
@@ -89,6 +98,7 @@ private:
     // View management
     const SessionData* referenceSession() const;
     static double exitTimeSeconds(const SessionData& s);
+    QVector<ReferenceMoment> collectExitMoments() const;
     QCPRange keyRangeOf(const SessionData& s,
                         const QString& sensor,
                         const QString& meas) const;

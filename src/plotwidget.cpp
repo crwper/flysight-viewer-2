@@ -624,6 +624,32 @@ double PlotWidget::exitTimeSeconds(const SessionData& s)
     return v.toDateTime().toMSecsSinceEpoch() / 1000.0;
 }
 
+QVector<ReferenceMoment> PlotWidget::collectExitMoments() const
+{
+    QVector<ReferenceMoment> exitMoments;
+
+    for (const auto& s : model->getAllSessions()) {
+        if (!s.isVisible())
+            continue;
+
+        QVariant v = s.getAttribute(SessionKeys::ExitTime);
+        if (!v.canConvert<QDateTime>())
+            continue;
+
+        QDateTime dt = v.toDateTime();
+        if (!dt.isValid())
+            continue;
+
+        ReferenceMoment moment;
+        moment.sessionId = s.getAttribute(SessionKeys::SessionId).toString();
+        moment.exitUtcSeconds = dt.toMSecsSinceEpoch() / 1000.0;
+
+        exitMoments.append(moment);
+    }
+
+    return exitMoments;
+}
+
 QCPRange PlotWidget::keyRangeOf(const SessionData& s,
                                 const QString& sensor,
                                 const QString& meas) const
