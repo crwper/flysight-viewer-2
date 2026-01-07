@@ -535,8 +535,18 @@ void PlotWidget::setupPlot()
     customPlot->axisRect()->setRangeDrag(Qt::Horizontal);
     customPlot->axisRect()->setRangeZoom(Qt::Horizontal);
 
+    // Reserve top margin for the reference marker lane
+    const int laneHeightPx = 32;
+    customPlot->axisRect()->setMinimumMargins(QMargins(0, laneHeightPx, 0, 0));
+
     // create a dedicated layer for highlighted graphs
     customPlot->addLayer("highlighted", customPlot->layer("main"), QCustomPlot::limAbove);
+
+    // create a dedicated layer for reference marker items (drawn above all plot content)
+    QCPLayer *aboveLayer = customPlot->layer("overlay");
+    if (!aboveLayer)
+        aboveLayer = customPlot->layer("highlighted");
+    customPlot->addLayer("referenceMarkers", aboveLayer, QCustomPlot::limAbove);
 }
 
 void PlotWidget::updateXAxisTicker()
