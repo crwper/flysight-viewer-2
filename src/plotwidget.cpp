@@ -441,6 +441,16 @@ void PlotWidget::onCursorsChanged()
 // Protected Methods
 bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 {
+    // Step 5: Keep reference markers aligned when plot geometry changes (resize/layout, margins).
+    // Spec trigger: QEvent::Resize on customPlot -> updateReferenceMarkers(Reflow)
+    if (obj == customPlot && event->type() == QEvent::Resize) {
+        // Defer to the next event loop turn so QCustomPlot can apply its new geometry first.
+        QTimer::singleShot(0, this, [this]() {
+            updateReferenceMarkers(UpdateMode::Reflow);
+            customPlot->replot(QCustomPlot::rpQueuedReplot);
+        });
+    }
+
     if (obj == customPlot && m_currentTool) {
         switch (event->type()) {
         case QEvent::MouseMove: {
