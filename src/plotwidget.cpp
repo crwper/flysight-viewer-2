@@ -267,6 +267,8 @@ void PlotWidget::updatePlot()
         }
     }
 
+    updateReferenceMarkers(UpdateMode::Rebuild);
+
     // Adjust y-axis ranges based on the updated x-axis range
     onXAxisRangeChanged(customPlot->xAxis->range());
 }
@@ -313,6 +315,8 @@ void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
             yAxis->setRange(yMin - padding, yMax + padding);
         }
     }
+
+    updateReferenceMarkers(UpdateMode::Reflow);
 
     customPlot->replot();
 
@@ -658,6 +662,111 @@ QVector<ReferenceMoment> PlotWidget::collectExitMoments() const
     }
 
     return exitMoments;
+}
+
+void PlotWidget::updateReferenceMarkers(UpdateMode mode)
+{
+    auto clearItems = [this]() {
+        for (auto &item : m_referenceMarkerItems) {
+            if (item)
+                customPlot->removeItem(item);
+        }
+        m_referenceMarkerItems.clear();
+    };
+
+    if (mode == UpdateMode::Rebuild) {
+        clearItems();
+    }
+
+    // Step 3: Only render a marker when there is exactly one visible EXIT moment
+    const QVector<ReferenceMoment> moments = collectExitMoments();
+    if (moments.size() != 1) {
+        if (!m_referenceMarkerItems.isEmpty())
+            clearItems();
+        return;
+    }
+
+    const ReferenceMoment &moment = moments.first();
+
+    // Determine x coordinate based on axis mode
+    const double xCoord = (m_xAxisKey == SessionKeys::Time) ? moment.exitUtcSeconds : 0.0;
+
+    // Only draw if the marker is currently within the visible x range
+    const QCPRange xRange = customPlot->xAxis->range();
+    if (xCoord < xRange.lower || xCoord > xRange.upper) {
+        if (!m_referenceMarkerItems.isEmpty())
+            clearItems();
+        return;
+    }
+
+    const double xPixel = customPlot->xAxis->coordToPixel(xCoord);
+
+    const QRect axisRectPx = customPlot->axisRect()->rect();
+    const int laneBottomY = axisRectPx.top();
+
+    const int pointerHeightPx = 8;
+    const int pointerBaseWidthPx = 10;
+    const int bubbleGapPx = 2;
+    const int bubbleBottomY = laneBottomY - pointerHeightPx - bubbleGapPx;
+
+    // Lazily create marker items on first draw (or after rebuild)
+    if (m_referenceMarkerItems.isEmpty()) {
+        const QColor markerColor(0, 122, 204);
+
+        // Pointer triangle (implemented via a flat arrow head)
+        QCPItemLine *pointer = new QCPItemLine(customPlot);
+        pointer->setLayer("referenceMarkers");
+        pointer->setClipToAxisRect(false);
+        pointer->setSelectable(false);
+
+        QPen pointerPen(markerColor);
+        pointerPen.setWidthF(0);
+        pointer->setPen(pointerPen);
+        pointer->setHead(QCPLineEnding(QCPLineEnding::esFlatArrow, pointerBaseWidthPx, pointerHeightPx));
+        pointer->setTail(QCPLineEnding(QCPLineEnding::esNone));
+
+        pointer->start->setType(QCPItemPosition::ptAbsolute);
+        pointer->end->setType(QCPItemPosition::ptAbsolute);
+
+        // Label bubble
+        QCPItemText *bubble = new QCPItemText(customPlot);
+        bubble->setLayer("referenceMarkers");
+        bubble->setClipToAxisRect(false);
+        bubble->setSelectable(false);
+
+        bubble->position->setType(QCPItemPosition::ptAbsolute);
+        bubble->setPositionAlignment(Qt::AlignHCenter | Qt::AlignBottom);
+        bubble->setTextAlignment(Qt::AlignCenter);
+
+        bubble->setText(QStringLiteral("EXIT"));
+        bubble->setPadding(QMargins(6, 2, 6, 2));
+        bubble->setBrush(QBrush(markerColor));
+        bubble->setPen(QPen(markerColor));
+        bubble->setColor(Qt::white);
+
+        QFont f = bubble->font();
+        f.setBold(true);
+        bubble->setFont(f);
+
+        m_referenceMarkerItems << pointer << bubble;
+    }
+
+    // Update item positions (for panning/zooming)
+    QCPItemLine *pointer = nullptr;
+    QCPItemText *bubble = nullptr;
+    for (auto &item : m_referenceMarkerItems) {
+        if (!item) continue;
+        if (!pointer) pointer = qobject_cast<QCPItemLine *>(item.data());
+        if (!bubble) bubble = qobject_cast<QCPItemText *>(item.data());
+    }
+
+    if (pointer) {
+        pointer->start->setCoords(xPixel, laneBottomY - pointerHeightPx);
+        pointer->end->setCoords(xPixel, laneBottomY);
+    }
+    if (bubble) {
+        bubble->position->setCoords(xPixel, bubbleBottomY);
+    }
 }
 
 QCPRange PlotWidget::keyRangeOf(const SessionData& s,

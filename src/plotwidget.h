@@ -103,6 +103,9 @@ private:
                         const QString& sensor,
                         const QString& meas) const;
 
+    enum class UpdateMode { Rebuild, Reflow };
+    void updateReferenceMarkers(UpdateMode mode);
+
     // Member Variables
     QCustomPlot *customPlot;
     SessionModel *model;
@@ -129,6 +132,8 @@ private:
     bool m_mouseInPlotArea = false;
 
     std::unique_ptr<CrosshairManager> m_crosshairManager;
+
+    QVector<QPointer<QCPAbstractItem>> m_referenceMarkerItems;
 
     QString m_xAxisKey   = SessionKeys::TimeFromExit;
     QString m_xAxisLabel = "Time from exit (s)";
