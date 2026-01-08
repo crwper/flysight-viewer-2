@@ -810,7 +810,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
 
     const int pointerHeightPx = 8;
     const int pointerBaseWidthPx = 10;
-    const int bubbleGapPx = 2;
+    const int bubbleGapPx = 0;
     const int bubbleBottomY = laneBottomY - pointerHeightPx - bubbleGapPx;
 
     // Lazily create marker items (one pointer + one bubble per cluster)
