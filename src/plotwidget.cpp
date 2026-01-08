@@ -678,28 +678,122 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
         clearItems();
     }
 
-    // Step 3: Only render a marker when there is exactly one visible EXIT moment
+    // Step 4: Multiple markers + clustering (pixel-space)
     const QVector<ReferenceMoment> moments = collectExitMoments();
-    if (moments.size() != 1) {
+    if (moments.isEmpty()) {
         if (!m_referenceMarkerItems.isEmpty())
             clearItems();
         return;
     }
 
-    const ReferenceMoment &moment = moments.first();
-
-    // Determine x coordinate based on axis mode
-    const double xCoord = (m_xAxisKey == SessionKeys::Time) ? moment.exitUtcSeconds : 0.0;
-
-    // Only draw if the marker is currently within the visible x range
+    // Only draw moments that are currently within the visible x range
     const QCPRange xRange = customPlot->xAxis->range();
-    if (xCoord < xRange.lower || xCoord > xRange.upper) {
+
+    struct DrawableMoment
+    {
+        ReferenceMoment moment;
+        double xPixel = 0.0;
+    };
+
+    QVector<DrawableMoment> drawable;
+    drawable.reserve(moments.size());
+
+    for (const ReferenceMoment &moment : moments) {
+        // Determine x coordinate based on axis mode
+        const double xCoord = (m_xAxisKey == SessionKeys::Time) ? moment.exitUtcSeconds : 0.0;
+
+        if (xCoord < xRange.lower || xCoord > xRange.upper)
+            continue;
+
+        DrawableMoment dm;
+        dm.moment = moment;
+        dm.xPixel = customPlot->xAxis->coordToPixel(xCoord);
+        drawable.append(dm);
+    }
+
+    if (drawable.isEmpty()) {
         if (!m_referenceMarkerItems.isEmpty())
             clearItems();
         return;
     }
 
-    const double xPixel = customPlot->xAxis->coordToPixel(xCoord);
+    std::sort(drawable.begin(), drawable.end(),
+              [](const DrawableMoment &a, const DrawableMoment &b) { return a.xPixel < b.xPixel; });
+
+    const int clusterThresholdPx = 20;
+
+    struct Cluster
+    {
+        double anchorXPixel = 0.0;
+        QVector<ReferenceMoment> moments;
+        QString label;
+
+        // Internal accumulator for mean anchor
+        double sumXPixel = 0.0;
+        double lastXPixel = 0.0;
+    };
+
+    QVector<Cluster> clusters;
+    clusters.reserve(drawable.size());
+
+    Cluster current;
+    current.moments.append(drawable.first().moment);
+    current.sumXPixel += drawable.first().xPixel;
+    current.lastXPixel = drawable.first().xPixel;
+
+    for (int i = 1; i < drawable.size(); ++i) {
+        const DrawableMoment &dm = drawable[i];
+
+        if (qAbs(dm.xPixel - current.lastXPixel) <= clusterThresholdPx) {
+            current.moments.append(dm.moment);
+            current.sumXPixel += dm.xPixel;
+            current.lastXPixel = dm.xPixel;
+            continue;
+        }
+
+        // Finalize current cluster
+        current.anchorXPixel = current.sumXPixel / current.moments.size();
+        const int count = current.moments.size();
+        current.label = (count == 1)
+                            ? QStringLiteral("EXIT")
+                            : QStringLiteral("EXIT \u00D7%1").arg(count);
+        clusters.append(current);
+
+        // Start a new cluster
+        current = Cluster{};
+        current.moments.append(dm.moment);
+        current.sumXPixel += dm.xPixel;
+        current.lastXPixel = dm.xPixel;
+    }
+
+    // Finalize last cluster
+    current.anchorXPixel = current.sumXPixel / current.moments.size();
+    const int count = current.moments.size();
+    current.label = (count == 1)
+                        ? QStringLiteral("EXIT")
+                        : QStringLiteral("EXIT \u00D7%1").arg(count);
+    clusters.append(current);
+
+    if (clusters.isEmpty()) {
+        if (!m_referenceMarkerItems.isEmpty())
+            clearItems();
+        return;
+    }
+
+    // If cluster count changed, rebuild items (even on Reflow)
+    const int requiredItemCount = clusters.size() * 2;
+    bool needsRebuild = (m_referenceMarkerItems.size() != requiredItemCount);
+    if (!needsRebuild) {
+        for (auto &item : m_referenceMarkerItems) {
+            if (!item) {
+                needsRebuild = true;
+                break;
+            }
+        }
+    }
+    if (needsRebuild) {
+        clearItems();
+    }
 
     const QRect axisRectPx = customPlot->axisRect()->rect();
     const int laneBottomY = axisRectPx.top();
@@ -709,63 +803,65 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
     const int bubbleGapPx = 2;
     const int bubbleBottomY = laneBottomY - pointerHeightPx - bubbleGapPx;
 
-    // Lazily create marker items on first draw (or after rebuild)
+    // Lazily create marker items (one pointer + one bubble per cluster)
     if (m_referenceMarkerItems.isEmpty()) {
         const QColor markerColor(0, 122, 204);
 
-        // Pointer triangle (implemented via a flat arrow head)
-        QCPItemLine *pointer = new QCPItemLine(customPlot);
-        pointer->setLayer("referenceMarkers");
-        pointer->setClipToAxisRect(false);
-        pointer->setSelectable(false);
+        for (int i = 0; i < clusters.size(); ++i) {
+            // Pointer triangle (implemented via a flat arrow head)
+            QCPItemLine *pointer = new QCPItemLine(customPlot);
+            pointer->setLayer("referenceMarkers");
+            pointer->setClipToAxisRect(false);
+            pointer->setSelectable(false);
 
-        QPen pointerPen(markerColor);
-        pointerPen.setWidthF(0);
-        pointer->setPen(pointerPen);
-        pointer->setHead(QCPLineEnding(QCPLineEnding::esFlatArrow, pointerBaseWidthPx, pointerHeightPx));
-        pointer->setTail(QCPLineEnding(QCPLineEnding::esNone));
+            QPen pointerPen(markerColor);
+            pointerPen.setWidthF(0);
+            pointer->setPen(pointerPen);
+            pointer->setHead(QCPLineEnding(QCPLineEnding::esFlatArrow, pointerBaseWidthPx, pointerHeightPx));
+            pointer->setTail(QCPLineEnding(QCPLineEnding::esNone));
 
-        pointer->start->setType(QCPItemPosition::ptAbsolute);
-        pointer->end->setType(QCPItemPosition::ptAbsolute);
+            pointer->start->setType(QCPItemPosition::ptAbsolute);
+            pointer->end->setType(QCPItemPosition::ptAbsolute);
 
-        // Label bubble
-        QCPItemText *bubble = new QCPItemText(customPlot);
-        bubble->setLayer("referenceMarkers");
-        bubble->setClipToAxisRect(false);
-        bubble->setSelectable(false);
+            // Label bubble
+            QCPItemText *bubble = new QCPItemText(customPlot);
+            bubble->setLayer("referenceMarkers");
+            bubble->setClipToAxisRect(false);
+            bubble->setSelectable(false);
 
-        bubble->position->setType(QCPItemPosition::ptAbsolute);
-        bubble->setPositionAlignment(Qt::AlignHCenter | Qt::AlignBottom);
-        bubble->setTextAlignment(Qt::AlignCenter);
+            bubble->position->setType(QCPItemPosition::ptAbsolute);
+            bubble->setPositionAlignment(Qt::AlignHCenter | Qt::AlignBottom);
+            bubble->setTextAlignment(Qt::AlignCenter);
 
-        bubble->setText(QStringLiteral("EXIT"));
-        bubble->setPadding(QMargins(6, 2, 6, 2));
-        bubble->setBrush(QBrush(markerColor));
-        bubble->setPen(QPen(markerColor));
-        bubble->setColor(Qt::white);
+            bubble->setText(QStringLiteral("EXIT"));
+            bubble->setPadding(QMargins(6, 2, 6, 2));
+            bubble->setBrush(QBrush(markerColor));
+            bubble->setPen(QPen(markerColor));
+            bubble->setColor(Qt::white);
 
-        QFont f = bubble->font();
-        f.setBold(true);
-        bubble->setFont(f);
+            QFont f = bubble->font();
+            f.setBold(true);
+            bubble->setFont(f);
 
-        m_referenceMarkerItems << pointer << bubble;
+            m_referenceMarkerItems << pointer << bubble;
+        }
     }
 
-    // Update item positions (for panning/zooming)
-    QCPItemLine *pointer = nullptr;
-    QCPItemText *bubble = nullptr;
-    for (auto &item : m_referenceMarkerItems) {
-        if (!item) continue;
-        if (!pointer) pointer = qobject_cast<QCPItemLine *>(item.data());
-        if (!bubble) bubble = qobject_cast<QCPItemText *>(item.data());
-    }
+    // Update item positions and labels (for panning/zooming and re-clustering)
+    for (int i = 0; i < clusters.size(); ++i) {
+        const double xPixel = clusters[i].anchorXPixel;
 
-    if (pointer) {
-        pointer->start->setCoords(xPixel, laneBottomY - pointerHeightPx);
-        pointer->end->setCoords(xPixel, laneBottomY);
-    }
-    if (bubble) {
-        bubble->position->setCoords(xPixel, bubbleBottomY);
+        QCPItemLine *pointer = qobject_cast<QCPItemLine *>(m_referenceMarkerItems[2 * i].data());
+        QCPItemText *bubble = qobject_cast<QCPItemText *>(m_referenceMarkerItems[2 * i + 1].data());
+
+        if (pointer) {
+            pointer->start->setCoords(xPixel, laneBottomY - pointerHeightPx);
+            pointer->end->setCoords(xPixel, laneBottomY);
+        }
+        if (bubble) {
+            bubble->setText(clusters[i].label);
+            bubble->position->setCoords(xPixel, bubbleBottomY);
+        }
     }
 }
 
