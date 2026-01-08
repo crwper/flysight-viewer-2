@@ -39,7 +39,6 @@ std::optional<Value> CalculatedValue<Key, Value>::getValue(SessionData &session,
 
     // Check if a calculation method is registered
     if (!s_methods.contains(key)) {
-        qWarning() << "No method registered for key:" << key;
         return std::nullopt;
     }
 
@@ -81,8 +80,6 @@ std::optional<Value> CalculatedValue<Key, Value>::getValue(SessionData &session,
 
     if (result.has_value()) {
         m_cache.insert(key, *result);
-    } else {
-        qWarning() << "Calculation failed for key:" << key;
     }
 
     return result;
