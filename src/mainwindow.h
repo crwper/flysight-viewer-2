@@ -22,6 +22,7 @@ class LegendWidget;
 class LegendPresenter;
 class PlotViewSettingsModel;
 class PlotModel;
+class MarkerModel;
 class CursorModel;
 class MapWidget;
 
@@ -99,6 +100,11 @@ private:
     LogbookView *logbookView;
     PlotWidget *plotWidget;
 
+    // Marker selection components
+    KDDockWidgets::QtWidgets::DockWidget *markerDock = nullptr;
+    QTreeView *markerTreeView = nullptr;
+    MarkerModel *markerModel = nullptr;
+
     // Legend dock/widget (new)
     KDDockWidgets::QtWidgets::DockWidget *legendDock = nullptr;
     LegendWidget *legendWidget = nullptr;
@@ -122,7 +128,10 @@ private:
     // Helper functions for plot values
     static void registerBuiltInPlots();
     static void registerBuiltInMarkers();
-    void setupPlotValues();
+
+    // Set up plot and marker selection docks
+    void setupPlotSelectionDock();
+    void setupMarkerSelectionDock();
 
     // Helper function for importing files
     void importFiles(const QStringList &fileNames, bool showProgress, const QString &baseDir = QString());

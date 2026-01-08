@@ -33,6 +33,7 @@ template class __declspec(dllimport) std::vector<size_t>;
 #include "imugnssekf.h"
 #include "plotviewsettingsmodel.h"
 #include "plotmodel.h"
+#include "markermodel.h"
 #include "markerregistry.h"
 #include "cursormodel.h"
 
@@ -56,6 +57,7 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
     , model(new SessionModel(this))
     , plotModel (new PlotModel(this))
+    , markerModel (new MarkerModel(this))
 {
     ui->setupUi(this);
     manualInit();
@@ -132,8 +134,9 @@ MainWindow::MainWindow(QWidget *parent)
     // Connect the newTimeRange signal to PlotWidget's setXAxisRange slot
     connect(this, &MainWindow::newTimeRange, plotWidget, &PlotWidget::setXAxisRange);
 
-    // Setup plot values
-    setupPlotValues();
+    // Setup plots and marker selection docks
+    setupPlotSelectionDock();
+    setupMarkerSelectionDock();
 
     // Initialize the Plots menu
     initializeXAxisMenu();
@@ -550,7 +553,7 @@ void MainWindow::registerBuiltInMarkers()
 {
     QVector<MarkerDefinition> defaults = {
         // Category: Reference
-        {"Reference", "EXIT", QColor(0, 122, 204), SessionKeys::ExitTime},
+        {"Reference", "Exit", QColor(0, 122, 204), SessionKeys::ExitTime},
     };
 
     for (auto &md : defaults)
@@ -632,7 +635,7 @@ void MainWindow::registerBuiltInPlots()
         PlotRegistry::instance().registerPlot(pv);
 }
 
-void MainWindow::setupPlotValues()
+void MainWindow::setupPlotSelectionDock()
 {
     // Create the dock widget
     plotSelectionDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Plot Selection"));
@@ -648,6 +651,25 @@ void MainWindow::setupPlotValues()
     // Let PlotModel own the category/plot tree
     if (plotModel) {
         plotModel->setPlots(PlotRegistry::instance().allPlots());
+    }
+}
+
+void MainWindow::setupMarkerSelectionDock()
+{
+    // Create the marker selection dock widget
+    markerDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Marker Selection"));
+    markerTreeView = new QTreeView(markerDock);
+    markerDock->setWidget(markerTreeView);
+    addDockWidget(markerDock, KDDockWidgets::Location_OnLeft);
+
+    // Attach the model
+    markerTreeView->setModel(markerModel);
+    markerTreeView->setHeaderHidden(true);
+    markerTreeView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    // Populate marker tree from registry
+    if (markerModel) {
+        markerModel->setMarkers(MarkerRegistry::instance().allMarkers());
     }
 }
 
@@ -1589,6 +1611,13 @@ void MainWindow::initializePlotsMenu()
         QAction *showMapAction = mapDock->toggleAction();
         showMapAction->setText(tr("Show Map"));
         plotsMenu->addAction(showMapAction);
+    }
+
+    // Create the "Show Marker Selection" action
+    if (markerDock) {
+        QAction *showMarkerSelectionAction = markerDock->toggleAction();
+        showMarkerSelectionAction->setText(tr("Show Marker Selection"));
+        plotsMenu->addAction(showMarkerSelectionAction);
     }
 }
 
