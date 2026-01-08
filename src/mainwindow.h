@@ -121,6 +121,7 @@ private:
 
     // Helper functions for plot values
     static void registerBuiltInPlots();
+    static void registerBuiltInMarkers();
     void setupPlotValues();
 
     // Helper function for importing files

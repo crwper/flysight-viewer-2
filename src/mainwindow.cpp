@@ -33,6 +33,7 @@ template class __declspec(dllimport) std::vector<size_t>;
 #include "imugnssekf.h"
 #include "plotviewsettingsmodel.h"
 #include "plotmodel.h"
+#include "markerregistry.h"
 #include "cursormodel.h"
 
 #include <GeographicLib/LocalCartesian.hpp>
@@ -71,6 +72,7 @@ MainWindow::MainWindow(QWidget *parent)
     QString pluginDir = qEnvironmentVariable("FLYSIGHT_PLUGINS", defaultDir);
 
     registerBuiltInPlots();
+    registerBuiltInMarkers();
     PluginHost::instance().initialise(pluginDir);
 
     // Add logbook view
@@ -542,6 +544,17 @@ void MainWindow::onPlotWidgetToolChanged(PlotWidget::Tool t)
         ui->action_SetGround->setChecked(true);
         break;
     }
+}
+
+void MainWindow::registerBuiltInMarkers()
+{
+    QVector<MarkerDefinition> defaults = {
+        // Category: Reference
+        {"Reference", "EXIT", QColor(0, 122, 204), SessionKeys::ExitTime},
+    };
+
+    for (auto &md : defaults)
+        MarkerRegistry::instance().registerMarker(md);
 }
 
 void MainWindow::registerBuiltInPlots()

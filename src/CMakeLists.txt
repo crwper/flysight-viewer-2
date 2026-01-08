@@ -205,6 +205,7 @@ set(PROJECT_SOURCES
   trackmapmodel.cpp          trackmapmodel.h
   mapcursordotmodel.cpp      mapcursordotmodel.h
   mapcursorproxy.cpp         mapcursorproxy.h
+  markerregistry.cpp         markerregistry.h
   resources.qrc
 )
 
