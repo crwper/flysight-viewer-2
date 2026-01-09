@@ -32,37 +32,16 @@ public:
             return false;
 
         // 1) Attempt marker bubble hit-test (works even above the axis rect).
-        constexpr double bubblePickThresholdPx = 5.0;
-
-        QCPItemText *bestBubble = nullptr;
-        double bestDist = bubblePickThresholdPx + 1.0;
-
-        const auto &lanes = m_widget->markerItemsByLane();
-        for (const auto &lane : lanes) {
-            for (int i = 1; i < lane.size(); i += 2) {
-                if (!lane[i])
-                    continue;
-
-                QCPItemText *bubble = qobject_cast<QCPItemText *>(lane[i].data());
-                if (!bubble)
-                    continue;
-
-                const double dist = bubble->selectTest(event->pos(), /*onlySelectable=*/false);
-                if (dist >= 0.0 && dist <= bubblePickThresholdPx && dist < bestDist) {
-                    bestDist = dist;
-                    bestBubble = bubble;
-                }
-            }
-        }
-
-        if (bestBubble) {
+        if (QCPItemText *bubble = m_plot->itemAt<QCPItemText>(event->pos(), /*onlySelectable=*/false)) {
             PlotWidget::MarkerBubbleMeta meta;
-            if (m_widget->markerBubbleMeta(bestBubble, &meta) && meta.count == 1) {
-                emit m_widget->utcTimePicked(meta.utcSeconds);
-                m_widget->revertToPrimaryTool();
+            if (m_widget->markerBubbleMeta(bubble, &meta)) {
+                if (meta.count == 1) {
+                    emit m_widget->utcTimePicked(meta.utcSeconds);
+                    m_widget->revertToPrimaryTool();
+                }
+                // Clustered bubbles (×N) are intentionally non-pickable.
+                return true;
             }
-            // Clustered bubbles (×N) are intentionally non-pickable.
-            return true;
         }
 
         // 2) Else attempt trace pick (only inside the plot axis rect).
