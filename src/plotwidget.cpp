@@ -941,7 +941,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
 
             if (pointer) {
                 pointer->start->setCoords(xPixel, laneBottomY - pointerHeightPx);
-                pointer->end->setCoords(xPixel, laneBottomY);
+                pointer->end->setCoords(xPixel, axisRectPx.top());
             }
             if (bubble) {
                 bubble->setText(clusters[i].label);
