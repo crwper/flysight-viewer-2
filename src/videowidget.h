@@ -31,8 +31,11 @@ public:
 
 signals:
     // Emitted when the user clicks "Select Time" (sync workflow).
-    // (Wiring to PlotWidget happens in later steps of the spec.)
     void selectTimeRequested();
+
+public slots:
+    // Receives the picked UTC seconds from the plot ("Select Time" workflow).
+    void setAnchorUtcSeconds(double utcSeconds);
 
 private slots:
     void onPlayPauseClicked();

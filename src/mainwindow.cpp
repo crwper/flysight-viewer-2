@@ -299,6 +299,15 @@ void MainWindow::on_action_ImportVideo_triggered()
         videoWidget = new VideoWidget(videoDock);
         videoDock->setWidget(videoWidget);
         addDockWidget(videoDock, KDDockWidgets::Location_OnBottom);
+
+        // "Select Time" workflow: put plot into Pick-Time mode, then receive the picked UTC back into the Video dock.
+        if (plotWidget && videoWidget) {
+            connect(videoWidget, &VideoWidget::selectTimeRequested,
+                    plotWidget, &PlotWidget::beginPickUtcTime);
+
+            connect(plotWidget, &PlotWidget::utcTimePicked,
+                    videoWidget, &VideoWidget::setAnchorUtcSeconds);
+        }
     } else if (!videoDock->isVisible()) {
         videoDock->show();
     }

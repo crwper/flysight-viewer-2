@@ -359,8 +359,14 @@ void VideoWidget::onGetFrameClicked()
 
 void VideoWidget::onSelectTimeClicked()
 {
-    // Wiring to PlotWidget happens in later steps of the spec.
+    // Ask the main window to put the plot into Pick-Time mode.
     emit selectTimeRequested();
+}
+
+void VideoWidget::setAnchorUtcSeconds(double utcSeconds)
+{
+    m_anchorUtcSeconds = utcSeconds;
+    updateSyncLabels();
 }
 
 QString VideoWidget::formatTimeMs(qint64 ms)
