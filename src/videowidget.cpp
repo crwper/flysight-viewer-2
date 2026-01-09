@@ -11,6 +11,7 @@
 #include <QSignalBlocker>
 #include <QUrl>
 #include <QDir>
+#include <QDateTime>
 
 #if QT_VERSION_MAJOR >= 6
 #include <QAudioOutput>
@@ -430,7 +431,10 @@ void VideoWidget::updateSyncLabels()
         : tr("—");
 
     const QString utcText = m_anchorUtcSeconds.has_value()
-        ? QString::number(*m_anchorUtcSeconds, 'f', 3)
+        ? QDateTime::fromMSecsSinceEpoch(
+              qint64((*m_anchorUtcSeconds) * 1000.0),
+              Qt::UTC
+          ).toString(QStringLiteral("yy-MM-dd HH:mm:ss.zzz"))
         : tr("—");
 
     m_frameAnchorLabel->setText(tr("Frame: %1").arg(frameText));
