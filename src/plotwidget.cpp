@@ -713,8 +713,15 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
 {
     auto clearLaneItems = [this](QVector<QPointer<QCPAbstractItem>> &laneItems) {
         for (auto &item : laneItems) {
-            if (item)
-                customPlot->removeItem(item);
+            if (!item)
+                continue;
+
+            // Keep marker-bubble metadata in sync with item lifetime.
+            if (QCPItemText *bubble = qobject_cast<QCPItemText *>(item.data())) {
+                m_markerBubbleMeta.remove(bubble);
+            }
+
+            customPlot->removeItem(item);
         }
         laneItems.clear();
     };
@@ -724,6 +731,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
             clearLaneItems(laneItems);
         }
         m_markerItemsByLane.clear();
+        m_markerBubbleMeta.clear();
     };
 
     if (mode == UpdateMode::Rebuild) {
@@ -738,7 +746,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
     customPlot->axisRect()->setMinimumMargins(QMargins(0, laneHeightPx * enabledDefs.size(), 0, 0));
 
     if (enabledDefs.isEmpty()) {
-        if (!m_markerItemsByLane.isEmpty())
+        if (!m_markerItemsByLane.isEmpty() || !m_markerBubbleMeta.isEmpty())
             clearAllItems();
         return;
     }
@@ -785,6 +793,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
 
         struct DrawableInstance {
             double xPixel = 0.0;
+            double markerUtcSeconds = 0.0;
         };
 
         QVector<DrawableInstance> drawable;
@@ -820,6 +829,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
 
             DrawableInstance di;
             di.xPixel = customPlot->xAxis->coordToPixel(xCoord);
+            di.markerUtcSeconds = markerUtcSeconds;
             drawable.append(di);
         }
 
@@ -841,6 +851,8 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
             double sumXPixel = 0.0;
             double lastXPixel = 0.0;
             int count = 0;
+
+            double markerUtcSeconds = 0.0; // Only valid when count == 1
         };
 
         QVector<Cluster> clusters;
@@ -850,14 +862,22 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
         current.sumXPixel = drawable.first().xPixel;
         current.lastXPixel = drawable.first().xPixel;
         current.count = 1;
+        current.markerUtcSeconds = drawable.first().markerUtcSeconds;
 
         for (int i = 1; i < drawable.size(); ++i) {
             const double xPix = drawable[i].xPixel;
+            const double utcSeconds = drawable[i].markerUtcSeconds;
 
             if (qAbs(xPix - current.lastXPixel) <= clusterThresholdPx) {
                 current.sumXPixel += xPix;
                 current.lastXPixel = xPix;
                 current.count += 1;
+
+                // Only valid for single-marker clusters.
+                if (current.count != 1) {
+                    current.markerUtcSeconds = 0.0;
+                }
+
                 continue;
             }
 
@@ -873,6 +893,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
             current.sumXPixel = xPix;
             current.lastXPixel = xPix;
             current.count = 1;
+            current.markerUtcSeconds = utcSeconds;
         }
 
         // finalize last cluster
@@ -965,6 +986,11 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
             if (bubble) {
                 bubble->setText(clusters[i].label);
                 bubble->position->setCoords(xPixel, bubbleBottomY);
+
+                MarkerBubbleMeta meta;
+                meta.count = clusters[i].count;
+                meta.utcSeconds = (clusters[i].count == 1) ? clusters[i].markerUtcSeconds : 0.0;
+                m_markerBubbleMeta.insert(bubble, meta);
             }
         }
     }

@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QMap>
+#include <QHash>
 #include <QPointer>
 #include <QSet>
 #include <memory>
@@ -55,6 +56,12 @@ public:
         SessionModel *model = nullptr;
     };
 
+    struct MarkerBubbleMeta
+    {
+        int count = 0;
+        double utcSeconds = 0.0; // Only valid when count == 1
+    };
+
     // Constructor
     PlotWidget(SessionModel *model,
             PlotModel *plotModel,
@@ -70,6 +77,23 @@ public:
     void setXAxisRange(double min, double max);
     void handleSessionsSelected(const QList<QString> &sessionIds);
     CrosshairManager* crosshairManager() const;
+
+    const QVector<QVector<QPointer<QCPAbstractItem>>> &markerItemsByLane() const { return m_markerItemsByLane; }
+
+    bool markerBubbleMeta(QCPItemText *bubble, MarkerBubbleMeta *outMeta) const
+    {
+        if (!bubble)
+            return false;
+
+        auto it = m_markerBubbleMeta.constFind(bubble);
+        if (it == m_markerBubbleMeta.constEnd())
+            return false;
+
+        if (outMeta)
+            *outMeta = it.value();
+
+        return true;
+    }
 
     static double interpolateY(const QCPGraph* graph, double x);
 
@@ -145,6 +169,7 @@ private:
     std::unique_ptr<CrosshairManager> m_crosshairManager;
 
     QVector<QVector<QPointer<QCPAbstractItem>>> m_markerItemsByLane;
+    QHash<QCPItemText*, MarkerBubbleMeta> m_markerBubbleMeta;
 
     QString m_xAxisKey   = SessionKeys::TimeFromExit;
     QString m_xAxisLabel = "Time from exit (s)";
