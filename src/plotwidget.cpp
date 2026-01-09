@@ -280,6 +280,12 @@ void PlotWidget::updateMarkersOnly()
 {
     // Marker-only update path: do not rebuild graphs
     updateReferenceMarkers(UpdateMode::Rebuild);
+
+    // Rebuild may change axisRect margins (lane count), which changes coordToPixel mapping.
+    // Force QCustomPlot to apply the new layout before we position absolute marker items.
+    customPlot->replot(QCustomPlot::rpImmediateRefresh);
+
+    updateReferenceMarkers(UpdateMode::Reflow);
     customPlot->replot(QCustomPlot::rpQueuedReplot);
 }
 
