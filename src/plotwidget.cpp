@@ -276,6 +276,13 @@ void PlotWidget::updatePlot()
     onXAxisRangeChanged(customPlot->xAxis->range());
 }
 
+void PlotWidget::updateMarkersOnly()
+{
+    // Marker-only update path: do not rebuild graphs
+    updateReferenceMarkers(UpdateMode::Rebuild);
+    customPlot->replot(QCustomPlot::rpQueuedReplot);
+}
+
 void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
 {
     if (m_updatingYAxis) return;

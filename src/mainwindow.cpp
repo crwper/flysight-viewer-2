@@ -139,6 +139,23 @@ MainWindow::MainWindow(QWidget *parent)
     // Connect the newTimeRange signal to PlotWidget's setXAxisRange slot
     connect(this, &MainWindow::newTimeRange, plotWidget, &PlotWidget::setXAxisRange);
 
+    // Marker toggles must update without rebuilding graphs
+    if (markerModel && plotWidget) {
+        connect(markerModel, &QAbstractItemModel::modelReset,
+                plotWidget,
+                [this](auto...) {
+                    if (plotWidget)
+                        plotWidget->updateMarkersOnly();
+                });
+
+        connect(markerModel, &QAbstractItemModel::dataChanged,
+                plotWidget,
+                [this](const QModelIndex&, const QModelIndex&, const QVector<int>&) {
+                    if (plotWidget)
+                        plotWidget->updateMarkersOnly();
+                });
+    }
+
     // Setup plots and marker selection docks
     setupPlotSelectionDock();
     setupMarkerSelectionDock();

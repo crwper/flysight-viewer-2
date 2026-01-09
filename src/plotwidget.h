@@ -78,6 +78,7 @@ signals:
 
 public slots:
     void updatePlot();
+    void updateMarkersOnly();
     void onXAxisRangeChanged(const QCPRange &newRange);
     void onXAxisKeyChanged(const QString &newKey, const QString &newLabel);
 
