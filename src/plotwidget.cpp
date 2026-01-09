@@ -10,6 +10,7 @@
 #include <QBitmap>
 #include <QPainter>
 #include <QDebug>
+#include <QShortcut>
 
 #include "plottool/plottool.h"
 #include "plottool/pantool.h"
@@ -17,6 +18,7 @@
 #include "plottool/selecttool.h"
 #include "plottool/setexittool.h"
 #include "plottool/setgroundtool.h"
+#include "plottool/picktimetool.h"
 
 namespace FlySight {
 
@@ -66,6 +68,7 @@ PlotWidget::PlotWidget(SessionModel *model,
     m_selectTool = std::make_unique<SelectTool>(ctx);
     m_setExitTool = std::make_unique<SetExitTool>(ctx);
     m_setGroundTool = std::make_unique<SetGroundTool>(ctx);
+    m_pickTimeTool = std::make_unique<PickTimeTool>(ctx);
 
     m_currentTool = m_panTool.get();
     m_primaryTool = Tool::Pan;
@@ -83,6 +86,14 @@ PlotWidget::PlotWidget(SessionModel *model,
 
     // For example, installing event filter:
     customPlot->installEventFilter(this);
+
+    // Esc cancels Pick-Time mode and returns to the current primary tool.
+    auto *escShortcut = new QShortcut(Qt::Key_Escape, customPlot);
+    connect(escShortcut, &QShortcut::activated, this, [this]() {
+        if (m_currentTool == m_pickTimeTool.get()) {
+            revertToPrimaryTool();
+        }
+    });
 
     if (m_cursorModel) {
         connect(m_cursorModel, &CursorModel::cursorsChanged,
@@ -140,6 +151,9 @@ void PlotWidget::setCurrentTool(Tool tool)
     case Tool::SetGround:
         m_currentTool = m_setGroundTool.get();
         break;
+    case Tool::PickTime:
+        m_currentTool = m_pickTimeTool.get();
+        break;
     }
 
     // Update previous primary tool
@@ -158,6 +172,11 @@ void PlotWidget::setCurrentTool(Tool tool)
 void PlotWidget::revertToPrimaryTool()
 {
     setCurrentTool(m_primaryTool);
+}
+
+void PlotWidget::beginPickUtcTime()
+{
+    setCurrentTool(Tool::PickTime);
 }
 
 void PlotWidget::setXAxisRange(double min, double max)

@@ -618,6 +618,10 @@ void MainWindow::onPlotWidgetToolChanged(PlotWidget::Tool t)
     case PlotWidget::Tool::SetGround:
         ui->action_SetGround->setChecked(true);
         break;
+    case PlotWidget::Tool::PickTime:
+        // PickTime is a momentary tool invoked by other UI (e.g. the Video dock).
+        // Keep the previous primary tool action checked.
+        break;
     }
 }
 

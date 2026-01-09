@@ -58,6 +58,18 @@ void CrosshairManager::setEnabled(bool enabled)
     }
 }
 
+void CrosshairManager::setMultiTraceEnabled(bool enabled)
+{
+    if (m_multiTraceEnabled == enabled)
+        return;
+
+    m_multiTraceEnabled = enabled;
+
+    // Refresh tracer visuals immediately if the cursor is currently over the plot area.
+    if (m_enabled)
+        updateIfOverPlotArea();
+}
+
 void CrosshairManager::handleMouseMove(const QPoint &pixelPos)
 {
     if (!m_enabled || !m_plot || !m_graphInfoMap)
@@ -292,22 +304,24 @@ void CrosshairManager::updateTracers(const QPoint &pixelPos)
         if (m_model)
             m_model->setHoveredSessionId(QString());
 
-        double xPlot = m_plot->xAxis->pixelToCoord(pixelPos.x());
-        hideAllTracers(); // We'll re-show them
-        for (auto it = m_graphInfoMap->begin(); it != m_graphInfoMap->end(); ++it) {
-            QCPGraph* g = it.key();
-            if (!g || !g->visible())
-                continue;
-            double yPlot = PlotWidget::interpolateY(g, xPlot);
-            if (std::isnan(yPlot))
-                continue;
-            QCPItemTracer *tr = getOrCreateTracer(g);
-            tr->position->setAxes(m_plot->xAxis, g->valueAxis());
-            tr->position->setCoords(xPlot, yPlot);
-            tr->setPen(it.value().defaultPen);
-            tr->setBrush(it.value().defaultPen.color());
-            tr->setVisible(true);
-            m_currentlyTracedSessionIds.insert(it.value().sessionId);
+        if (m_multiTraceEnabled) {
+            double xPlot = m_plot->xAxis->pixelToCoord(pixelPos.x());
+            hideAllTracers(); // We'll re-show them
+            for (auto it = m_graphInfoMap->begin(); it != m_graphInfoMap->end(); ++it) {
+                QCPGraph* g = it.key();
+                if (!g || !g->visible())
+                    continue;
+                double yPlot = PlotWidget::interpolateY(g, xPlot);
+                if (std::isnan(yPlot))
+                    continue;
+                QCPItemTracer *tr = getOrCreateTracer(g);
+                tr->position->setAxes(m_plot->xAxis, g->valueAxis());
+                tr->position->setCoords(xPlot, yPlot);
+                tr->setPen(it.value().defaultPen);
+                tr->setBrush(it.value().defaultPen.color());
+                tr->setVisible(true);
+                m_currentlyTracedSessionIds.insert(it.value().sessionId);
+            }
         }
     }
 

@@ -44,6 +44,9 @@ public:
     //! If you want to override the distance threshold for single-tracer mode
     void setPixelThreshold(double px) { m_pixelThreshold = px; }
 
+    //! Enable or disable the "multi-trace" fallback when not near a specific graph.
+    void setMultiTraceEnabled(bool enabled);
+
     //! Called if your plot was re-drawn or re-laid out,
     //! to keep the crosshair lines in sync if needed
     void updateIfOverPlotArea();
@@ -97,6 +100,9 @@ private:
 
     // We do "single-tracer" if distance < pixelThreshold, else "multi-tracer"
     double m_pixelThreshold = 8.0;
+
+    // If false, the "multi-trace" fallback (when not near a graph) is disabled.
+    bool m_multiTraceEnabled = true;
 
     // Each graph can have its own tracer. We'll create them on demand.
     QMap<QCPGraph*, QCPItemTracer*> m_tracers;
