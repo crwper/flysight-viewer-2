@@ -21,6 +21,7 @@ class SetExitTool;
 class SetGroundTool;
 class PlotViewSettingsModel;
 class PlotModel;
+class MarkerModel;
 class CursorModel;
 
 struct ReferenceMoment
@@ -54,10 +55,11 @@ public:
 
     // Constructor
     PlotWidget(SessionModel *model,
-               PlotModel *plotModel,
-               PlotViewSettingsModel *viewSettingsModel,
-               CursorModel *cursorModel,
-               QWidget *parent = nullptr);
+            PlotModel *plotModel,
+            MarkerModel *markerModel,
+            PlotViewSettingsModel *viewSettingsModel,
+            CursorModel *cursorModel,
+            QWidget *parent = nullptr);
 
     // Public Methods
     void setCurrentTool(Tool tool);
@@ -110,6 +112,7 @@ private:
     QCustomPlot *customPlot;
     SessionModel *model;
     PlotModel *plotModel;
+    MarkerModel *markerModel;
     PlotViewSettingsModel* m_viewSettingsModel;
     CursorModel* m_cursorModel = nullptr;
 
@@ -133,7 +136,7 @@ private:
 
     std::unique_ptr<CrosshairManager> m_crosshairManager;
 
-    QVector<QPointer<QCPAbstractItem>> m_referenceMarkerItems;
+    QVector<QVector<QPointer<QCPAbstractItem>>> m_markerItemsByLane;
 
     QString m_xAxisKey   = SessionKeys::TimeFromExit;
     QString m_xAxisLabel = "Time from exit (s)";

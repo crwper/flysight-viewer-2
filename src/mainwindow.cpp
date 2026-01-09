@@ -77,6 +77,11 @@ MainWindow::MainWindow(QWidget *parent)
     registerBuiltInMarkers();
     PluginHost::instance().initialise(pluginDir);
 
+    // Populate marker model before PlotWidget construction so markers can render immediately
+    if (markerModel) {
+        markerModel->setMarkers(MarkerRegistry::instance().allMarkers());
+    }
+
     // Add logbook view
     auto *logbookDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Logbook"));
     logbookView = new LogbookView(model, this);
@@ -113,7 +118,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Add plot view
     auto *plotDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Plots"));
-    plotWidget = new PlotWidget(model, plotModel, m_plotViewSettingsModel, m_cursorModel, this);
+    plotWidget = new PlotWidget(model, plotModel, markerModel, m_plotViewSettingsModel, m_cursorModel, this);
     plotDock->setWidget(plotWidget);
     addDockWidget(plotDock, KDDockWidgets::Location_OnLeft);
 
