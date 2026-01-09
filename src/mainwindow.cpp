@@ -100,8 +100,9 @@ MainWindow::MainWindow(QWidget *parent)
     legendDock->setWidget(legendWidget);
     addDockWidget(legendDock, KDDockWidgets::Location_OnRight);
 
-    // Initialize the "mouse" cursor entry
+    // Initialize cursor entries
     if (m_cursorModel) {
+        // Mouse
         CursorModel::Cursor mouse;
         mouse.id = QStringLiteral("mouse");
         mouse.label = tr("Mouse");
@@ -115,6 +116,19 @@ MainWindow::MainWindow(QWidget *parent)
         mouse.targetPolicy = CursorModel::TargetPolicy::Explicit;
 
         m_cursorModel->ensureCursor(mouse);
+
+        // Video
+        CursorModel::Cursor video;
+        video.id = QStringLiteral("video");
+        video.label = tr("Video");
+        video.type = CursorModel::CursorType::VideoPlayback;
+        video.active = false;
+        video.positionSpace = CursorModel::PositionSpace::UtcSeconds;
+        video.positionValue = 0.0;
+        video.axisKey.clear(); // unused when positionSpace == UtcSeconds
+        video.targetPolicy = CursorModel::TargetPolicy::AutoVisibleOverlap;
+
+        m_cursorModel->ensureCursor(video);
     }
 
     // Add plot view
