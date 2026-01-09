@@ -37,7 +37,7 @@ set(BOOST_ROOT "C:/Program Files/Boost/boost_1_87_0"
 
 # ─────────────────────────────── Qt
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets PrintSupport QuickWidgets Quick Qml Location Positioning)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets PrintSupport QuickWidgets Quick Qml Location Positioning Multimedia MultimediaWidgets)
 
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
   # Nice-to-have; safe to omit if you prefer older style
@@ -202,6 +202,7 @@ set(PROJECT_SOURCES
   cursormodel.cpp            cursormodel.h
   legendpresenter.cpp        legendpresenter.h
   mapwidget.cpp              mapwidget.h
+  videowidget.cpp            videowidget.h
   trackmapmodel.cpp          trackmapmodel.h
   mapcursordotmodel.cpp      mapcursordotmodel.h
   mapcursorproxy.cpp         mapcursorproxy.h

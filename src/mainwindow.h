@@ -25,6 +25,7 @@ class PlotModel;
 class MarkerModel;
 class CursorModel;
 class MapWidget;
+class VideoWidget;
 
 class MainWindow : public KDDockWidgets::QtWidgets::MainWindow
 {
@@ -52,6 +53,7 @@ signals:
 private slots:
     void on_action_Import_triggered();
     void on_action_ImportFolder_triggered();
+    void on_action_ImportVideo_triggered();
     void on_action_Pan_triggered();
     void on_action_Zoom_triggered();
     void on_action_Select_triggered();
@@ -112,6 +114,10 @@ private:
     // Map dock/widget (Qt Location)
     KDDockWidgets::QtWidgets::DockWidget *mapDock = nullptr;
     MapWidget *mapWidget = nullptr;
+
+    // Video dock/widget
+    KDDockWidgets::QtWidgets::DockWidget *videoDock = nullptr;
+    VideoWidget *videoWidget = nullptr;
 
     // Drives LegendWidget content based on models + CursorModel
     LegendPresenter *m_legendPresenter = nullptr;

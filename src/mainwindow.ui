@@ -44,6 +44,7 @@
     </property>
     <addaction name="action_Import"/>
     <addaction name="action_ImportFolder"/>
+    <addaction name="action_ImportVideo"/>
     <addaction name="separator"/>
     <addaction name="action_Preferences"/>
     <addaction name="separator"/>
@@ -79,6 +80,11 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+Shift+T</string>
+   </property>
+  </action>
+  <action name="action_ImportVideo">
+   <property name="text">
+    <string>Import &amp;Video...</string>
    </property>
   </action>
   <action name="action_Delete">

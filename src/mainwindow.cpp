@@ -26,6 +26,7 @@ template class __declspec(dllimport) std::vector<size_t>;
 #include "legendwidget.h"
 #include "legendpresenter.h"
 #include "mapwidget.h"
+#include "videowidget.h"
 #include "pluginhost.h"
 #include "preferences/preferencesdialog.h"
 #include "preferences/preferencesmanager.h"
@@ -257,6 +258,41 @@ void MainWindow::on_action_ImportFolder_triggered()
 
     // Call the helper function
     importFiles(filesToImport, filesToImport.size() > 5, selectedDir);
+}
+
+void MainWindow::on_action_ImportVideo_triggered()
+{
+    const QString defaultDir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+    const QString startDir = m_settings->value("videoFolder", defaultDir).toString();
+
+    const QString fileName = QFileDialog::getOpenFileName(
+        this,
+        tr("Import Video"),
+        startDir,
+        tr("Video Files (*.mp4 *.mov *.m4v *.avi *.mkv *.webm *.wmv *.mpg *.mpeg);;All Files (*)")
+        );
+
+    if (fileName.isEmpty()) {
+        return;
+    }
+
+    // Update last used folder
+    m_settings->setValue("videoFolder", QFileInfo(fileName).absolutePath());
+
+    // Create or reuse the Video dock
+    if (!videoDock) {
+        videoDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Video"));
+        videoWidget = new VideoWidget(videoDock);
+        videoDock->setWidget(videoWidget);
+        addDockWidget(videoDock, KDDockWidgets::Location_OnBottom);
+    } else if (!videoDock->isVisible()) {
+        videoDock->show();
+    }
+
+    // Load/replace the video in the widget
+    if (videoWidget) {
+        videoWidget->loadVideo(fileName);
+    }
 }
 
 void MainWindow::importFiles(
