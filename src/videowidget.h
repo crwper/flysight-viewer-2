@@ -3,9 +3,19 @@
 
 #include <QWidget>
 #include <QString>
+#include <optional>
+
+#include <QMediaPlayer>
 
 QT_BEGIN_NAMESPACE
+class QVideoWidget;
+class QSlider;
+class QToolButton;
+class QPushButton;
 class QLabel;
+#if QT_VERSION_MAJOR >= 6
+class QAudioOutput;
+#endif
 QT_END_NAMESPACE
 
 namespace FlySight {
@@ -19,9 +29,70 @@ public:
     void loadVideo(const QString &filePath);
     QString videoFilePath() const { return m_filePath; }
 
+signals:
+    // Emitted when the user clicks "Select Time" (sync workflow).
+    // (Wiring to PlotWidget happens in later steps of the spec.)
+    void selectTimeRequested();
+
+private slots:
+    void onPlayPauseClicked();
+    void onStepBackwardClicked();
+    void onStepForwardClicked();
+
+    void onSliderPressed();
+    void onSliderReleased();
+    void onSliderMoved(int value);
+
+    void onDurationChanged(qint64 durationMs);
+    void onPositionChanged(qint64 positionMs);
+
+#if QT_VERSION_MAJOR >= 6
+    void onPlaybackStateChanged(QMediaPlayer::PlaybackState state);
+    void onErrorOccurred(QMediaPlayer::Error error, const QString &errorString);
+#else
+    void onStateChanged(QMediaPlayer::State state);
+    void onErrorOccurred(QMediaPlayer::Error error);
+#endif
+
+    void onGetFrameClicked();
+    void onSelectTimeClicked();
+
 private:
-    QLabel *m_label = nullptr;
+    static QString formatTimeMs(qint64 ms);
+    void updatePlayPauseButton();
+    void updateTimeLabel(qint64 positionMs, qint64 durationMs);
+    void updateSyncLabels();
+    void setControlsEnabled(bool enabled);
+
+private:
+    QMediaPlayer *m_player = nullptr;
+#if QT_VERSION_MAJOR >= 6
+    QAudioOutput *m_audioOutput = nullptr;
+#endif
+    QVideoWidget *m_videoWidget = nullptr;
+
+    QLabel *m_statusLabel = nullptr;
+
+    QToolButton *m_stepBackButton = nullptr;
+    QToolButton *m_playPauseButton = nullptr;
+    QToolButton *m_stepForwardButton = nullptr;
+
+    QSlider *m_positionSlider = nullptr;
+    QLabel *m_timeLabel = nullptr;
+
+    QPushButton *m_getFrameButton = nullptr;
+    QPushButton *m_selectTimeButton = nullptr;
+    QLabel *m_frameAnchorLabel = nullptr;
+    QLabel *m_utcAnchorLabel = nullptr;
+    QLabel *m_syncStatusLabel = nullptr;
+
     QString m_filePath;
+
+    bool m_sliderIsDown = false;
+    bool m_resumeAfterScrub = false;
+
+    std::optional<double> m_anchorVideoSeconds;
+    std::optional<double> m_anchorUtcSeconds;
 };
 
 } // namespace FlySight

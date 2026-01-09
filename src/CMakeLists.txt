@@ -237,6 +237,8 @@ target_link_libraries(FlySightViewer PRIVATE
   Qt${QT_VERSION_MAJOR}::Qml
   Qt${QT_VERSION_MAJOR}::Location
   Qt${QT_VERSION_MAJOR}::Positioning
+  Qt${QT_VERSION_MAJOR}::Multimedia
+  Qt${QT_VERSION_MAJOR}::MultimediaWidgets
 
   pybind11::embed
   Boost::boost
