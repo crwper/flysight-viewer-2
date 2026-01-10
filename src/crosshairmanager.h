@@ -5,6 +5,7 @@
 #include <QPointer>
 #include <QCursor>
 #include <QMap>
+#include <QHash>
 #include <QSet>
 #include <QCustomPlot/qcustomplot.h>
 #include "sessionmodel.h"
@@ -53,6 +54,10 @@ public:
 
     //! Render externally-driven cursor (e.g., map hover) at xPlot for a single session.
     void setExternalCursor(const QString &sessionId, double xPlot);
+
+    //! Render externally-driven cursor (e.g., video playback) at per-session xPlot positions.
+    //! If showVerticalLineIfPossible is true, a vertical line is shown only when all sessions share the same xPlot.
+    void setExternalCursorMulti(const QHash<QString, double> &xBySession, bool showVerticalLineIfPossible);
 
     //! Clear externally-driven cursor visuals (tracers/crosshair) if shown.
     void clearExternalCursor();

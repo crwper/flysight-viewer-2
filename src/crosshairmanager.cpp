@@ -175,6 +175,81 @@ void CrosshairManager::setExternalCursor(const QString &sessionId, double xPlot)
     m_plot->replot(QCustomPlot::rpQueuedReplot);
 }
 
+void CrosshairManager::setExternalCursorMulti(const QHash<QString, double> &xBySession, bool showVerticalLineIfPossible)
+{
+    if (!m_enabled || !m_plot || !m_graphInfoMap)
+        return;
+
+    if (xBySession.isEmpty()) {
+        clearExternalCursor();
+        return;
+    }
+
+    ensureCrosshairCreated();
+    if (m_crosshairH)
+        m_crosshairH->setVisible(false);
+
+    bool showVLine = false;
+    double sharedX = 0.0;
+
+    if (showVerticalLineIfPossible) {
+        auto itX = xBySession.constBegin();
+        sharedX = itX.value();
+        showVLine = true;
+
+        constexpr double kEpsilon = 1e-9;
+        ++itX;
+        for (; itX != xBySession.constEnd(); ++itX) {
+            if (qAbs(itX.value() - sharedX) > kEpsilon) {
+                showVLine = false;
+                break;
+            }
+        }
+    }
+
+    if (m_crosshairV) {
+        if (showVLine) {
+            const double yLower = m_plot->yAxis->range().lower;
+            const double yUpper = m_plot->yAxis->range().upper;
+            m_crosshairV->start->setCoords(sharedX, yLower);
+            m_crosshairV->end->setCoords(sharedX, yUpper);
+            m_crosshairV->setVisible(true);
+        } else {
+            m_crosshairV->setVisible(false);
+        }
+    }
+
+    hideAllTracers();
+    m_currentlyTracedSessionIds.clear();
+
+    for (auto it = m_graphInfoMap->begin(); it != m_graphInfoMap->end(); ++it) {
+        const QString sid = it.value().sessionId;
+        auto xIt = xBySession.constFind(sid);
+        if (xIt == xBySession.constEnd())
+            continue;
+
+        QCPGraph* g = it.key();
+        if (!g || !g->visible())
+            continue;
+
+        const double xPlot = xIt.value();
+        const double yPlot = PlotWidget::interpolateY(g, xPlot);
+        if (std::isnan(yPlot))
+            continue;
+
+        QCPItemTracer *tr = getOrCreateTracer(g);
+        tr->position->setAxes(m_plot->xAxis, g->valueAxis());
+        tr->position->setCoords(xPlot, yPlot);
+        tr->setPen(it.value().defaultPen);
+        tr->setBrush(it.value().defaultPen.color());
+        tr->setVisible(true);
+
+        m_currentlyTracedSessionIds.insert(sid);
+    }
+
+    m_plot->replot(QCustomPlot::rpQueuedReplot);
+}
+
 void CrosshairManager::clearExternalCursor()
 {
     if (!m_plot)

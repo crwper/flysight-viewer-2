@@ -393,39 +393,55 @@ void PlotWidget::onCursorsChanged()
     if (m_mouseInPlotArea)
         return;
 
-    if (!m_cursorModel->hasCursor(QStringLiteral("mouse"))) {
-        m_crosshairManager->clearExternalCursor();
-        return;
-    }
+    // Choose the effective cursor using the same precedence rules as the legend:
+    // 1) usable "mouse" (active + explicit non-empty targets)
+    // 2) first active non-mouse cursor (CursorModel insertion order)
+    // 3) none
+    CursorModel::Cursor effective;
 
-    const CursorModel::Cursor c = m_cursorModel->cursorById(QStringLiteral("mouse"));
+    auto mouseUsable = [](const CursorModel::Cursor &c) -> bool {
+        return c.active &&
+               c.targetPolicy == CursorModel::TargetPolicy::Explicit &&
+               !c.targetSessions.isEmpty();
+    };
 
-    if (!c.active ||
-        c.targetPolicy != CursorModel::TargetPolicy::Explicit ||
-        c.targetSessions.isEmpty()) {
-        m_crosshairManager->clearExternalCursor();
-        return;
-    }
-
-    // Step 5 spec: map hover drives exactly one target session.
-    if (c.targetSessions.size() != 1) {
-        m_crosshairManager->clearExternalCursor();
-        return;
-    }
-
-    const QString sessionId = *c.targetSessions.constBegin();
-
-    const SessionData *sessionPtr = nullptr;
-    for (const auto &s : model->getAllSessions()) {
-        if (s.getAttribute(SessionKeys::SessionId).toString() == sessionId) {
-            sessionPtr = &s;
-            break;
+    if (m_cursorModel->hasCursor(QStringLiteral("mouse"))) {
+        const CursorModel::Cursor mouse = m_cursorModel->cursorById(QStringLiteral("mouse"));
+        if (mouseUsable(mouse)) {
+            effective = mouse;
         }
     }
 
-    if (!sessionPtr) {
+    if (effective.id.isEmpty()) {
+        const int n = m_cursorModel->rowCount();
+        for (int row = 0; row < n; ++row) {
+            const QModelIndex idx = m_cursorModel->index(row, 0);
+            const QString id = m_cursorModel->data(idx, CursorModel::IdRole).toString();
+            if (id.isEmpty() || id == QStringLiteral("mouse"))
+                continue;
+
+            const CursorModel::Cursor c = m_cursorModel->cursorById(id);
+            if (c.active) {
+                effective = c;
+                break;
+            }
+        }
+    }
+
+    if (effective.id.isEmpty() || !effective.active) {
         m_crosshairManager->clearExternalCursor();
         return;
+    }
+
+    const QVector<SessionData> &sessions = model->getAllSessions();
+
+    // Build a fast id → session lookup.
+    QHash<QString, const SessionData *> sessionById;
+    sessionById.reserve(sessions.size());
+    for (const auto &s : sessions) {
+        const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
+        if (!sid.isEmpty())
+            sessionById.insert(sid, &s);
     }
 
     auto tryExitTimeSeconds = [](const SessionData &s, double *outExitUtcSeconds) -> bool {
@@ -444,33 +460,131 @@ void PlotWidget::onCursorsChanged()
         return true;
     };
 
-    double xPlot = 0.0;
-    bool haveXPlot = false;
+    auto xPlotForSession = [&](const CursorModel::Cursor &c,
+                              const SessionData &s,
+                              double *outXPlot) -> bool {
+        if (!outXPlot)
+            return false;
 
-    if (c.positionSpace == CursorModel::PositionSpace::PlotAxisCoord) {
-        if (c.axisKey == m_xAxisKey) {
-            xPlot = c.positionValue;
-            haveXPlot = true;
+        if (c.positionSpace == CursorModel::PositionSpace::PlotAxisCoord) {
+            if (c.axisKey != m_xAxisKey)
+                return false;
+
+            *outXPlot = c.positionValue;
+            return true;
         }
-    } else if (c.positionSpace == CursorModel::PositionSpace::UtcSeconds) {
-        if (m_xAxisKey == SessionKeys::Time) {
-            xPlot = c.positionValue;
-            haveXPlot = true;
-        } else if (m_xAxisKey == SessionKeys::TimeFromExit) {
-            double exitUtc = 0.0;
-            if (tryExitTimeSeconds(*sessionPtr, &exitUtc)) {
-                xPlot = c.positionValue - exitUtc;
-                haveXPlot = true;
+
+        if (c.positionSpace == CursorModel::PositionSpace::UtcSeconds) {
+            if (m_xAxisKey == SessionKeys::Time) {
+                *outXPlot = c.positionValue;
+                return true;
             }
+
+            if (m_xAxisKey == SessionKeys::TimeFromExit) {
+                double exitUtc = 0.0;
+                if (!tryExitTimeSeconds(s, &exitUtc))
+                    return false;
+
+                *outXPlot = c.positionValue - exitUtc;
+                return true;
+            }
+
+            // Fallback: treat UTC seconds as plot x.
+            *outXPlot = c.positionValue;
+            return true;
+        }
+
+        return false;
+    };
+
+    auto sessionOverlapsAtXPlot = [&](const QString &sessionId, double xPlot) -> bool {
+        for (auto it = m_graphInfoMap.cbegin(); it != m_graphInfoMap.cend(); ++it) {
+            if (it.value().sessionId != sessionId)
+                continue;
+
+            QCPGraph *g = it.key();
+            if (!g || !g->visible())
+                continue;
+
+            const double yPlot = PlotWidget::interpolateY(g, xPlot);
+            if (!std::isnan(yPlot))
+                return true;
+        }
+        return false;
+    };
+
+    // Case 1: Map hover (existing behavior): "mouse" + exactly one explicit target session.
+    if (effective.id == QStringLiteral("mouse")) {
+        if (effective.targetPolicy != CursorModel::TargetPolicy::Explicit ||
+            effective.targetSessions.size() != 1) {
+            m_crosshairManager->clearExternalCursor();
+            return;
+        }
+
+        const QString sessionId = *effective.targetSessions.constBegin();
+        const SessionData *sessionPtr = sessionById.value(sessionId, nullptr);
+        if (!sessionPtr) {
+            m_crosshairManager->clearExternalCursor();
+            return;
+        }
+
+        double xPlot = 0.0;
+        if (!xPlotForSession(effective, *sessionPtr, &xPlot)) {
+            m_crosshairManager->clearExternalCursor();
+            return;
+        }
+
+        m_crosshairManager->setExternalCursor(sessionId, xPlot);
+        return;
+    }
+
+    // Case 2: Non-mouse effective cursor (video playback / pinned / etc.): multi-session external cursor.
+    QHash<QString, double> xBySession;
+
+    const bool explicitTargets =
+        (effective.targetPolicy == CursorModel::TargetPolicy::Explicit &&
+         !effective.targetSessions.isEmpty());
+
+    if (explicitTargets) {
+        for (const QString &sid : effective.targetSessions) {
+            const SessionData *s = sessionById.value(sid, nullptr);
+            if (!s || !s->isVisible())
+                continue;
+
+            double xPlot = 0.0;
+            if (!xPlotForSession(effective, *s, &xPlot))
+                continue;
+
+            xBySession.insert(sid, xPlot);
+        }
+    } else {
+        // Auto-visible-overlap: derive from visible sessions that overlap at the cursor time.
+        for (const auto &s : sessions) {
+            if (!s.isVisible())
+                continue;
+
+            const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
+            if (sid.isEmpty())
+                continue;
+
+            double xPlot = 0.0;
+            if (!xPlotForSession(effective, s, &xPlot))
+                continue;
+
+            if (!sessionOverlapsAtXPlot(sid, xPlot))
+                continue;
+
+            xBySession.insert(sid, xPlot);
         }
     }
 
-    if (!haveXPlot) {
+    if (xBySession.isEmpty()) {
         m_crosshairManager->clearExternalCursor();
         return;
     }
 
-    m_crosshairManager->setExternalCursor(sessionId, xPlot);
+    // Show a vertical line only when all sessions share the same xPlot.
+    m_crosshairManager->setExternalCursorMulti(xBySession, true);
 }
 
 // Protected Methods
@@ -490,6 +604,8 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
         switch (event->type()) {
         case QEvent::MouseMove: {
             auto me = static_cast<QMouseEvent*>(event);
+
+            const bool wasInPlotArea = m_mouseInPlotArea;
 
             const bool inPlotArea =
                 customPlot->axisRect()->rect().contains(me->pos());
@@ -529,6 +645,12 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                 );
             }
 
+            // If the mouse just left the plot area, force a re-evaluation of the effective cursor
+            // so external (e.g., video) cursors re-appear immediately even if CursorModel didn't change.
+            if (wasInPlotArea && !inPlotArea) {
+                onCursorsChanged();
+            }
+
             // also forward to the current tool
             return m_currentTool->mouseMoveEvent(me);
         }
@@ -558,6 +680,9 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                     false
                 );
             }
+
+            // Force re-evaluation so external (e.g., video) cursors come back immediately.
+            onCursorsChanged();
 
             m_currentTool->leaveEvent(event);
             return false;
