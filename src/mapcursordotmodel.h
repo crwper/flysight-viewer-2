@@ -16,8 +16,9 @@ class CursorModel;
 /**
  * Exposes cursor-driven dot markers to QML for display on a Qt Location Map.
  *
- * Dots are derived from CursorModel (cursor id "mouse") and sampled from the
- * "Simplified" GNSS track (lat/lon vs SessionKeys::Time) for each targeted session.
+ * Dots are derived from the effective cursor (same precedence rules as the legend)
+ * and sampled from the "Simplified" GNSS track (lat/lon vs SessionKeys::Time) for
+ * each targeted session.
  */
 class MapCursorDotModel : public QAbstractListModel
 {

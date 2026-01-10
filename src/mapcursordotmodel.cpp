@@ -215,6 +215,39 @@ static bool cursorUtcSecondsForSession(const CursorModel::Cursor &c,
     return false;
 }
 
+static CursorModel::Cursor chooseEffectiveCursor(const CursorModel *cursorModel)
+{
+    if (!cursorModel)
+        return CursorModel::Cursor{};
+
+    // 1) Prefer mouse cursor when active and it has usable targets
+    if (cursorModel->hasCursor(QStringLiteral("mouse"))) {
+        const CursorModel::Cursor mouse = cursorModel->cursorById(QStringLiteral("mouse"));
+        if (mouse.active) {
+            if (mouse.targetPolicy == CursorModel::TargetPolicy::Explicit && !mouse.targetSessions.isEmpty()) {
+                return mouse;
+            }
+            // If explicit targets are empty, treat as not usable and fall through.
+        }
+    }
+
+    // 2) Otherwise, first active non-mouse cursor
+    const int n = cursorModel->rowCount();
+    for (int row = 0; row < n; ++row) {
+        const QModelIndex idx = cursorModel->index(row, 0);
+        const QString id = cursorModel->data(idx, CursorModel::IdRole).toString();
+        if (id.isEmpty() || id == QStringLiteral("mouse"))
+            continue;
+
+        const CursorModel::Cursor c = cursorModel->cursorById(id);
+        if (c.active)
+            return c;
+    }
+
+    // 3) None
+    return CursorModel::Cursor{};
+}
+
 MapCursorDotModel::MapCursorDotModel(SessionModel *sessionModel, CursorModel *cursorModel, QObject *parent)
     : QAbstractListModel(parent)
     , m_sessionModel(sessionModel)
@@ -291,19 +324,14 @@ void MapCursorDotModel::rebuild()
         return;
     }
 
-    if (!m_cursorModel->hasCursor(QStringLiteral("mouse"))) {
+    const CursorModel::Cursor c = chooseEffectiveCursor(m_cursorModel);
+    if (c.id.isEmpty() || !c.active) {
         endResetModel();
         return;
     }
 
-    const CursorModel::Cursor c = m_cursorModel->cursorById(QStringLiteral("mouse"));
-
-    if (!c.active ||
-        c.targetPolicy != CursorModel::TargetPolicy::Explicit ||
-        c.targetSessions.isEmpty()) {
-        endResetModel();
-        return;
-    }
+    const bool explicitTargets =
+        (c.targetPolicy == CursorModel::TargetPolicy::Explicit && !c.targetSessions.isEmpty());
 
     const auto &sessions = m_sessionModel->getAllSessions();
 
@@ -317,7 +345,7 @@ void MapCursorDotModel::rebuild()
         if (sessionId.isEmpty())
             continue;
 
-        if (!c.targetSessions.contains(sessionId))
+        if (explicitTargets && !c.targetSessions.contains(sessionId))
             continue;
 
         double utcSeconds = 0.0;
