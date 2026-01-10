@@ -84,7 +84,7 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     // Add logbook view
-    auto *logbookDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Logbook"));
+    logbookDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Logbook"));
     logbookView = new LogbookView(model, this);
     logbookDock->setWidget(logbookView);
     addDockWidget(logbookDock, KDDockWidgets::Location_OnRight);
@@ -132,10 +132,10 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     // Add plot view
-    auto *plotDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Plots"));
+    plotsDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Plots"));
     plotWidget = new PlotWidget(model, plotModel, markerModel, m_plotViewSettingsModel, m_cursorModel, this);
-    plotDock->setWidget(plotWidget);
-    addDockWidget(plotDock, KDDockWidgets::Location_OnLeft);
+    plotsDock->setWidget(plotWidget);
+    addDockWidget(plotsDock, KDDockWidgets::Location_OnLeft);
 
     // Add map view (Qt Location)
     mapDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Map"));
@@ -174,6 +174,24 @@ MainWindow::MainWindow(QWidget *parent)
     // Setup plots and marker selection docks
     setupPlotSelectionDock();
     setupMarkerSelectionDock();
+
+    // Add video view (dock exists even before a video is imported)
+    videoDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Video"));
+    videoWidget = new VideoWidget(m_cursorModel, videoDock);
+    videoDock->setWidget(videoWidget);
+    addDockWidget(videoDock, KDDockWidgets::Location_OnBottom);
+
+    // "Select Time" workflow: put plot into Pick-Time mode, then receive the picked UTC back into the Video dock.
+    if (plotWidget && videoWidget) {
+        connect(videoWidget, &VideoWidget::selectTimeRequested,
+                plotWidget, &PlotWidget::beginPickUtcTime);
+
+        connect(plotWidget, &PlotWidget::utcTimePicked,
+                videoWidget, &VideoWidget::setAnchorUtcSeconds);
+    }
+
+    // Initialize the Window menu (dock visibility)
+    initializeWindowMenu();
 
     // Initialize the Plots menu
     initializeXAxisMenu();
@@ -293,22 +311,8 @@ void MainWindow::on_action_ImportVideo_triggered()
     // Update last used folder
     m_settings->setValue("videoFolder", QFileInfo(fileName).absolutePath());
 
-    // Create or reuse the Video dock
-    if (!videoDock) {
-        videoDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Video"));
-        videoWidget = new VideoWidget(m_cursorModel, videoDock);
-        videoDock->setWidget(videoWidget);
-        addDockWidget(videoDock, KDDockWidgets::Location_OnBottom);
-
-        // "Select Time" workflow: put plot into Pick-Time mode, then receive the picked UTC back into the Video dock.
-        if (plotWidget && videoWidget) {
-            connect(videoWidget, &VideoWidget::selectTimeRequested,
-                    plotWidget, &PlotWidget::beginPickUtcTime);
-
-            connect(plotWidget, &PlotWidget::utcTimePicked,
-                    videoWidget, &VideoWidget::setAnchorUtcSeconds);
-        }
-    } else if (!videoDock->isVisible()) {
+    // Ensure the Video dock is visible when a video is imported.
+    if (videoDock && !videoDock->isVisible()) {
         videoDock->show();
     }
 
@@ -1676,35 +1680,29 @@ void MainWindow::initializePlotsMenu()
         // Add the action to the 'Plots' menu
         plotsMenu->addAction(action);
     }
+}
 
-    // Add a separator before the dock toggle actions
-    plotsMenu->addSeparator();
+void MainWindow::initializeWindowMenu()
+{
+    QMenu *windowMenu = ui->menuWindow;
+    Q_ASSERT(windowMenu);
 
-    // Create the "Show Plot Selection" action
-    QAction *showPlotSelectionAction = plotSelectionDock->toggleAction();
-    showPlotSelectionAction->setText(tr("Show Plot Selection"));
-    plotsMenu->addAction(showPlotSelectionAction);
+    auto addDockAction = [windowMenu](KDDockWidgets::QtWidgets::DockWidget *dock, const QString &text) {
+        if (!dock)
+            return;
 
-    // Create the "Show Legend" action
-    if (legendDock) {
-        QAction *showLegendAction = legendDock->toggleAction();
-        showLegendAction->setText(tr("Show Legend"));
-        plotsMenu->addAction(showLegendAction);
-    }
+        QAction *a = dock->toggleAction();
+        a->setText(text);
+        windowMenu->addAction(a);
+    };
 
-    // Create the "Show Map" action
-    if (mapDock) {
-        QAction *showMapAction = mapDock->toggleAction();
-        showMapAction->setText(tr("Show Map"));
-        plotsMenu->addAction(showMapAction);
-    }
-
-    // Create the "Show Marker Selection" action
-    if (markerDock) {
-        QAction *showMarkerSelectionAction = markerDock->toggleAction();
-        showMarkerSelectionAction->setText(tr("Show Marker Selection"));
-        plotsMenu->addAction(showMarkerSelectionAction);
-    }
+    addDockAction(logbookDock, tr("Logbook"));
+    addDockAction(plotsDock, tr("Plots"));
+    addDockAction(legendDock, tr("Legend"));
+    addDockAction(mapDock, tr("Map"));
+    addDockAction(plotSelectionDock, tr("Plot Selection"));
+    addDockAction(markerDock, tr("Marker Selection"));
+    addDockAction(videoDock, tr("Video"));
 }
 
 void MainWindow::togglePlot(const QString &sensorID, const QString &measurementID)

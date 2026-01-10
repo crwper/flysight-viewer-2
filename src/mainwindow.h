@@ -99,7 +99,9 @@ private:
     KDDockWidgets::QtWidgets::DockWidget *plotSelectionDock;
     QTreeView *plotTreeView;
     PlotModel *plotModel;
+    KDDockWidgets::QtWidgets::DockWidget *logbookDock = nullptr;
     LogbookView *logbookView;
+    KDDockWidgets::QtWidgets::DockWidget *plotsDock = nullptr;
     PlotWidget *plotWidget;
 
     // Marker selection components
@@ -149,9 +151,10 @@ private:
     void initializeCalculatedAttributes();
     void initializeCalculatedMeasurements();
 
-    // Helper methods for plot menu
+    // Helper methods for menus
     void initializeXAxisMenu();
     void initializePlotsMenu();
+    void initializeWindowMenu();
     void togglePlot(const QString &sensorID, const QString &measurementID);
 
     // Helper functions for tracks

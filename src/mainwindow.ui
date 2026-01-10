@@ -61,10 +61,16 @@
     <addaction name="action_SetExit"/>
     <addaction name="action_SetGround"/>
    </widget>
+   <widget class="QMenu" name="menuWindow">
+    <property name="title">
+     <string>&amp;Window</string>
+    </property>
+   </widget>
    <addaction name="menu_File"/>
    <addaction name="menuPlots"/>
    <addaction name="menu_Tools"/>
    <addaction name="menuTrack"/>
+   <addaction name="menuWindow"/>
   </widget>
   <action name="action_Import">
    <property name="text">
