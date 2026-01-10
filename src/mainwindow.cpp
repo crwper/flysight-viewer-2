@@ -296,7 +296,7 @@ void MainWindow::on_action_ImportVideo_triggered()
     // Create or reuse the Video dock
     if (!videoDock) {
         videoDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Video"));
-        videoWidget = new VideoWidget(videoDock);
+        videoWidget = new VideoWidget(m_cursorModel, videoDock);
         videoDock->setWidget(videoWidget);
         addDockWidget(videoDock, KDDockWidgets::Location_OnBottom);
 

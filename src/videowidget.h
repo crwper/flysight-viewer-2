@@ -20,11 +20,13 @@ QT_END_NAMESPACE
 
 namespace FlySight {
 
+class CursorModel;
+
 class VideoWidget : public QWidget
 {
     Q_OBJECT
 public:
-    explicit VideoWidget(QWidget *parent = nullptr);
+    explicit VideoWidget(CursorModel *cursorModel, QWidget *parent = nullptr);
 
     void loadVideo(const QString &filePath);
     QString videoFilePath() const { return m_filePath; }
@@ -67,7 +69,13 @@ private:
     void updateSyncLabels();
     void setControlsEnabled(bool enabled);
 
+    // Drives CursorModel's "video" cursor while the video is synced.
+    void updateVideoCursorSyncState();
+    void updateVideoCursorFromPositionMs(qint64 positionMs);
+
 private:
+    CursorModel *m_cursorModel = nullptr;
+
     QMediaPlayer *m_player = nullptr;
 #if QT_VERSION_MAJOR >= 6
     QAudioOutput *m_audioOutput = nullptr;

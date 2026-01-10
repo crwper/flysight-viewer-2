@@ -1,5 +1,7 @@
 #include "videowidget.h"
 
+#include "cursormodel.h"
+
 #include <QVideoWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -24,8 +26,9 @@ namespace FlySight {
 
 static constexpr qint64 kStepMs = 40;
 
-VideoWidget::VideoWidget(QWidget *parent)
+VideoWidget::VideoWidget(CursorModel *cursorModel, QWidget *parent)
     : QWidget(parent)
+    , m_cursorModel(cursorModel)
     , m_player(new QMediaPlayer(this))
 {
 #if QT_VERSION_MAJOR >= 6
@@ -147,14 +150,15 @@ VideoWidget::VideoWidget(QWidget *parent)
 void VideoWidget::loadVideo(const QString &filePath)
 {
     // Stop any previous playback and clear sync anchor state (v1: single video at a time).
+    m_anchorVideoSeconds.reset();
+    m_anchorUtcSeconds.reset();
+    updateSyncLabels();
+
     if (m_player) {
         m_player->stop();
     }
 
     m_filePath = filePath;
-    m_anchorVideoSeconds.reset();
-    m_anchorUtcSeconds.reset();
-    updateSyncLabels();
 
     if (!m_player || !m_statusLabel) {
         return;
@@ -216,6 +220,8 @@ void VideoWidget::onStepBackwardClicked()
     const qint64 pos = m_player->position();
     const qint64 newPos = qMax<qint64>(0, pos - kStepMs);
     m_player->setPosition(newPos);
+
+    updateVideoCursorFromPositionMs(newPos);
 }
 
 void VideoWidget::onStepForwardClicked()
@@ -232,6 +238,8 @@ void VideoWidget::onStepForwardClicked()
     const qint64 newPos = (dur > 0) ? qMin(dur, unclamped) : unclamped;
 
     m_player->setPosition(newPos);
+
+    updateVideoCursorFromPositionMs(newPos);
 }
 
 void VideoWidget::onSliderPressed()
@@ -263,6 +271,8 @@ void VideoWidget::onSliderReleased()
     const qint64 newPos = static_cast<qint64>(m_positionSlider->value());
     m_player->setPosition(newPos);
 
+    updateVideoCursorFromPositionMs(newPos);
+
     if (m_resumeAfterScrub) {
         m_player->play();
     }
@@ -279,6 +289,8 @@ void VideoWidget::onSliderMoved(int value)
 
     // Keep time label responsive while dragging.
     updateTimeLabel(newPos, m_player->duration());
+
+    updateVideoCursorFromPositionMs(newPos);
 }
 
 void VideoWidget::onDurationChanged(qint64 durationMs)
@@ -312,6 +324,8 @@ void VideoWidget::onPositionChanged(qint64 positionMs)
     }
 
     updateTimeLabel(positionMs, m_player ? m_player->duration() : 0);
+
+    updateVideoCursorFromPositionMs(positionMs);
 }
 
 #if QT_VERSION_MAJOR >= 6
@@ -442,6 +456,8 @@ void VideoWidget::updateSyncLabels()
 
     const bool synced = m_anchorVideoSeconds.has_value() && m_anchorUtcSeconds.has_value();
     m_syncStatusLabel->setText(synced ? tr("Synced") : tr("Not synced"));
+
+    updateVideoCursorSyncState();
 }
 
 void VideoWidget::setControlsEnabled(bool enabled)
@@ -454,6 +470,39 @@ void VideoWidget::setControlsEnabled(bool enabled)
 
     if (m_getFrameButton)    m_getFrameButton->setEnabled(enabled);
     if (m_selectTimeButton)  m_selectTimeButton->setEnabled(enabled);
+}
+
+void VideoWidget::updateVideoCursorSyncState()
+{
+    if (!m_cursorModel)
+        return;
+
+    const bool synced = m_anchorVideoSeconds.has_value() && m_anchorUtcSeconds.has_value();
+    if (!synced) {
+        m_cursorModel->setCursorActive(QStringLiteral("video"), false);
+        return;
+    }
+
+    m_cursorModel->setCursorTargetPolicy(QStringLiteral("video"), CursorModel::TargetPolicy::AutoVisibleOverlap);
+    m_cursorModel->setCursorActive(QStringLiteral("video"), true);
+
+    if (m_player) {
+        updateVideoCursorFromPositionMs(m_player->position());
+    }
+}
+
+void VideoWidget::updateVideoCursorFromPositionMs(qint64 positionMs)
+{
+    if (!m_cursorModel)
+        return;
+
+    if (!m_anchorVideoSeconds.has_value() || !m_anchorUtcSeconds.has_value())
+        return;
+
+    const double videoNowSeconds = static_cast<double>(positionMs) / 1000.0;
+    const double utcNow = (*m_anchorUtcSeconds) + (videoNowSeconds - (*m_anchorVideoSeconds));
+
+    m_cursorModel->setCursorPositionUtc(QStringLiteral("video"), utcNow);
 }
 
 } // namespace FlySight
