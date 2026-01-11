@@ -8,6 +8,8 @@
 #include <QDirIterator>
 #include <QMouseEvent>
 #include <QStandardPaths>
+#include <QCloseEvent>
+#include <kddockwidgets/LayoutSaver.h>
 #include <vector>
 
 // --- FIX FOR GTSAM LINKING ERROR ---
@@ -190,6 +192,9 @@ MainWindow::MainWindow(QWidget *parent)
                 videoWidget, &VideoWidget::setAnchorUtcSeconds);
     }
 
+    // Restore the previous dock layout (includes visibility/open/closed state).
+    restoreDockLayout();
+
     // Initialize the Window menu (dock visibility)
     initializeWindowMenu();
 
@@ -210,6 +215,41 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    saveDockLayout();
+    KDDockWidgets::QtWidgets::MainWindow::closeEvent(event);
+}
+
+void MainWindow::restoreDockLayout()
+{
+    if (!m_settings)
+        return;
+
+    const QByteArray layout = m_settings->value(QStringLiteral("ui/dockLayout")).toByteArray();
+    if (layout.isEmpty())
+        return;
+
+    KDDockWidgets::LayoutSaver saver;
+    if (!saver.restoreLayout(layout)) {
+        qWarning() << "MainWindow::restoreDockLayout: Failed to restore dock layout, using defaults.";
+        m_settings->remove(QStringLiteral("ui/dockLayout"));
+    }
+}
+
+void MainWindow::saveDockLayout()
+{
+    if (!m_settings)
+        return;
+
+    KDDockWidgets::LayoutSaver saver;
+    const QByteArray layout = saver.serializeLayout();
+    if (layout.isEmpty())
+        return;
+
+    m_settings->setValue(QStringLiteral("ui/dockLayout"), layout);
 }
 
 void MainWindow::on_action_Import_triggered()

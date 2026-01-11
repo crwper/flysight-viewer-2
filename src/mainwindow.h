@@ -11,6 +11,7 @@
 #include "plotregistry.h"
 
 QT_BEGIN_NAMESPACE
+class QCloseEvent;
 namespace Ui {
 class MainWindow;
 }
@@ -49,6 +50,9 @@ signals:
     void plotValueSelected(const QModelIndex &selectedIndex);
     void newTimeRange(double min, double max);
     void xAxisKeyChanged(const QString &newKey, const QString &newLabel);
+
+protected:
+    void closeEvent(QCloseEvent *event) override;
 
 private slots:
     void on_action_Import_triggered();
@@ -162,6 +166,10 @@ private:
 
     // Plot tools
     void setupPlotTools();
+
+    // Save/restore dock layout between app launches
+    void restoreDockLayout();
+    void saveDockLayout();
 
     // Accessors for persisting the current x-axis measurement key
     void setXAxisKey(const QString &key, const QString &label);
