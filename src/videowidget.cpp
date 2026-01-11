@@ -1,6 +1,7 @@
 #include "videowidget.h"
 
 #include "cursormodel.h"
+#include "sessionmodel.h"
 
 #include <QVideoWidget>
 #include <QVBoxLayout>
@@ -9,6 +10,7 @@
 #include <QToolButton>
 #include <QPushButton>
 #include <QLabel>
+#include <QComboBox>
 #include <QStyle>
 #include <QSignalBlocker>
 #include <QUrl>
@@ -26,8 +28,11 @@ namespace FlySight {
 
 static constexpr qint64 kStepMs = 40;
 
-VideoWidget::VideoWidget(CursorModel *cursorModel, QWidget *parent)
+VideoWidget::VideoWidget(SessionModel *sessionModel,
+                         CursorModel *cursorModel,
+                         QWidget *parent)
     : QWidget(parent)
+    , m_sessionModel(sessionModel)
     , m_cursorModel(cursorModel)
     , m_player(new QMediaPlayer(this))
 {
@@ -81,28 +86,54 @@ VideoWidget::VideoWidget(CursorModel *cursorModel, QWidget *parent)
     m_positionSlider->setRange(0, 0);
     layout->addWidget(m_positionSlider);
 
-    auto *syncRow = new QHBoxLayout();
-    syncRow->setContentsMargins(0, 0, 0, 0);
-    syncRow->setSpacing(6);
+    // Sync controls (selector + Mark Exit + legacy tools)
+    auto *syncLayout = new QVBoxLayout();
+    syncLayout->setContentsMargins(0, 0, 0, 0);
+    syncLayout->setSpacing(4);
+
+    auto *syncTopRow = new QHBoxLayout();
+    syncTopRow->setContentsMargins(0, 0, 0, 0);
+    syncTopRow->setSpacing(6);
+
+    m_sessionLabel = new QLabel(tr("Sync session:"), this);
+    syncTopRow->addWidget(m_sessionLabel);
+
+    m_sessionCombo = new QComboBox(this);
+    m_sessionCombo->setToolTip(tr("Select which visible session to use for Mark Exit sync."));
+    syncTopRow->addWidget(m_sessionCombo, 1);
+
+    m_markExitButton = new QPushButton(tr("Mark Exit"), this);
+    m_markExitButton->setToolTip(tr("Sync the current video frame to the selected session's Exit Time."));
+    syncTopRow->addWidget(m_markExitButton);
 
     m_getFrameButton = new QPushButton(tr("Get Frame"), this);
-    syncRow->addWidget(m_getFrameButton);
+    syncTopRow->addWidget(m_getFrameButton);
 
     m_selectTimeButton = new QPushButton(tr("Select Time"), this);
-    syncRow->addWidget(m_selectTimeButton);
+    syncTopRow->addWidget(m_selectTimeButton);
+
+    syncTopRow->addStretch(1);
+
+    syncLayout->addLayout(syncTopRow);
+
+    auto *syncBottomRow = new QHBoxLayout();
+    syncBottomRow->setContentsMargins(0, 0, 0, 0);
+    syncBottomRow->setSpacing(6);
 
     m_frameAnchorLabel = new QLabel(this);
-    syncRow->addWidget(m_frameAnchorLabel);
+    syncBottomRow->addWidget(m_frameAnchorLabel);
 
     m_utcAnchorLabel = new QLabel(this);
-    syncRow->addWidget(m_utcAnchorLabel);
+    syncBottomRow->addWidget(m_utcAnchorLabel);
 
     m_syncStatusLabel = new QLabel(this);
-    syncRow->addWidget(m_syncStatusLabel);
+    syncBottomRow->addWidget(m_syncStatusLabel);
 
-    syncRow->addStretch(1);
+    syncBottomRow->addStretch(1);
 
-    layout->addLayout(syncRow);
+    syncLayout->addLayout(syncBottomRow);
+
+    layout->addLayout(syncLayout);
 
     // Player -> UI
     connect(m_player, &QMediaPlayer::durationChanged,
@@ -142,6 +173,21 @@ VideoWidget::VideoWidget(CursorModel *cursorModel, QWidget *parent)
     connect(m_selectTimeButton, &QPushButton::clicked,
             this, &VideoWidget::onSelectTimeClicked);
 
+    connect(m_markExitButton, &QPushButton::clicked,
+            this, &VideoWidget::onMarkExitClicked);
+
+    if (m_sessionCombo) {
+        connect(m_sessionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                this, &VideoWidget::onSelectedSessionChanged);
+    }
+
+    if (m_sessionModel) {
+        connect(m_sessionModel, &SessionModel::modelChanged,
+                this, &VideoWidget::rebuildSessionSelector);
+    }
+
+    rebuildSessionSelector();
+
     setControlsEnabled(false);
     updatePlayPauseButton();
     updateSyncLabels();
@@ -177,6 +223,7 @@ void VideoWidget::loadVideo(const QString &filePath)
         onDurationChanged(0);
         onPositionChanged(0);
         updatePlayPauseButton();
+        updateMarkExitEnabled();
         return;
     }
 
@@ -190,6 +237,7 @@ void VideoWidget::loadVideo(const QString &filePath)
 
     setControlsEnabled(true);
     updatePlayPauseButton();
+    updateMarkExitEnabled();
 }
 
 void VideoWidget::onPlayPauseClicked()
@@ -384,6 +432,132 @@ void VideoWidget::setAnchorUtcSeconds(double utcSeconds)
     updateSyncLabels();
 }
 
+void VideoWidget::onMarkExitClicked()
+{
+    if (!m_player || !m_sessionModel)
+        return;
+
+    if (m_filePath.isEmpty())
+        return;
+
+    const QString sessionId = selectedSessionId();
+    if (sessionId.isEmpty())
+        return;
+
+    const int row = m_sessionModel->getSessionRow(sessionId);
+    if (row < 0)
+        return;
+
+    SessionData &session = m_sessionModel->sessionRef(row);
+
+    const QVariant exitVar = session.getAttribute(SessionKeys::ExitTime);
+    if (!exitVar.canConvert<QDateTime>()) {
+        if (m_statusLabel) {
+            m_statusLabel->setText(tr("Video: %1\nCannot mark exit: selected session has no Exit Time.")
+                                   .arg(QDir::toNativeSeparators(m_filePath)));
+        }
+        return;
+    }
+
+    const QDateTime exitDt = exitVar.toDateTime();
+    if (!exitDt.isValid()) {
+        if (m_statusLabel) {
+            m_statusLabel->setText(tr("Video: %1\nCannot mark exit: selected session Exit Time is invalid.")
+                                   .arg(QDir::toNativeSeparators(m_filePath)));
+        }
+        return;
+    }
+
+    const double exitUtcSeconds = exitDt.toMSecsSinceEpoch() / 1000.0;
+
+    const qint64 posMs = m_player->position();
+    m_anchorVideoSeconds = static_cast<double>(posMs) / 1000.0;
+    m_anchorUtcSeconds = exitUtcSeconds;
+
+    updateSyncLabels();
+}
+
+void VideoWidget::onSelectedSessionChanged(int index)
+{
+    Q_UNUSED(index);
+    updateMarkExitEnabled();
+    updateVideoCursorSyncState();
+}
+
+void VideoWidget::rebuildSessionSelector()
+{
+    if (!m_sessionCombo)
+        return;
+
+    const QString prevId = selectedSessionId();
+
+    const QSignalBlocker blocker(m_sessionCombo);
+    m_sessionCombo->clear();
+
+    if (!m_sessionModel) {
+        m_sessionCombo->addItem(tr("No sessions"), QString());
+        m_sessionCombo->setEnabled(false);
+        updateMarkExitEnabled();
+        updateVideoCursorSyncState();
+        return;
+    }
+
+    int selectIndex = -1;
+    int visibleCount = 0;
+
+    const QVector<SessionData> &sessions = m_sessionModel->getAllSessions();
+    for (const SessionData &s : sessions) {
+        if (!s.isVisible())
+            continue;
+
+        const QString id = s.getAttribute(SessionKeys::SessionId).toString();
+        if (id.isEmpty())
+            continue;
+
+        QString label = s.getAttribute(SessionKeys::Description).toString();
+        if (label.isEmpty())
+            label = id;
+
+        m_sessionCombo->addItem(label, id);
+
+        if (!prevId.isEmpty() && id == prevId)
+            selectIndex = visibleCount;
+
+        ++visibleCount;
+    }
+
+    if (m_sessionCombo->count() == 0) {
+        m_sessionCombo->addItem(tr("No visible sessions"), QString());
+        m_sessionCombo->setEnabled(false);
+    } else {
+        m_sessionCombo->setEnabled(true);
+        m_sessionCombo->setCurrentIndex(selectIndex >= 0 ? selectIndex : 0);
+    }
+
+    updateMarkExitEnabled();
+    updateVideoCursorSyncState();
+}
+
+QString VideoWidget::selectedSessionId() const
+{
+    if (!m_sessionCombo)
+        return QString();
+
+    return m_sessionCombo->currentData().toString();
+}
+
+void VideoWidget::updateMarkExitEnabled()
+{
+    if (!m_markExitButton)
+        return;
+
+    const bool videoLoaded = !m_filePath.isEmpty();
+    const bool playbackEnabled = (m_getFrameButton && m_getFrameButton->isEnabled());
+    const bool hasSession = !selectedSessionId().isEmpty();
+
+    m_markExitButton->setEnabled(videoLoaded && playbackEnabled && hasSession);
+}
+
 QString VideoWidget::formatTimeMs(qint64 ms)
 {
     if (ms < 0)
@@ -470,6 +644,8 @@ void VideoWidget::setControlsEnabled(bool enabled)
 
     if (m_getFrameButton)    m_getFrameButton->setEnabled(enabled);
     if (m_selectTimeButton)  m_selectTimeButton->setEnabled(enabled);
+
+    updateMarkExitEnabled();
 }
 
 void VideoWidget::updateVideoCursorSyncState()
@@ -483,7 +659,15 @@ void VideoWidget::updateVideoCursorSyncState()
         return;
     }
 
-    m_cursorModel->setCursorTargetPolicy(QStringLiteral("video"), CursorModel::TargetPolicy::AutoVisibleOverlap);
+    const QString sessionId = selectedSessionId();
+    if (!sessionId.isEmpty()) {
+        QSet<QString> targets;
+        targets.insert(sessionId);
+        m_cursorModel->setCursorTargetsExplicit(QStringLiteral("video"), targets);
+    } else {
+        m_cursorModel->setCursorTargetPolicy(QStringLiteral("video"), CursorModel::TargetPolicy::AutoVisibleOverlap);
+    }
+
     m_cursorModel->setCursorActive(QStringLiteral("video"), true);
 
     if (m_player) {

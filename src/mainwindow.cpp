@@ -179,7 +179,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Add video view (dock exists even before a video is imported)
     videoDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Video"));
-    videoWidget = new VideoWidget(m_cursorModel, videoDock);
+    videoWidget = new VideoWidget(model, m_cursorModel, videoDock);
     videoDock->setWidget(videoWidget);
     addDockWidget(videoDock, KDDockWidgets::Location_OnBottom);
 

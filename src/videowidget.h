@@ -13,6 +13,7 @@ class QSlider;
 class QToolButton;
 class QPushButton;
 class QLabel;
+class QComboBox;
 #if QT_VERSION_MAJOR >= 6
 class QAudioOutput;
 #endif
@@ -21,12 +22,15 @@ QT_END_NAMESPACE
 namespace FlySight {
 
 class CursorModel;
+class SessionModel;
 
 class VideoWidget : public QWidget
 {
     Q_OBJECT
 public:
-    explicit VideoWidget(CursorModel *cursorModel, QWidget *parent = nullptr);
+    explicit VideoWidget(SessionModel *sessionModel,
+                         CursorModel *cursorModel,
+                         QWidget *parent = nullptr);
 
     void loadVideo(const QString &filePath);
     QString videoFilePath() const { return m_filePath; }
@@ -62,6 +66,10 @@ private slots:
     void onGetFrameClicked();
     void onSelectTimeClicked();
 
+    void onMarkExitClicked();
+    void onSelectedSessionChanged(int index);
+    void rebuildSessionSelector();
+
 private:
     static QString formatTimeMs(qint64 ms);
     void updatePlayPauseButton();
@@ -69,11 +77,15 @@ private:
     void updateSyncLabels();
     void setControlsEnabled(bool enabled);
 
+    QString selectedSessionId() const;
+    void updateMarkExitEnabled();
+
     // Drives CursorModel's "video" cursor while the video is synced.
     void updateVideoCursorSyncState();
     void updateVideoCursorFromPositionMs(qint64 positionMs);
 
 private:
+    SessionModel *m_sessionModel = nullptr;
     CursorModel *m_cursorModel = nullptr;
 
     QMediaPlayer *m_player = nullptr;
@@ -91,8 +103,13 @@ private:
     QSlider *m_positionSlider = nullptr;
     QLabel *m_timeLabel = nullptr;
 
+    QLabel *m_sessionLabel = nullptr;
+    QComboBox *m_sessionCombo = nullptr;
+
+    QPushButton *m_markExitButton = nullptr;
     QPushButton *m_getFrameButton = nullptr;
     QPushButton *m_selectTimeButton = nullptr;
+
     QLabel *m_frameAnchorLabel = nullptr;
     QLabel *m_utcAnchorLabel = nullptr;
     QLabel *m_syncStatusLabel = nullptr;
