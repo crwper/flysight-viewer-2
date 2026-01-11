@@ -92,6 +92,9 @@
    <property name="text">
     <string>Import &amp;Video...</string>
    </property>
+   <property name="shortcut">
+    <string>Ctrl+D</string>
+   </property>
   </action>
   <action name="action_Delete">
    <property name="text">
