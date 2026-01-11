@@ -106,12 +106,6 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
     m_markExitButton->setToolTip(tr("Sync the current video frame to the selected session's Exit Time."));
     syncTopRow->addWidget(m_markExitButton);
 
-    m_getFrameButton = new QPushButton(tr("Get Frame"), this);
-    syncTopRow->addWidget(m_getFrameButton);
-
-    m_selectTimeButton = new QPushButton(tr("Select Time"), this);
-    syncTopRow->addWidget(m_selectTimeButton);
-
     syncTopRow->addStretch(1);
 
     syncLayout->addLayout(syncTopRow);
@@ -167,11 +161,6 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
             this, &VideoWidget::onSliderReleased);
     connect(m_positionSlider, &QSlider::sliderMoved,
             this, &VideoWidget::onSliderMoved);
-
-    connect(m_getFrameButton, &QPushButton::clicked,
-            this, &VideoWidget::onGetFrameClicked);
-    connect(m_selectTimeButton, &QPushButton::clicked,
-            this, &VideoWidget::onSelectTimeClicked);
 
     connect(m_markExitButton, &QPushButton::clicked,
             this, &VideoWidget::onMarkExitClicked);
@@ -410,28 +399,6 @@ void VideoWidget::onErrorOccurred(QMediaPlayer::Error error)
 }
 #endif
 
-void VideoWidget::onGetFrameClicked()
-{
-    if (!m_player)
-        return;
-
-    const qint64 posMs = m_player->position();
-    m_anchorVideoSeconds = static_cast<double>(posMs) / 1000.0;
-    updateSyncLabels();
-}
-
-void VideoWidget::onSelectTimeClicked()
-{
-    // Ask the main window to put the plot into Pick-Time mode.
-    emit selectTimeRequested();
-}
-
-void VideoWidget::setAnchorUtcSeconds(double utcSeconds)
-{
-    m_anchorUtcSeconds = utcSeconds;
-    updateSyncLabels();
-}
-
 void VideoWidget::onMarkExitClicked()
 {
     if (!m_player || !m_sessionModel)
@@ -552,7 +519,7 @@ void VideoWidget::updateMarkExitEnabled()
         return;
 
     const bool videoLoaded = !m_filePath.isEmpty();
-    const bool playbackEnabled = (m_getFrameButton && m_getFrameButton->isEnabled());
+    const bool playbackEnabled = (m_positionSlider && m_positionSlider->isEnabled());
     const bool hasSession = !selectedSessionId().isEmpty();
 
     m_markExitButton->setEnabled(videoLoaded && playbackEnabled && hasSession);
@@ -641,9 +608,6 @@ void VideoWidget::setControlsEnabled(bool enabled)
     if (m_stepForwardButton) m_stepForwardButton->setEnabled(enabled);
 
     if (m_positionSlider)    m_positionSlider->setEnabled(enabled);
-
-    if (m_getFrameButton)    m_getFrameButton->setEnabled(enabled);
-    if (m_selectTimeButton)  m_selectTimeButton->setEnabled(enabled);
 
     updateMarkExitEnabled();
 }

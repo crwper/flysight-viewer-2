@@ -35,14 +35,6 @@ public:
     void loadVideo(const QString &filePath);
     QString videoFilePath() const { return m_filePath; }
 
-signals:
-    // Emitted when the user clicks "Select Time" (sync workflow).
-    void selectTimeRequested();
-
-public slots:
-    // Receives the picked UTC seconds from the plot ("Select Time" workflow).
-    void setAnchorUtcSeconds(double utcSeconds);
-
 private slots:
     void onPlayPauseClicked();
     void onStepBackwardClicked();
@@ -62,9 +54,6 @@ private slots:
     void onStateChanged(QMediaPlayer::State state);
     void onErrorOccurred(QMediaPlayer::Error error);
 #endif
-
-    void onGetFrameClicked();
-    void onSelectTimeClicked();
 
     void onMarkExitClicked();
     void onSelectedSessionChanged(int index);
@@ -107,8 +96,6 @@ private:
     QComboBox *m_sessionCombo = nullptr;
 
     QPushButton *m_markExitButton = nullptr;
-    QPushButton *m_getFrameButton = nullptr;
-    QPushButton *m_selectTimeButton = nullptr;
 
     QLabel *m_frameAnchorLabel = nullptr;
     QLabel *m_utcAnchorLabel = nullptr;

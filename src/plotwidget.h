@@ -20,7 +20,6 @@ class ZoomTool;
 class SelectTool;
 class SetExitTool;
 class SetGroundTool;
-class PickTimeTool;
 class PlotViewSettingsModel;
 class PlotModel;
 class MarkerModel;
@@ -45,8 +44,7 @@ public:
         Zoom,
         Select,
         SetExit,
-        SetGround,
-        PickTime
+        SetGround
     };
 
     struct PlotContext {
@@ -73,7 +71,6 @@ public:
     // Public Methods
     void setCurrentTool(Tool tool);
     void revertToPrimaryTool();
-    void beginPickUtcTime();
     void setXAxisRange(double min, double max);
     void handleSessionsSelected(const QList<QString> &sessionIds);
     CrosshairManager* crosshairManager() const;
@@ -102,9 +99,6 @@ public:
 signals:
     void sessionsSelected(const QList<QString> &sessionIds);
     void toolChanged(PlotWidget::Tool newTool);
-
-    // Step 5: emitted by Pick-Time mode (pick logic added in later steps)
-    void utcTimePicked(double utcSeconds);
 
 public slots:
     void updatePlot();
@@ -156,7 +150,6 @@ private:
     std::unique_ptr<SelectTool> m_selectTool;
     std::unique_ptr<SetExitTool> m_setExitTool;
     std::unique_ptr<SetGroundTool> m_setGroundTool;
-    std::unique_ptr<PickTimeTool> m_pickTimeTool;
 
     // Plot Management
     QMap<QCPGraph*, GraphInfo> m_graphInfoMap;

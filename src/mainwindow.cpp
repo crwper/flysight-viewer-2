@@ -183,15 +183,6 @@ MainWindow::MainWindow(QWidget *parent)
     videoDock->setWidget(videoWidget);
     addDockWidget(videoDock, KDDockWidgets::Location_OnBottom);
 
-    // "Select Time" workflow: put plot into Pick-Time mode, then receive the picked UTC back into the Video dock.
-    if (plotWidget && videoWidget) {
-        connect(videoWidget, &VideoWidget::selectTimeRequested,
-                plotWidget, &PlotWidget::beginPickUtcTime);
-
-        connect(plotWidget, &PlotWidget::utcTimePicked,
-                videoWidget, &VideoWidget::setAnchorUtcSeconds);
-    }
-
     // Restore the previous dock layout (includes visibility/open/closed state).
     restoreDockLayout();
 
@@ -670,10 +661,6 @@ void MainWindow::onPlotWidgetToolChanged(PlotWidget::Tool t)
         break;
     case PlotWidget::Tool::SetGround:
         ui->action_SetGround->setChecked(true);
-        break;
-    case PlotWidget::Tool::PickTime:
-        // PickTime is a momentary tool invoked by other UI (e.g. the Video dock).
-        // Keep the previous primary tool action checked.
         break;
     }
 }
