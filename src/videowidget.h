@@ -5,6 +5,7 @@
 #include <QString>
 #include <optional>
 
+#include <QElapsedTimer>
 #include <QMediaPlayer>
 
 QT_BEGIN_NAMESPACE
@@ -34,6 +35,9 @@ public:
 
     void loadVideo(const QString &filePath);
     QString videoFilePath() const { return m_filePath; }
+
+protected:
+    void wheelEvent(QWheelEvent *event) override;
 
 private slots:
     void onPlayPauseClicked();
@@ -108,6 +112,10 @@ private:
 
     std::optional<double> m_anchorVideoSeconds;
     std::optional<double> m_anchorUtcSeconds;
+
+    // Wheel scrubbing state
+    QElapsedTimer m_wheelTimer;
+    bool m_wheelTimerStarted = false;
 };
 
 } // namespace FlySight

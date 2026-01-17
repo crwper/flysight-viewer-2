@@ -16,6 +16,7 @@
 #include <QUrl>
 #include <QDir>
 #include <QDateTime>
+#include <QWheelEvent>
 
 #if QT_VERSION_MAJOR >= 6
 #include <QAudioOutput>
@@ -27,6 +28,15 @@
 namespace FlySight {
 
 static constexpr qint64 kStepMs = 40;
+
+// Wheel scrubbing configuration
+static constexpr qint64 kWheelBaseStepMs = 40;       // Base step (one frame at ~25fps)
+static constexpr qint64 kWheelMinStepMs = 40;        // Minimum step (single frame)
+static constexpr qint64 kWheelMaxStepMs = 5000;      // Maximum step (5 seconds)
+static constexpr qint64 kWheelFastThresholdMs = 50;  // Time threshold for fast scrolling
+static constexpr qint64 kWheelSlowThresholdMs = 200; // Time threshold for slow scrolling
+static constexpr double kWheelMaxMultiplier = 50.0;  // Max acceleration multiplier
+static constexpr int kWheelDeltaPerStep = 120;       // Standard wheel delta per notch
 
 VideoWidget::VideoWidget(SessionModel *sessionModel,
                          CursorModel *cursorModel,
@@ -651,6 +661,72 @@ void VideoWidget::updateVideoCursorFromPositionMs(qint64 positionMs)
     const double utcNow = (*m_anchorUtcSeconds) + (videoNowSeconds - (*m_anchorVideoSeconds));
 
     m_cursorModel->setCursorPositionUtc(QStringLiteral("video"), utcNow);
+}
+
+void VideoWidget::wheelEvent(QWheelEvent *event)
+{
+    if (!m_player || m_filePath.isEmpty()) {
+        QWidget::wheelEvent(event);
+        return;
+    }
+
+    // Get wheel delta (positive = scroll up/away = forward, negative = scroll down/toward = backward)
+    const int delta = event->angleDelta().y();
+
+    if (delta == 0) {
+        event->ignore();
+        return;
+    }
+
+    event->accept();
+
+    // Calculate velocity-based acceleration
+    double accelerationMultiplier = 1.0;
+
+    if (m_wheelTimerStarted) {
+        const qint64 elapsedMs = m_wheelTimer.elapsed();
+
+        if (elapsedMs < kWheelFastThresholdMs) {
+            // Fast scrolling: apply strong acceleration with quadratic ramp
+            const double t = 1.0 - (static_cast<double>(elapsedMs) / kWheelFastThresholdMs);
+            accelerationMultiplier = 1.0 + (kWheelMaxMultiplier - 1.0) * t * t;
+        } else if (elapsedMs < kWheelSlowThresholdMs) {
+            // Medium scrolling: mild acceleration with linear ramp
+            const double t = 1.0 - (static_cast<double>(elapsedMs - kWheelFastThresholdMs)
+                                    / (kWheelSlowThresholdMs - kWheelFastThresholdMs));
+            accelerationMultiplier = 1.0 + t * 2.0;
+        }
+        // else: slow scrolling, keep multiplier at 1.0
+    }
+
+    m_wheelTimer.restart();
+    m_wheelTimerStarted = true;
+
+    // Calculate step based on delta magnitude and acceleration
+    // Standard wheel notch is 120 units; high-resolution wheels may send smaller values
+    const double notches = static_cast<double>(delta) / kWheelDeltaPerStep;
+    const double rawStepMs = kWheelBaseStepMs * accelerationMultiplier * qAbs(notches);
+
+    // Clamp to reasonable bounds
+    const qint64 stepMs = qBound(kWheelMinStepMs,
+                                  static_cast<qint64>(rawStepMs),
+                                  kWheelMaxStepMs);
+
+    // Apply direction
+    const qint64 signedStep = (delta > 0) ? stepMs : -stepMs;
+
+    // Calculate and clamp new position
+    const qint64 currentPos = m_player->position();
+    const qint64 duration = m_player->duration();
+    const qint64 newPos = qBound(static_cast<qint64>(0),
+                                  currentPos + signedStep,
+                                  duration > 0 ? duration : currentPos);
+
+    // Apply the position change
+    m_player->setPosition(newPos);
+
+    // Update cursor to sync with plots
+    updateVideoCursorFromPositionMs(newPos);
 }
 
 } // namespace FlySight
