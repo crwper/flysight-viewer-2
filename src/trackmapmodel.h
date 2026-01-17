@@ -11,6 +11,8 @@
 namespace FlySight {
 
 class SessionModel;
+class PlotRangeModel;
+class SessionData;
 
 /**
  * Exposes visible session GNSS tracks to QML for display on a Qt Location Map.
@@ -36,7 +38,9 @@ public:
         TrackColorRole
     };
 
-    explicit TrackMapModel(SessionModel *sessionModel, QObject *parent = nullptr);
+    explicit TrackMapModel(SessionModel *sessionModel,
+                           PlotRangeModel *rangeModel = nullptr,
+                           QObject *parent = nullptr);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
@@ -64,7 +68,11 @@ private:
     };
 
     SessionModel *m_sessionModel = nullptr;
+    PlotRangeModel *m_rangeModel = nullptr;
     QVector<Track> m_tracks;
+
+    bool computeSessionUtcRange(const SessionData &session,
+                                double *outLower, double *outUpper) const;
 
     bool m_hasData = false;
     QGeoCoordinate m_center;

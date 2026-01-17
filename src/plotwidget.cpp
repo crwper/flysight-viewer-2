@@ -3,6 +3,7 @@
 #include "markermodel.h"
 #include "plotviewsettingsmodel.h"
 #include "cursormodel.h"
+#include "plotrangemodel.h"
 
 #include <QVBoxLayout>
 #include <QMouseEvent>
@@ -26,6 +27,7 @@ PlotWidget::PlotWidget(SessionModel *model,
                        MarkerModel *markerModel,
                        PlotViewSettingsModel *viewSettingsModel,
                        CursorModel *cursorModel,
+                       PlotRangeModel *rangeModel,
                        QWidget *parent)
     : QWidget(parent)
     , customPlot(new QCustomPlot(this))
@@ -34,6 +36,7 @@ PlotWidget::PlotWidget(SessionModel *model,
     , markerModel(markerModel)
     , m_viewSettingsModel(viewSettingsModel)
     , m_cursorModel(cursorModel)
+    , m_rangeModel(rangeModel)
     , m_xAxisKey(SessionKeys::TimeFromExit)
     , m_xAxisLabel(tr("Time from exit (s)"))
 {
@@ -338,6 +341,11 @@ void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
 
     if (m_xAxisKey == SessionKeys::Time)
         updateXAxisTicker();      // update format when span changes
+
+    // Broadcast range to interested listeners (e.g., map)
+    if (m_rangeModel) {
+        m_rangeModel->setRange(m_xAxisKey, newRange.lower, newRange.upper);
+    }
 
     m_updatingYAxis = false;
 }
@@ -1151,6 +1159,11 @@ void PlotWidget::applyXAxisChange(const QString& key, const QString& label)
     customPlot->replot();
 
     updateXAxisTicker();
+
+    // Broadcast range with new axis key
+    if (m_rangeModel) {
+        m_rangeModel->setRange(m_xAxisKey, newRange.lower, newRange.upper);
+    }
 
     // If an external source (e.g., map hover) is driving the cursor, re-apply it under the new axis mode.
     onCursorsChanged();

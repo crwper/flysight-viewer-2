@@ -10,6 +10,7 @@ class TrackMapModel;
 class MapCursorDotModel;
 class MapCursorProxy;
 class CursorModel;
+class PlotRangeModel;
 
 /**
  * QWidget wrapper around a QML Map (Qt Location) that overlays
@@ -19,7 +20,10 @@ class MapWidget : public QWidget
 {
     Q_OBJECT
 public:
-    explicit MapWidget(SessionModel *sessionModel, CursorModel *cursorModel, QWidget *parent = nullptr);
+    explicit MapWidget(SessionModel *sessionModel,
+                       CursorModel *cursorModel,
+                       PlotRangeModel *rangeModel,
+                       QWidget *parent = nullptr);
 
 private:
     TrackMapModel *m_trackModel = nullptr;

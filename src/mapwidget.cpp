@@ -4,6 +4,7 @@
 #include "mapcursordotmodel.h"
 #include "mapcursorproxy.h"
 #include "sessionmodel.h"
+#include "plotrangemodel.h"
 
 #include <QQuickWidget>
 #include <QQmlContext>
@@ -13,7 +14,10 @@
 
 namespace FlySight {
 
-MapWidget::MapWidget(SessionModel *sessionModel, CursorModel *cursorModel, QWidget *parent)
+MapWidget::MapWidget(SessionModel *sessionModel,
+                     CursorModel *cursorModel,
+                     PlotRangeModel *rangeModel,
+                     QWidget *parent)
     : QWidget(parent)
     , m_cursorModel(cursorModel)
 {
@@ -21,7 +25,8 @@ MapWidget::MapWidget(SessionModel *sessionModel, CursorModel *cursorModel, QWidg
     layout->setContentsMargins(0, 0, 0, 0);
 
     // Model that converts visible sessions into QML-friendly polyline paths
-    m_trackModel = new TrackMapModel(sessionModel, this);
+    // Range model is used to filter tracks to only show the visible plot range
+    m_trackModel = new TrackMapModel(sessionModel, rangeModel, this);
 
     // Model that converts CursorModel ("mouse") state into per-session map dots
     m_cursorDotModel = new MapCursorDotModel(sessionModel, m_cursorModel, this);

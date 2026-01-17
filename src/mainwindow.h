@@ -25,6 +25,7 @@ class PlotViewSettingsModel;
 class PlotModel;
 class MarkerModel;
 class CursorModel;
+class PlotRangeModel;
 class MapWidget;
 class VideoWidget;
 
@@ -136,6 +137,9 @@ private:
 
     // Cursor model
     CursorModel *m_cursorModel = nullptr;
+
+    // Range model for synchronizing plot x-axis range with other docks
+    PlotRangeModel *m_rangeModel = nullptr;
 
     // Helper functions for plot values
     static void registerBuiltInPlots();

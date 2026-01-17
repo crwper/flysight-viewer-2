@@ -39,6 +39,7 @@ template class __declspec(dllimport) std::vector<size_t>;
 #include "markermodel.h"
 #include "markerregistry.h"
 #include "cursormodel.h"
+#include "plotrangemodel.h"
 
 #include <GeographicLib/LocalCartesian.hpp>
 #include <boost/geometry.hpp>
@@ -133,15 +134,18 @@ MainWindow::MainWindow(QWidget *parent)
         m_cursorModel->ensureCursor(video);
     }
 
+    // Create range model for synchronizing plot x-axis range with other docks
+    m_rangeModel = new PlotRangeModel(this);
+
     // Add plot view
     plotsDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Plots"));
-    plotWidget = new PlotWidget(model, plotModel, markerModel, m_plotViewSettingsModel, m_cursorModel, this);
+    plotWidget = new PlotWidget(model, plotModel, markerModel, m_plotViewSettingsModel, m_cursorModel, m_rangeModel, this);
     plotsDock->setWidget(plotWidget);
     addDockWidget(plotsDock, KDDockWidgets::Location_OnLeft);
 
     // Add map view (Qt Location)
     mapDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Map"));
-    mapWidget = new MapWidget(model, m_cursorModel, mapDock);
+    mapWidget = new MapWidget(model, m_cursorModel, m_rangeModel, mapDock);
     mapDock->setWidget(mapWidget);
     addDockWidget(mapDock, KDDockWidgets::Location_OnBottom);
 

@@ -2,9 +2,12 @@
 
 #include "sessionmodel.h"
 #include "sessiondata.h"
+#include "plotrangemodel.h"
 
 #include <QtMath>
 #include <QVariantMap>
+#include <QDateTime>
+#include <limits>
 
 namespace FlySight {
 
@@ -12,12 +15,20 @@ static constexpr const char *kDefaultSensor = "Simplified";
 static constexpr const char *kLatKey = "lat";
 static constexpr const char *kLonKey = "lon";
 
-TrackMapModel::TrackMapModel(SessionModel *sessionModel, QObject *parent)
+TrackMapModel::TrackMapModel(SessionModel *sessionModel,
+                             PlotRangeModel *rangeModel,
+                             QObject *parent)
     : QAbstractListModel(parent)
     , m_sessionModel(sessionModel)
+    , m_rangeModel(rangeModel)
 {
     if (m_sessionModel) {
         connect(m_sessionModel, &SessionModel::modelChanged,
+                this, &TrackMapModel::rebuild);
+    }
+
+    if (m_rangeModel) {
+        connect(m_rangeModel, &PlotRangeModel::rangeChanged,
                 this, &TrackMapModel::rebuild);
     }
 
@@ -68,6 +79,41 @@ QColor TrackMapModel::colorForSession(const QString &sessionId)
     return c;
 }
 
+bool TrackMapModel::computeSessionUtcRange(const SessionData &session,
+                                           double *outLower, double *outUpper) const
+{
+    if (!m_rangeModel || !m_rangeModel->hasRange())
+        return false;
+
+    const QString axisKey = m_rangeModel->axisKey();
+
+    if (axisKey == SessionKeys::Time) {
+        // UTC mode: range values are already in UTC seconds
+        *outLower = m_rangeModel->rangeLower();
+        *outUpper = m_rangeModel->rangeUpper();
+        return true;
+    }
+
+    if (axisKey == SessionKeys::TimeFromExit) {
+        // Time-from-exit mode: need to convert using session's exit time
+        QVariant v = session.getAttribute(SessionKeys::ExitTime);
+        if (!v.canConvert<QDateTime>())
+            return false;
+
+        QDateTime dt = v.toDateTime();
+        if (!dt.isValid())
+            return false;
+
+        double exitUtcSeconds = dt.toMSecsSinceEpoch() / 1000.0;
+
+        *outLower = m_rangeModel->rangeLower() + exitUtcSeconds;
+        *outUpper = m_rangeModel->rangeUpper() + exitUtcSeconds;
+        return true;
+    }
+
+    return false;
+}
+
 void TrackMapModel::rebuild()
 {
     const bool oldHasData = m_hasData;
@@ -99,6 +145,11 @@ void TrackMapModel::rebuild()
             if (n < 2)
                 continue;
 
+            // Compute UTC range filter for this session
+            double filterLower = -std::numeric_limits<double>::infinity();
+            double filterUpper = std::numeric_limits<double>::infinity();
+            computeSessionUtcRange(session, &filterLower, &filterUpper);
+
             QVariantList points;
             points.reserve(n);
 
@@ -110,6 +161,10 @@ void TrackMapModel::rebuild()
                 if (!qIsFinite(la) || !qIsFinite(lo) || !qIsFinite(tt))
                     continue;
                 if (la < -90.0 || la > 90.0 || lo < -180.0 || lo > 180.0)
+                    continue;
+
+                // Skip points outside the visible range
+                if (tt < filterLower || tt > filterUpper)
                     continue;
 
                 QVariantMap pt;

@@ -24,6 +24,7 @@ class PlotViewSettingsModel;
 class PlotModel;
 class MarkerModel;
 class CursorModel;
+class PlotRangeModel;
 
 struct ReferenceMoment
 {
@@ -66,6 +67,7 @@ public:
             MarkerModel *markerModel,
             PlotViewSettingsModel *viewSettingsModel,
             CursorModel *cursorModel,
+            PlotRangeModel *rangeModel,
             QWidget *parent = nullptr);
 
     // Public Methods
@@ -140,6 +142,7 @@ private:
     MarkerModel *markerModel;
     PlotViewSettingsModel* m_viewSettingsModel;
     CursorModel* m_cursorModel = nullptr;
+    PlotRangeModel* m_rangeModel = nullptr;
 
     // Tools
     PlotTool* m_currentTool = nullptr;
