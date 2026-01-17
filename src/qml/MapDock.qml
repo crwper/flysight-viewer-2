@@ -266,10 +266,26 @@ Item {
 
             onWheel: function(wheel) {
                 // Smooth zoom like Google Maps (~0.2 per scroll notch)
+                // Keeps point under cursor stationary
                 var zoomDelta = wheel.angleDelta.y / 600.0
-                map.zoomLevel = Math.max(map.minimumZoomLevel,
-                                Math.min(map.maximumZoomLevel,
-                                         map.zoomLevel + zoomDelta))
+                var newZoom = Math.max(map.minimumZoomLevel,
+                              Math.min(map.maximumZoomLevel,
+                                       map.zoomLevel + zoomDelta))
+                if (newZoom === map.zoomLevel) return
+
+                // Get coordinate under cursor before zoom
+                var mouseCoord = map.toCoordinate(Qt.point(wheel.x, wheel.y))
+
+                map.zoomLevel = newZoom
+
+                // Get screen position of that coordinate after zoom
+                var newMousePt = map.fromCoordinate(mouseCoord, false)
+
+                // Shift center to keep cursor point stationary
+                var dx = wheel.x - newMousePt.x
+                var dy = wheel.y - newMousePt.y
+                var centerPt = map.fromCoordinate(map.center, false)
+                map.center = map.toCoordinate(Qt.point(centerPt.x - dx, centerPt.y - dy))
             }
         }
 
