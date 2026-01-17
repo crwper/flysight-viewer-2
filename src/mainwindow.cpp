@@ -11,6 +11,7 @@
 #include <QCloseEvent>
 #include <kddockwidgets/LayoutSaver.h>
 #include <vector>
+#include <QScopeGuard>
 
 // --- FIX FOR GTSAM LINKING ERROR ---
 // GTSAM exports std::vector<size_t> (aka unsigned __int64) in its DLL.
@@ -366,6 +367,13 @@ void MainWindow::importFiles(
     if (fileNames.isEmpty()) {
         return;
     }
+
+    // Block signals during batch import to prevent multiple redraws
+    model->blockSignals(true);
+    auto cleanup = qScopeGuard([this]() {
+        model->blockSignals(false);
+        emit model->modelChanged();
+    });
 
     // honour whatever the user picked in the Horizontal-Axis menu
     const QString xAxisKey = currentXAxisKey();
