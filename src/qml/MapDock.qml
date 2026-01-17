@@ -213,7 +213,39 @@ Item {
         onBearingChanged:   if (mapHoverArea.containsMouse) root._pokeHoverRecalc()
         onTiltChanged:      if (mapHoverArea.containsMouse) root._pokeHoverRecalc()
 
-        // Hover-only tracker that doesn't steal presses (so pan/zoom gestures still work).
+        // Pan gesture via drag - keeps point under cursor stationary
+        DragHandler {
+            id: dragHandler
+            target: null
+            property var startCenter
+            onActiveChanged: {
+                if (active) {
+                    startCenter = map.center
+                }
+            }
+            onTranslationChanged: {
+                if (!startCenter) return
+                var startPt = map.fromCoordinate(startCenter, false)
+                var newCenter = map.toCoordinate(Qt.point(startPt.x - translation.x,
+                                                          startPt.y - translation.y))
+                map.center = newCenter
+            }
+        }
+
+        // Pinch-to-zoom gesture
+        PinchHandler {
+            id: pinchHandler
+            target: null
+            onScaleChanged: {
+                var newZoom = map.zoomLevel + Math.log2(scale / activeScale)
+                map.zoomLevel = Math.max(map.minimumZoomLevel,
+                                Math.min(map.maximumZoomLevel, newZoom))
+            }
+            property real activeScale: 1.0
+            onActiveChanged: if (active) activeScale = scale
+        }
+
+        // Hover and wheel zoom handler
         MouseArea {
             id: mapHoverArea
             anchors.fill: parent
@@ -230,6 +262,14 @@ Item {
             onExited: {
                 root._pendingMousePos = Qt.point(-1, -1)
                 root._clearMapHover()
+            }
+
+            onWheel: function(wheel) {
+                // Smooth zoom like Google Maps (~0.2 per scroll notch)
+                var zoomDelta = wheel.angleDelta.y / 600.0
+                map.zoomLevel = Math.max(map.minimumZoomLevel,
+                                Math.min(map.maximumZoomLevel,
+                                         map.zoomLevel + zoomDelta))
             }
         }
 
