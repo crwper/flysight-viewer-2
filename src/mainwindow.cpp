@@ -564,18 +564,14 @@ void MainWindow::on_action_HideOthers_triggered()
     if (selectedRows.isEmpty())
         return;
 
-    QSet<int> selectedRowsSet;
-    for (const QModelIndex &idx : selectedRows) {
-        selectedRowsSet.insert(idx.row());
-    }
-
-    // Only hide unselected rows; leave selected rows unchanged
+    // Hide all rows, then remove selected rows from the map
     QMap<int, bool> visibility;
     int totalRows = model->rowCount();
     for (int i = 0; i < totalRows; ++i) {
-        if (!selectedRowsSet.contains(i)) {
-            visibility.insert(i, false);
-        }
+        visibility.insert(i, false);
+    }
+    for (const QModelIndex &idx : selectedRows) {
+        visibility.remove(idx.row());
     }
     model->setRowsVisibility(visibility);
 }
