@@ -319,6 +319,77 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
         qDebug() << "Added new SessionData with SESSION_ID:" << newSessionID;
     }
 }
+
+void SessionModel::mergeSessions(const QList<SessionData>& sessions)
+{
+    if (sessions.isEmpty())
+        return;
+
+    beginResetModel();
+    for (const SessionData& newSession : sessions) {
+        if (!newSession.hasAttribute(SessionKeys::SessionId)) {
+            qWarning() << "Skipping session with no SESSION_ID";
+            continue;
+        }
+
+        QString newSessionID = newSession.getAttribute(SessionKeys::SessionId).toString();
+
+        auto sessionIt = std::find_if(
+            m_sessionData.begin(), m_sessionData.end(),
+            [&newSessionID](const SessionData &item) {
+                return item.getAttribute(SessionKeys::SessionId) == newSessionID;
+            });
+
+        if (sessionIt != m_sessionData.end()) {
+            // Merge into existing session
+            SessionData &existingSession = *sessionIt;
+
+            for (const QString &attributeKey : newSession.attributeKeys()) {
+                existingSession.setAttribute(attributeKey, newSession.getAttribute(attributeKey));
+            }
+
+            for (const QString &sensorKey : newSession.sensorKeys()) {
+                for (const QString &measurementKey : newSession.measurementKeys(sensorKey)) {
+                    existingSession.setMeasurement(sensorKey, measurementKey,
+                        newSession.getMeasurement(sensorKey, measurementKey));
+                }
+            }
+
+            qDebug() << "Merged SessionData with SESSION_ID:" << newSessionID;
+        } else {
+            // Add as new session
+            m_sessionData.append(newSession);
+            qDebug() << "Added new SessionData with SESSION_ID:" << newSessionID;
+        }
+    }
+    endResetModel();
+    emit modelChanged();
+}
+
+void SessionModel::setRowsVisibility(const QMap<int, bool>& rowVisibility)
+{
+    if (rowVisibility.isEmpty())
+        return;
+
+    int minRow = INT_MAX;
+    int maxRow = 0;
+
+    for (auto it = rowVisibility.constBegin(); it != rowVisibility.constEnd(); ++it) {
+        int row = it.key();
+        bool visible = it.value();
+        if (row >= 0 && row < m_sessionData.size()) {
+            m_sessionData[row].setVisible(visible);
+            minRow = std::min(minRow, row);
+            maxRow = std::max(maxRow, row);
+        }
+    }
+
+    if (minRow <= maxRow) {
+        emit dataChanged(index(minRow, 0), index(maxRow, columnCount() - 1), {Qt::CheckStateRole});
+        emit modelChanged();
+    }
+}
+
 bool SessionModel::removeSessions(const QList<QString> &sessionIds)
 {
     if (sessionIds.isEmpty())

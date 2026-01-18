@@ -11,7 +11,6 @@
 #include <QCloseEvent>
 #include <kddockwidgets/LayoutSaver.h>
 #include <vector>
-#include <QScopeGuard>
 
 // --- FIX FOR GTSAM LINKING ERROR ---
 // GTSAM exports std::vector<size_t> (aka unsigned __int64) in its DLL.
@@ -368,18 +367,14 @@ void MainWindow::importFiles(
         return;
     }
 
-    // Block signals during batch import to prevent multiple redraws
-    model->blockSignals(true);
-    auto cleanup = qScopeGuard([this]() {
-        model->blockSignals(false);
-        emit model->modelChanged();
-    });
-
     // honour whatever the user picked in the Horizontal-Axis menu
     const QString xAxisKey = currentXAxisKey();
 
     // Initialize a map to collect failed imports with error messages
     QMap<QString, QString> failedImports;
+
+    // Collect successfully imported sessions for batch merge
+    QList<SessionData> importedSessions;
 
     // Variables to track the overall min and max time from newly imported files
     double newMinTime = std::numeric_limits<double>::max();
@@ -407,8 +402,8 @@ void MainWindow::importFiles(
                 // Force groundElev calculation on the temp session
                 tempSessionData.getAttribute(SessionKeys::GroundElev);
 
-                // Merge tempSessionData into model
-                model->mergeSessionData(tempSessionData);
+                // Collect for batch merge
+                importedSessions.append(tempSessionData);
 
                 // Collect min and max time from tempSessionData
                 for (const QString &sensorKey : tempSessionData.sensorKeys()) {
@@ -453,8 +448,11 @@ void MainWindow::importFiles(
             SessionData tempSessionData;
 
             if (importer.importFile(filePath, tempSessionData)) {
-                // Merge tempSessionData into model
-                model->mergeSessionData(tempSessionData);
+                // Force groundElev calculation on the temp session
+                tempSessionData.getAttribute(SessionKeys::GroundElev);
+
+                // Collect for batch merge
+                importedSessions.append(tempSessionData);
 
                 // Collect min and max time from tempSessionData
                 for (const QString &sensorKey : tempSessionData.sensorKeys()) {
@@ -488,6 +486,9 @@ void MainWindow::importFiles(
             }
         }
     }
+
+    // Batch merge all imported sessions
+    model->mergeSessions(importedSessions);
 
     // Emit the new time range if valid
     if (newMinTime != std::numeric_limits<double>::max() && newMaxTime != std::numeric_limits<double>::lowest()) {
@@ -568,25 +569,15 @@ void MainWindow::on_action_HideOthers_triggered()
         selectedRowsSet.insert(idx.row());
     }
 
-    // Block signals to prevent multiple dataChanged emissions
-    model->blockSignals(true);
-
+    // Only hide unselected rows; leave selected rows unchanged
+    QMap<int, bool> visibility;
     int totalRows = model->rowCount();
     for (int i = 0; i < totalRows; ++i) {
-        bool visible = selectedRowsSet.contains(i);
-        model->setData(model->index(i, SessionModel::Description),
-                       visible ? Qt::Checked : Qt::Unchecked, Qt::CheckStateRole);
+        if (!selectedRowsSet.contains(i)) {
+            visibility.insert(i, false);
+        }
     }
-
-    // Unblock signals
-    model->blockSignals(false);
-
-    // Emit a single dataChanged for the entire range or the rows you altered
-    emit model->dataChanged(model->index(0, 0),
-                            model->index(totalRows - 1, model->columnCount() - 1));
-
-    // Emit modelChanged() if your logic requires it
-    emit model->modelChanged();
+    model->setRowsVisibility(visibility);
 }
 
 void MainWindow::on_action_Delete_triggered()
@@ -1765,24 +1756,11 @@ void MainWindow::setSelectedTrackCheckState(Qt::CheckState state)
     if (selectedRows.isEmpty())
         return;
 
-    // Block signals to prevent multiple dataChanged emissions
-    model->blockSignals(true);
-
-    // Set check state for selected sessions
+    QMap<int, bool> visibility;
     for (const QModelIndex &idx : selectedRows) {
-        model->setData(model->index(idx.row(), SessionModel::Description), state, Qt::CheckStateRole);
+        visibility.insert(idx.row(), state == Qt::Checked);
     }
-
-    // Unblock signals
-    model->blockSignals(false);
-
-    // Emit a single dataChanged for the entire range or the rows you altered
-    int totalRows = model->rowCount();
-    emit model->dataChanged(model->index(0, 0),
-                            model->index(totalRows - 1, model->columnCount() - 1));
-
-    // Emit modelChanged() if your logic requires it
-    emit model->modelChanged();
+    model->setRowsVisibility(visibility);
 }
 
 void MainWindow::setupPlotTools()
