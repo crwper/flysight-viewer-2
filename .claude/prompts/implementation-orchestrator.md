@@ -76,10 +76,22 @@ Follow the instructions in .claude/prompts/implementation-agent.md
 
 <full contents of the phase document from docs/implementation-plan/NN-phase-name.md>
 
+## Feature Context
+
+<include the Feature Specification section from 00-overview.md so the 
+implementation agent understands the broader context>
+
 ## Codebase Context
 
 Key files to understand before implementing:
-- [list 3-5 most relevant existing files]
+
+[List ALL files referenced in the phase document's "Technical Approach" 
+sections, plus any additional files needed to understand integration points.
+Do not artificially limit—include everything relevant.]
+
+- path/to/file1.cpp — [why relevant]
+- path/to/file2.h — [why relevant]
+- ...
 
 ## Output Requirements
 
@@ -102,15 +114,24 @@ Follow the instructions in .claude/prompts/review-agent.md
 
 ## Requirements
 
-<full contents of the phase document>
+<full contents of the phase document, including all acceptance criteria>
 
-## Changes Made
+## Feature Context
 
-<summary provided by implementation agent>
+<include the Feature Specification section from 00-overview.md for broader context>
+
+## Implementation Summary
+
+<complete summary provided by implementation agent, including all files changed>
 
 ## Modified Files
 
-<list of files changed>
+<complete list of files changed with descriptions>
+
+## Reference Patterns
+
+These files show the patterns the implementation should follow:
+<list reference files from the phase document>
 
 ## Your Task
 
@@ -162,15 +183,26 @@ Report what you changed and how it addresses the feedback.
 
 ## Context Management
 
-**Critical: Keep your context lean.**
+**Critical: Keep YOUR context lean while giving sub-agents FULL context.**
 
-- Do NOT read full source files into your context
-- Do NOT hold implementation details in your context
-- DO track phase/track status
-- DO hold the overview document
-- DO pass full context to sub-agents (they have fresh context)
+**You (the orchestrator) should NOT:**
+- Read full source files into your context
+- Hold implementation details in your context
+- Summarize or compress information meant for sub-agents
 
-When spawning an agent, give them everything they need. Don't expect them to have context from previous agents.
+**You (the orchestrator) SHOULD:**
+- Track phase/track status
+- Hold the overview document structure (phases, dependencies)
+- Pass complete context to sub-agents
+- Reference file paths without reading full contents
+
+**Sub-agents SHOULD receive:**
+- Complete phase documentation
+- Full feature specification context
+- All relevant reference files
+- Complete feedback from reviewers (when iterating)
+
+When spawning an agent, give them everything they need. They have fresh context windows—don't artificially limit what you pass them. The constraint is on YOUR context, not theirs.
 
 ## Final Review Phase
 

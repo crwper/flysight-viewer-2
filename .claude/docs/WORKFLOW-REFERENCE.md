@@ -124,10 +124,19 @@ The implementation plan is in docs/implementation-plan/
 | Principle | Why It Matters |
 |-----------|----------------|
 | **Coordinators don't write code** | Keeps their context focused on orchestration |
-| **Sub-agents get full context** | They have fresh context windows to work with |
+| **Sub-agents get FULL context** | They have fresh context windows—don't starve them |
 | **Parallel where possible** | Independent phases/tracks run simultaneously |
 | **Bounded iteration** | Max 3 review cycles prevents infinite loops |
-| **Explicit handoffs** | Each agent receives complete instructions |
+| **Explicit handoffs** | Each agent receives complete, unabridged instructions |
+
+### The Context Rule
+
+```
+Coordinators: Keep YOUR context lean (don't read full files)
+Sub-agents:   Give them EVERYTHING (full specs, all reference files)
+```
+
+The constraint is on the coordinator's context, not what gets passed to sub-agents. A complex feature might need 15+ reference files—pass all of them.
 
 ## Customization Points
 

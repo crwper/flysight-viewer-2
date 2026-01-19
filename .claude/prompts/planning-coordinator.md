@@ -27,8 +27,11 @@ Create `docs/implementation-plan/00-overview.md` with the following structure:
 ```markdown
 # Implementation Plan: [Feature Name]
 
-## Summary
-[2-3 sentence description of the feature]
+## Feature Specification
+
+[Include the COMPLETE original feature specification here, unabridged. 
+Sub-agents need the full context to make correct decisions. 
+Do not summarize—copy or reference the entire spec.]
 
 ## Phases
 
@@ -44,11 +47,19 @@ Create `docs/implementation-plan/00-overview.md` with the following structure:
 
 ## Key Patterns & References
 
-The following existing files exemplify patterns that phase documentation 
-should reference:
+List ALL files that exemplify patterns relevant to this feature.
+Do not artificially limit this list—include every file that phase 
+documenters might need to reference. Group by category if helpful.
 
-- `path/to/pattern1.cpp` — [what pattern it demonstrates]
-- `path/to/pattern2.h` — [what pattern it demonstrates]
+### [Category 1, e.g., "Preference Pages"]
+- `path/to/file1.cpp` — [what pattern it demonstrates]
+- `path/to/file2.cpp` — [what pattern it demonstrates]
+
+### [Category 2, e.g., "Registry Access"]
+- `path/to/file3.cpp` — [what pattern it demonstrates]
+- `path/to/file4.h` — [what pattern it demonstrates]
+
+### [Category N]
 - ...
 
 ## Decisions & Constraints
@@ -67,13 +78,13 @@ For each phase identified in the overview, spawn a sub-agent to document it.
 
 Load the instructions from `.claude/prompts/phase-documenter.md` and provide the sub-agent with:
 
-1. **The overview document** you created (`00-overview.md`)
+1. **The overview document** you created (`00-overview.md`) — This includes the full feature specification
 2. **Phase assignment:**
    - Phase number and name
    - One-sentence purpose (from your overview)
    - Dependencies (which phases must complete before this one)
    - What this phase blocks (which phases depend on this one)
-3. **Reference files:** 2-4 specific file paths from "Key Patterns & References" most relevant to this phase
+3. **Reference files:** All files from "Key Patterns & References" relevant to this specific phase. Do not artificially limit—if 10 files are relevant, include all 10. The sub-agent has a fresh context window.
 4. **Output path:** `docs/implementation-plan/NN-phase-name.md`
 
 ### Parallelization Rules
@@ -98,16 +109,22 @@ Blocks: [list or "None"]
 
 ## Context Documents
 
-<contents of 00-overview.md>
+<full contents of 00-overview.md, which includes the complete feature specification>
 
 [If this phase has dependencies:]
-<contents of dependency phase docs>
+<full contents of dependency phase docs>
 
 ## Reference Files
 
-These files exemplify patterns you should follow:
+These files exemplify patterns relevant to this phase. Study them before writing:
+
+[List ALL relevant files from the overview's Key Patterns & References 
+section that apply to this phase. Include as many as needed.]
+
 - [path1] — [why relevant]
 - [path2] — [why relevant]
+- [path3] — [why relevant]
+- ...
 
 ## Output
 
@@ -150,10 +167,26 @@ The plan is ready for handoff to the implementation orchestrator.
 
 ## Context Management Rules
 
-- **Do not** read full implementation files into your context; note paths only
-- **Do not** write detailed task breakdowns yourself; delegate to phase documenters
-- **Do** maintain awareness of phase boundaries and dependencies
-- **Do** track which sub-agents have completed and which are pending
+The goal is to keep YOUR context lean while giving sub-agents FULL context.
+
+**You (the coordinator) should NOT:**
+- Read full implementation files into your context
+- Write detailed task breakdowns yourself
+- Hold implementation details in your working memory
+
+**You (the coordinator) SHOULD:**
+- Note file paths and what patterns they contain
+- Maintain awareness of phase boundaries and dependencies
+- Track which sub-agents have completed and which are pending
+- Pass complete, unabridged context to sub-agents
+
+**Sub-agents SHOULD receive:**
+- The complete feature specification (not a summary)
+- All relevant reference files for their phase
+- Full documentation from any dependency phases
+- Clear, specific instructions
+
+Sub-agents have fresh context windows—don't starve them of information to save your own context.
 
 ## Error Handling
 
