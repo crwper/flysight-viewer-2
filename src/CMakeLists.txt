@@ -186,9 +186,14 @@ set(PROJECT_SOURCES
   plottool/setexittool.h     plottool/setexittool.cpp
   plottool/setgroundtool.h   plottool/setgroundtool.cpp
   preferences/preferencesmanager.h
+  preferences/preferencekeys.h
   preferences/preferencesdialog.h  preferences/preferencesdialog.cpp
   preferences/generalsettingspage.h preferences/generalsettingspage.cpp
   preferences/importsettingspage.h  preferences/importsettingspage.cpp
+  preferences/legendsettingspage.h  preferences/legendsettingspage.cpp
+  preferences/mapsettingspage.h     preferences/mapsettingspage.cpp
+  preferences/markerssettingspage.h preferences/markerssettingspage.cpp
+  preferences/plotssettingspage.h  preferences/plotssettingspage.cpp
   dependencykey.h
   crosshairmanager.h         crosshairmanager.cpp
   graphinfo.h
@@ -202,6 +207,7 @@ set(PROJECT_SOURCES
   cursormodel.cpp            cursormodel.h
   legendpresenter.cpp        legendpresenter.h
   mapwidget.cpp              mapwidget.h
+  mappreferencesbridge.cpp   mappreferencesbridge.h
   videowidget.cpp            videowidget.h
   trackmapmodel.cpp          trackmapmodel.h
   mapcursordotmodel.cpp      mapcursordotmodel.h

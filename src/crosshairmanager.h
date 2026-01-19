@@ -10,6 +10,8 @@
 #include <QCustomPlot/qcustomplot.h>
 #include "sessionmodel.h"
 #include "graphinfo.h"
+#include "preferences/preferencesmanager.h"
+#include "preferences/preferencekeys.h"
 
 namespace FlySight {
 
@@ -65,7 +67,12 @@ public:
     //! Returns the set of session IDs currently marked by a visible tracer.
     QSet<QString> getTracedSessionIds() const;
 
+private slots:
+    void onPreferenceChanged(const QString &key, const QVariant &value);
+
 private:
+    void applyCrosshairPreferences();
+
     // Create crosshair lines if needed
     void ensureCrosshairCreated();
 
@@ -114,6 +121,10 @@ private:
 
     // Keep track of which sessions have visible tracers
     QSet<QString> m_currentlyTracedSessionIds;
+
+    // Cached preference values
+    QColor m_crosshairColor = Qt::gray;
+    double m_crosshairThickness = 1.0;
 };
 
 } // namespace FlySight

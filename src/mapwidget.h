@@ -9,6 +9,7 @@ class SessionModel;
 class TrackMapModel;
 class MapCursorDotModel;
 class MapCursorProxy;
+class MapPreferencesBridge;
 class CursorModel;
 class PlotRangeModel;
 
@@ -29,6 +30,7 @@ private:
     TrackMapModel *m_trackModel = nullptr;
     MapCursorDotModel *m_cursorDotModel = nullptr;
     MapCursorProxy *m_cursorProxy = nullptr;
+    MapPreferencesBridge *m_preferencesBridge = nullptr;
     CursorModel *m_cursorModel = nullptr;
 };
 

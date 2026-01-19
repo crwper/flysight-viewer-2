@@ -8,6 +8,9 @@
 #include <QVariantList>
 #include <QVector>
 
+#include "preferences/preferencesmanager.h"
+#include "preferences/preferencekeys.h"
+
 namespace FlySight {
 
 class SessionModel;
@@ -54,6 +57,9 @@ public:
 public slots:
     void rebuild();
 
+private slots:
+    void onPreferenceChanged(const QString &key, const QVariant &value);
+
 signals:
     void hasDataChanged();
     void countChanged();
@@ -78,7 +84,9 @@ private:
     QGeoCoordinate m_center;
     QGeoRectangle m_bounds;
 
-    static QColor colorForSession(const QString &sessionId);
+    double m_trackOpacity = 0.85;
+
+    QColor colorForSession(const QString &sessionId) const;
 };
 
 } // namespace FlySight

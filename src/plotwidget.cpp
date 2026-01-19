@@ -4,6 +4,8 @@
 #include "plotviewsettingsmodel.h"
 #include "cursormodel.h"
 #include "plotrangemodel.h"
+#include "preferences/preferencesmanager.h"
+#include "preferences/preferencekeys.h"
 
 #include <QVBoxLayout>
 #include <QMouseEvent>
@@ -112,6 +114,13 @@ PlotWidget::PlotWidget(SessionModel *model,
     connect(model, &SessionModel::hoveredSessionChanged,
             this, &PlotWidget::onHoveredSessionChanged);
 
+    // Connect to preferences system
+    connect(&PreferencesManager::instance(), &PreferencesManager::preferenceChanged,
+            this, &PlotWidget::onPreferenceChanged);
+
+    // Apply initial preferences
+    applyPlotPreferences();
+
     // update the plot with initial data
     updatePlot();
 
@@ -208,6 +217,17 @@ void PlotWidget::updatePlot()
     for (const PlotValue &pv : plots) {
         // Retrieve metadata for the graph
         QColor color = pv.defaultColor;
+
+        // Check for user-configured color preference
+        QString colorKey = PreferenceKeys::plotColorKey(pv.sensorID, pv.measurementID);
+        QVariant colorPref = PreferencesManager::instance().getValue(colorKey);
+        if (colorPref.isValid()) {
+            QColor prefColor = colorPref.value<QColor>();
+            if (prefColor.isValid()) {
+                color = prefColor;
+            }
+        }
+
         QString sensorID = pv.sensorID;
         QString measurementID = pv.measurementID;
         QString plotName = pv.plotName;
@@ -260,7 +280,7 @@ void PlotWidget::updatePlot()
             } else {
                 info.displayName = plotName;
             }
-            info.defaultPen = QPen(QColor(color));
+            info.defaultPen = QPen(QColor(color), m_lineThickness);
 
             QCPGraph *graph = customPlot->addGraph(customPlot->xAxis, assignedYAxis);
             graph->setPen(determineGraphPen(info, hoveredSessionId));
@@ -290,6 +310,66 @@ void PlotWidget::updateMarkersOnly()
 
     updateReferenceMarkers(UpdateMode::Reflow);
     customPlot->replot(QCustomPlot::rpQueuedReplot);
+}
+
+void PlotWidget::applyPlotPreferences()
+{
+    auto &prefs = PreferencesManager::instance();
+
+    // Cache global settings
+    m_lineThickness = prefs.getValue(PreferenceKeys::PlotsLineThickness).toDouble();
+    m_textSize = prefs.getValue(PreferenceKeys::PlotsTextSize).toInt();
+    m_yAxisPadding = prefs.getValue(PreferenceKeys::PlotsYAxisPadding).toDouble();
+
+    // Apply text size to axis labels
+    QFont axisFont = customPlot->xAxis->labelFont();
+    axisFont.setPointSize(m_textSize);
+    customPlot->xAxis->setLabelFont(axisFont);
+    customPlot->xAxis->setTickLabelFont(axisFont);
+
+    // Apply to all Y axes
+    for (auto it = m_plotValueAxes.constBegin(); it != m_plotValueAxes.constEnd(); ++it) {
+        QCPAxis *yAxis = it.value();
+        yAxis->setLabelFont(axisFont);
+        yAxis->setTickLabelFont(axisFont);
+    }
+}
+
+void PlotWidget::onPreferenceChanged(const QString &key, const QVariant &value)
+{
+    // Global plot settings
+    if (key == PreferenceKeys::PlotsLineThickness) {
+        m_lineThickness = value.toDouble();
+        updatePlot(); // Rebuild graphs with new line thickness
+        return;
+    }
+
+    if (key == PreferenceKeys::PlotsTextSize) {
+        m_textSize = value.toInt();
+        applyPlotPreferences();
+        customPlot->replot();
+        return;
+    }
+
+    if (key == PreferenceKeys::PlotsYAxisPadding) {
+        m_yAxisPadding = value.toDouble();
+        onXAxisRangeChanged(customPlot->xAxis->range()); // Recalculate Y ranges
+        return;
+    }
+
+    // Per-plot color changes
+    if (key.startsWith("plots/") && key.endsWith("/color")) {
+        updatePlot(); // Rebuild to apply new color
+        return;
+    }
+
+    // Per-plot Y-axis mode changes
+    if (key.startsWith("plots/") && (key.endsWith("/yAxisMode") ||
+                                      key.endsWith("/yAxisMin") ||
+                                      key.endsWith("/yAxisMax"))) {
+        onXAxisRangeChanged(customPlot->xAxis->range()); // Recalculate Y ranges
+        return;
+    }
 }
 
 void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
@@ -329,9 +409,39 @@ void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
         }
 
         if (yMin < yMax) {
-            double padding = (yMax - yMin) * 0.05;
-            padding = (padding == 0) ? 1.0 : padding;
-            yAxis->setRange(yMin - padding, yMax + padding);
+            // Extract sensorID/measurementID from axis key
+            QString axisKey = it.key(); // Format: "sensorID/measurementID"
+            QStringList parts = axisKey.split('/');
+
+            bool useManualRange = false;
+            double manualMin = 0.0;
+            double manualMax = 100.0;
+
+            if (parts.size() == 2) {
+                QString sensorID = parts[0];
+                QString measurementID = parts[1];
+
+                // Check Y-axis mode preference
+                QString modeKey = PreferenceKeys::plotYAxisModeKey(sensorID, measurementID);
+                QString mode = PreferencesManager::instance().getValue(modeKey).toString();
+
+                if (mode.toLower() == "manual") {
+                    useManualRange = true;
+                    QString minKey = PreferenceKeys::plotYAxisMinKey(sensorID, measurementID);
+                    QString maxKey = PreferenceKeys::plotYAxisMaxKey(sensorID, measurementID);
+                    manualMin = PreferencesManager::instance().getValue(minKey).toDouble();
+                    manualMax = PreferencesManager::instance().getValue(maxKey).toDouble();
+                }
+            }
+
+            if (useManualRange && manualMax > manualMin) {
+                yAxis->setRange(manualMin, manualMax);
+            } else {
+                // Auto mode: use data range with padding
+                double padding = (yMax - yMin) * m_yAxisPadding;
+                padding = (padding == 0) ? 1.0 : padding;
+                yAxis->setRange(yMin - padding, yMax + padding);
+            }
         }
     }
 

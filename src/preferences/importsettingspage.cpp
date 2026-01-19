@@ -18,15 +18,15 @@ ImportSettingsPage::ImportSettingsPage(QWidget *parent)
 }
 
 QGroupBox* ImportSettingsPage::createGroundReferenceGroup() {
-    QGroupBox *groundReferenceGroup = new QGroupBox("Ground reference", this);
+    QGroupBox *groundReferenceGroup = new QGroupBox(tr("Ground reference"), this);
     QVBoxLayout *groupLayout = new QVBoxLayout(groundReferenceGroup);
 
-    automaticRadioButton = new QRadioButton("Automatic", this);
-    fixedRadioButton = new QRadioButton("Fixed", this);
+    automaticRadioButton = new QRadioButton(tr("Automatic"), this);
+    fixedRadioButton = new QRadioButton(tr("Fixed"), this);
 
     QHBoxLayout *fixedLayout = new QHBoxLayout();
     fixedElevationLineEdit = new QLineEdit(this);
-    QLabel *metersLabel = new QLabel("m", this);
+    QLabel *metersLabel = new QLabel(tr("m"), this);
 
     fixedLayout->addWidget(fixedRadioButton);
     fixedLayout->addWidget(fixedElevationLineEdit);

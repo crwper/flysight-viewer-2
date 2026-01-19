@@ -3,6 +3,7 @@
 #include "trackmapmodel.h"
 #include "mapcursordotmodel.h"
 #include "mapcursorproxy.h"
+#include "mappreferencesbridge.h"
 #include "sessionmodel.h"
 #include "plotrangemodel.h"
 
@@ -34,6 +35,9 @@ MapWidget::MapWidget(SessionModel *sessionModel,
     // Proxy for QML to drive CursorModel from map hover
     m_cursorProxy = new MapCursorProxy(sessionModel, m_cursorModel, this);
 
+    // Create preferences bridge for QML
+    m_preferencesBridge = new MapPreferencesBridge(this);
+
     auto *view = new QQuickWidget(this);
     view->setResizeMode(QQuickWidget::SizeRootObjectToView);
 
@@ -41,6 +45,7 @@ MapWidget::MapWidget(SessionModel *sessionModel,
     view->engine()->rootContext()->setContextProperty(QStringLiteral("trackModel"), m_trackModel);
     view->engine()->rootContext()->setContextProperty(QStringLiteral("mapCursorDots"), m_cursorDotModel);
     view->engine()->rootContext()->setContextProperty(QStringLiteral("mapCursorProxy"), m_cursorProxy);
+    view->engine()->rootContext()->setContextProperty(QStringLiteral("mapPreferences"), m_preferencesBridge);
 
     view->setSource(QUrl(QStringLiteral("qrc:/qml/MapDock.qml")));
 

@@ -1,6 +1,8 @@
 #include "crosshairmanager.h"
 #include "graphinfo.h"
 #include "plotwidget.h"
+#include "preferences/preferencesmanager.h"
+#include "preferences/preferencekeys.h"
 
 #include <QMouseEvent>
 #include <QDebug>
@@ -29,6 +31,13 @@ CrosshairManager::CrosshairManager(QCustomPlot *plot,
     if (m_plot) {
         m_originalCursor = m_plot->cursor();
     }
+
+    // Connect to preferences system
+    connect(&PreferencesManager::instance(), &PreferencesManager::preferenceChanged,
+            this, &CrosshairManager::onPreferenceChanged);
+
+    // Apply initial preferences
+    applyCrosshairPreferences();
 }
 
 void CrosshairManager::setEnabled(bool enabled)
@@ -68,6 +77,43 @@ void CrosshairManager::setMultiTraceEnabled(bool enabled)
     // Refresh tracer visuals immediately if the cursor is currently over the plot area.
     if (m_enabled)
         updateIfOverPlotArea();
+}
+
+void CrosshairManager::applyCrosshairPreferences()
+{
+    auto &prefs = PreferencesManager::instance();
+
+    m_crosshairColor = prefs.getValue(PreferenceKeys::PlotsCrosshairColor).value<QColor>();
+    if (!m_crosshairColor.isValid()) {
+        m_crosshairColor = Qt::gray;
+    }
+
+    m_crosshairThickness = prefs.getValue(PreferenceKeys::PlotsCrosshairThickness).toDouble();
+    if (m_crosshairThickness <= 0) {
+        m_crosshairThickness = 1.0;
+    }
+
+    // Apply to existing crosshair lines if they exist
+    if (m_crosshairH) {
+        m_crosshairH->setPen(QPen(m_crosshairColor, m_crosshairThickness));
+    }
+    if (m_crosshairV) {
+        m_crosshairV->setPen(QPen(m_crosshairColor, m_crosshairThickness));
+    }
+
+    if (m_plot) {
+        m_plot->replot(QCustomPlot::rpQueuedReplot);
+    }
+}
+
+void CrosshairManager::onPreferenceChanged(const QString &key, const QVariant &value)
+{
+    Q_UNUSED(value)
+
+    if (key == PreferenceKeys::PlotsCrosshairColor ||
+        key == PreferenceKeys::PlotsCrosshairThickness) {
+        applyCrosshairPreferences();
+    }
 }
 
 void CrosshairManager::handleMouseMove(const QPoint &pixelPos)
@@ -290,12 +336,12 @@ void CrosshairManager::ensureCrosshairCreated()
 
     if (!m_crosshairH) {
         m_crosshairH = new QCPItemLine(m_plot);
-        m_crosshairH->setPen(QPen(Qt::gray, 1));
+        m_crosshairH->setPen(QPen(m_crosshairColor, m_crosshairThickness));
         m_crosshairH->setVisible(false);
     }
     if (!m_crosshairV) {
         m_crosshairV = new QCPItemLine(m_plot);
-        m_crosshairV->setPen(QPen(Qt::gray, 1));
+        m_crosshairV->setPen(QPen(m_crosshairColor, m_crosshairThickness));
         m_crosshairV->setVisible(false);
     }
 }

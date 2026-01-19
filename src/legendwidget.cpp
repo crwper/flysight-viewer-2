@@ -1,5 +1,7 @@
 #include "legendwidget.h"
 #include "legendtablemodel.h"
+#include "preferences/preferencesmanager.h"
+#include "preferences/preferencekeys.h"
 
 #include <QVBoxLayout>
 #include <QHeaderView>
@@ -63,6 +65,13 @@ LegendWidget::LegendWidget(QWidget *parent)
     m_table->horizontalHeader()->setStretchLastSection(false);
 
     layout->addWidget(m_table, 1);
+
+    // Connect to preferences system
+    connect(&PreferencesManager::instance(), &PreferencesManager::preferenceChanged,
+            this, &LegendWidget::onPreferenceChanged);
+
+    // Apply initial preferences
+    applyLegendPreferences();
 
     configureTableForMode(m_mode);
     clear();
@@ -183,6 +192,52 @@ void LegendWidget::clear()
     clearHeader();
     if (m_tableModel)
         m_tableModel->clear();
+}
+
+void LegendWidget::applyLegendPreferences()
+{
+    auto &prefs = PreferencesManager::instance();
+
+    m_textSize = prefs.getValue(PreferenceKeys::LegendTextSize).toInt();
+    if (m_textSize < 6) {
+        m_textSize = 9; // Fallback to default
+    }
+
+    // Apply to table view
+    if (m_table) {
+        QFont tableFont = m_table->font();
+        tableFont.setPointSize(m_textSize);
+        m_table->setFont(tableFont);
+    }
+
+    // Apply to header labels
+    if (m_sessionLabel) {
+        QFont labelFont = m_sessionLabel->font();
+        labelFont.setPointSize(m_textSize);
+        labelFont.setItalic(true);
+        m_sessionLabel->setFont(labelFont);
+    }
+
+    if (m_utcLabel) {
+        QFont labelFont = m_utcLabel->font();
+        labelFont.setPointSize(m_textSize);
+        m_utcLabel->setFont(labelFont);
+    }
+
+    if (m_coordsLabel) {
+        QFont labelFont = m_coordsLabel->font();
+        labelFont.setPointSize(m_textSize);
+        m_coordsLabel->setFont(labelFont);
+    }
+}
+
+void LegendWidget::onPreferenceChanged(const QString &key, const QVariant &value)
+{
+    Q_UNUSED(value)
+
+    if (key == PreferenceKeys::LegendTextSize) {
+        applyLegendPreferences();
+    }
 }
 
 } // namespace FlySight

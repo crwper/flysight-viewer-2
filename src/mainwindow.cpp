@@ -32,6 +32,7 @@ template class __declspec(dllimport) std::vector<size_t>;
 #include "pluginhost.h"
 #include "preferences/preferencesdialog.h"
 #include "preferences/preferencesmanager.h"
+#include "preferences/preferencekeys.h"
 #include "sessiondata.h"
 #include "imugnssekf.h"
 #include "plotviewsettingsmodel.h"
@@ -66,20 +67,22 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     manualInit();
 
-    // Initialize preferences
+    // Register built-in plots and markers BEFORE initializing preferences
+    // so that we can dynamically register per-plot and per-marker preferences
+    registerBuiltInPlots();
+    registerBuiltInMarkers();
+
+    // Initialize plugins (may register additional plots/markers)
+    QString defaultDir = QCoreApplication::applicationDirPath() + "/plugins";
+    QString pluginDir = qEnvironmentVariable("FLYSIGHT_PLUGINS", defaultDir);
+    PluginHost::instance().initialise(pluginDir);
+
+    // Initialize preferences (must come AFTER plots and markers are registered)
     initializePreferences();
 
     // Initialize calculated values
     initializeCalculatedAttributes();
     initializeCalculatedMeasurements();
-
-    // Initialize plugin calculations
-    QString defaultDir = QCoreApplication::applicationDirPath() + "/plugins";
-    QString pluginDir = qEnvironmentVariable("FLYSIGHT_PLUGINS", defaultDir);
-
-    registerBuiltInPlots();
-    registerBuiltInMarkers();
-    PluginHost::instance().initialise(pluginDir);
 
     // Populate marker model before PlotWidget construction so markers can render immediately
     if (markerModel) {
@@ -793,11 +796,79 @@ void MainWindow::initializePreferences()
 {
     PreferencesManager &prefs = PreferencesManager::instance();
 
-    // Register preferences with keys and default values
-    prefs.registerPreference("general/units", "Metric");
-    prefs.registerPreference("general/logbookFolder", QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation));
-    prefs.registerPreference("import/groundReferenceMode", "Automatic");
-    prefs.registerPreference("import/fixedElevation", 0.0);
+    // ========================================================================
+    // General Preferences
+    // ========================================================================
+    prefs.registerPreference(PreferenceKeys::GeneralUnits, QStringLiteral("Metric"));
+    prefs.registerPreference(PreferenceKeys::GeneralLogbookFolder,
+                             QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation));
+
+    // ========================================================================
+    // Import Preferences
+    // ========================================================================
+    prefs.registerPreference(PreferenceKeys::ImportGroundReferenceMode, QStringLiteral("Automatic"));
+    prefs.registerPreference(PreferenceKeys::ImportFixedElevation, 0.0);
+
+    // ========================================================================
+    // Global Plot Preferences
+    // ========================================================================
+    prefs.registerPreference(PreferenceKeys::PlotsLineThickness, 1.0);
+    prefs.registerPreference(PreferenceKeys::PlotsTextSize, 9);
+    prefs.registerPreference(PreferenceKeys::PlotsCrosshairColor, QVariant::fromValue(QColor(Qt::gray)));
+    prefs.registerPreference(PreferenceKeys::PlotsCrosshairThickness, 1.0);
+    prefs.registerPreference(PreferenceKeys::PlotsYAxisPadding, 0.05);
+
+    // ========================================================================
+    // Per-Plot Preferences (dynamically registered from PlotRegistry)
+    // ========================================================================
+    const QVector<PlotValue> allPlots = PlotRegistry::instance().allPlots();
+    for (const PlotValue &pv : allPlots) {
+        // Color preference (default from PlotValue.defaultColor)
+        prefs.registerPreference(
+            PreferenceKeys::plotColorKey(pv.sensorID, pv.measurementID),
+            QVariant::fromValue(pv.defaultColor)
+        );
+
+        // Y-axis mode preference (auto, fixed)
+        prefs.registerPreference(
+            PreferenceKeys::plotYAxisModeKey(pv.sensorID, pv.measurementID),
+            QStringLiteral("auto")
+        );
+
+        // Y-axis min/max values (used when mode is "fixed")
+        prefs.registerPreference(
+            PreferenceKeys::plotYAxisMinKey(pv.sensorID, pv.measurementID),
+            0.0
+        );
+        prefs.registerPreference(
+            PreferenceKeys::plotYAxisMaxKey(pv.sensorID, pv.measurementID),
+            100.0
+        );
+    }
+
+    // ========================================================================
+    // Per-Marker Preferences (dynamically registered from MarkerRegistry)
+    // ========================================================================
+    const QVector<MarkerDefinition> allMarkers = MarkerRegistry::instance().allMarkers();
+    for (const MarkerDefinition &md : allMarkers) {
+        // Color preference (default from MarkerDefinition.color)
+        prefs.registerPreference(
+            PreferenceKeys::markerColorKey(md.attributeKey),
+            QVariant::fromValue(md.color)
+        );
+    }
+
+    // ========================================================================
+    // Legend Preferences
+    // ========================================================================
+    prefs.registerPreference(PreferenceKeys::LegendTextSize, 9);
+
+    // ========================================================================
+    // Map Preferences
+    // ========================================================================
+    prefs.registerPreference(PreferenceKeys::MapLineThickness, 3.0);
+    prefs.registerPreference(PreferenceKeys::MapMarkerSize, 10);
+    prefs.registerPreference(PreferenceKeys::MapTrackOpacity, 0.85);
 }
 
 void MainWindow::initializeCalculatedAttributes()

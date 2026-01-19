@@ -297,7 +297,7 @@ Item {
             delegate: MapPolyline {
                 id: poly
                 z: 10
-                line.width: 3
+                line.width: mapPreferences ? mapPreferences.lineThickness : 3
                 line.color: trackColor
 
                 // Expect TrackMapModel roles:
@@ -336,8 +336,8 @@ Item {
 
                 sourceItem: Rectangle {
                     id: dotItem
-                    width: 10
-                    height: 10
+                    width: mapPreferences ? mapPreferences.markerSize : 10
+                    height: mapPreferences ? mapPreferences.markerSize : 10
                     radius: width / 2
                     color: dot.dotColor
                     border.width: 2

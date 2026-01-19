@@ -8,6 +8,9 @@
 #include <QVariant>
 #include <QVector>
 
+#include "preferences/preferencesmanager.h"
+#include "preferences/preferencekeys.h"
+
 namespace FlySight {
 
 class SessionModel;
@@ -39,6 +42,9 @@ public:
 
 public slots:
     void rebuild();
+
+private slots:
+    void onPreferenceChanged(const QString &key, const QVariant &value);
 
 private:
     struct Dot {

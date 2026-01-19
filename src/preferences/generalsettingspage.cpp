@@ -18,7 +18,7 @@ GeneralSettingsPage::GeneralSettingsPage(QWidget *parent)
 }
 
 QGroupBox* GeneralSettingsPage::createUnitsGroup() {
-    QGroupBox *unitsGroup = new QGroupBox("Measurement units", this);
+    QGroupBox *unitsGroup = new QGroupBox(tr("Measurement units"), this);
     QHBoxLayout *unitsLayout = new QHBoxLayout(unitsGroup);
 
     unitsComboBox = new QComboBox(this);
@@ -35,7 +35,7 @@ QGroupBox* GeneralSettingsPage::createUnitsGroup() {
 }
 
 QGroupBox* GeneralSettingsPage::createLogbookFolderGroup() {
-    QGroupBox *logbookGroup = new QGroupBox("Logbook folder", this);
+    QGroupBox *logbookGroup = new QGroupBox(tr("Logbook folder"), this);
     QHBoxLayout *logbookLayout = new QHBoxLayout(logbookGroup);
 
     logbookFolderLineEdit = new QLineEdit(this);
@@ -61,7 +61,7 @@ void GeneralSettingsPage::saveSettings() {
 }
 
 void GeneralSettingsPage::browseLogbookFolder() {
-    QString folder = QFileDialog::getExistingDirectory(this, "Select Logbook Folder");
+    QString folder = QFileDialog::getExistingDirectory(this, tr("Select Logbook Folder"));
     if (!folder.isEmpty()) {
         logbookFolderLineEdit->setText(folder);
         saveSettings();

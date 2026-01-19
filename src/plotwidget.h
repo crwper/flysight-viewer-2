@@ -11,6 +11,8 @@
 #include "sessionmodel.h"
 #include "graphinfo.h"
 #include "crosshairmanager.h"
+#include "preferences/preferencesmanager.h"
+#include "preferences/preferencekeys.h"
 
 namespace FlySight {
 
@@ -114,11 +116,13 @@ protected:
 private slots:
     void onHoveredSessionChanged(const QString& sessionId);
     void onCursorsChanged();
+    void onPreferenceChanged(const QString &key, const QVariant &value);
 
 private:
     // Initialization
     void setupPlot();
     void updateXAxisTicker();
+    void applyPlotPreferences();
 
     // Utility Methods
     QPen determineGraphPen(const GraphInfo &info, const QString &hoveredSessionId) const;
@@ -169,6 +173,11 @@ private:
 
     QString m_xAxisKey   = SessionKeys::TimeFromExit;
     QString m_xAxisLabel = "Time from exit (s)";
+
+    // Cached preference values
+    double m_lineThickness = 1.0;
+    int m_textSize = 9;
+    double m_yAxisPadding = 0.05;
 
     void applyXAxisChange(const QString& key, const QString& label);
 };

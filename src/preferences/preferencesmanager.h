@@ -31,9 +31,18 @@ public:
 
     QVariant getValue(const QString &key) const {
         if (!m_preferences.contains(key)) {
-            Q_ASSERT("Requested value for an unregistered preference!");
+            qWarning() << "Requested value for an unregistered preference:" << key;
+            Q_ASSERT(false && "Requested value for an unregistered preference!");
         }
         return m_settings.value(key, m_preferences.value(key).defaultValue);
+    }
+
+    QVariant getDefaultValue(const QString &key) const {
+        if (!m_preferences.contains(key)) {
+            qWarning() << "Requested default value for an unregistered preference:" << key;
+            return QVariant();
+        }
+        return m_preferences.value(key).defaultValue;
     }
 
     void setValue(const QString &key, const QVariant &value) {

@@ -263,6 +263,10 @@ MapCursorDotModel::MapCursorDotModel(SessionModel *sessionModel, CursorModel *cu
                 this, &MapCursorDotModel::rebuild);
     }
 
+    // Connect to preferences system
+    connect(&PreferencesManager::instance(), &PreferencesManager::preferenceChanged,
+            this, &MapCursorDotModel::onPreferenceChanged);
+
     rebuild();
 }
 
@@ -310,8 +314,21 @@ QColor MapCursorDotModel::colorForSession(const QString &sessionId)
     const uint h = qHash(sessionId);
     const int hue = static_cast<int>(h % 360);
     QColor c = QColor::fromHsv(hue, 200, 255);
-    c.setAlphaF(0.85);
+
+    double opacity = PreferencesManager::instance().getValue(
+        PreferenceKeys::MapTrackOpacity).toDouble();
+    c.setAlphaF(opacity);
+
     return c;
+}
+
+void MapCursorDotModel::onPreferenceChanged(const QString &key, const QVariant &value)
+{
+    Q_UNUSED(value)
+
+    if (key == PreferenceKeys::MapTrackOpacity) {
+        rebuild(); // Rebuild dots with new opacity (affects color)
+    }
 }
 
 void MapCursorDotModel::rebuild()

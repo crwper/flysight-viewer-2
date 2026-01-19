@@ -8,6 +8,9 @@
 #include <QVector>
 #include <QString>
 
+#include "preferences/preferencesmanager.h"
+#include "preferences/preferencekeys.h"
+
 namespace FlySight {
 
 class LegendTableModel;
@@ -46,8 +49,12 @@ public:
     void setRows(const QVector<Row> &rows);
     void clear();
 
+private slots:
+    void onPreferenceChanged(const QString &key, const QVariant &value);
+
 private:
     void configureTableForMode(Mode mode);
+    void applyLegendPreferences();
 
     void clearHeader();
     void updateHeaderVisibility() const;
@@ -62,6 +69,8 @@ private:
 
     QTableView       *m_table = nullptr;
     LegendTableModel *m_tableModel = nullptr;
+
+    int m_textSize = 9;
 };
 
 } // namespace FlySight

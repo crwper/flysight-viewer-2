@@ -32,6 +32,14 @@ TrackMapModel::TrackMapModel(SessionModel *sessionModel,
                 this, &TrackMapModel::rebuild);
     }
 
+    // Connect to preferences system
+    connect(&PreferencesManager::instance(), &PreferencesManager::preferenceChanged,
+            this, &TrackMapModel::onPreferenceChanged);
+
+    // Load initial preference value
+    m_trackOpacity = PreferencesManager::instance().getValue(
+        PreferenceKeys::MapTrackOpacity).toDouble();
+
     rebuild();
 }
 
@@ -70,13 +78,21 @@ QHash<int, QByteArray> TrackMapModel::roleNames() const
     };
 }
 
-QColor TrackMapModel::colorForSession(const QString &sessionId)
+QColor TrackMapModel::colorForSession(const QString &sessionId) const
 {
     const uint h = qHash(sessionId);
     const int hue = static_cast<int>(h % 360);
     QColor c = QColor::fromHsv(hue, 200, 255);
-    c.setAlphaF(0.85);
+    c.setAlphaF(m_trackOpacity);
     return c;
+}
+
+void TrackMapModel::onPreferenceChanged(const QString &key, const QVariant &value)
+{
+    if (key == PreferenceKeys::MapTrackOpacity) {
+        m_trackOpacity = value.toDouble();
+        rebuild(); // Rebuild tracks with new opacity
+    }
 }
 
 bool TrackMapModel::computeSessionUtcRange(const SessionData &session,
