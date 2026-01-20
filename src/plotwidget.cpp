@@ -447,6 +447,10 @@ void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
 
     updateReferenceMarkers(UpdateMode::Reflow);
 
+    // Update crosshairs to match new axis range before replot (avoids flicker)
+    if (m_crosshairManager)
+        m_crosshairManager->updateIfOverPlotArea();
+
     customPlot->replot();
 
     if (m_xAxisKey == SessionKeys::Time)
