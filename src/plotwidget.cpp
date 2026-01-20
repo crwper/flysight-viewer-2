@@ -114,6 +114,9 @@ PlotWidget::PlotWidget(SessionModel *model,
     connect(model, &SessionModel::hoveredSessionChanged,
             this, &PlotWidget::onHoveredSessionChanged);
 
+    connect(model, &SessionModel::exitTimeChanged,
+            this, &PlotWidget::onExitTimeChanged);
+
     // Connect to preferences system
     connect(&PreferencesManager::instance(), &PreferencesManager::preferenceChanged,
             this, &PlotWidget::onPreferenceChanged);
@@ -198,6 +201,29 @@ QString PlotWidget::getXAxisKey() const
 // Slots
 void PlotWidget::updatePlot()
 {
+    // Apply any pending x-axis adjustment from exit time change.
+    // This must happen at the start of updatePlot() so the range adjustment
+    // and graph data rebuild occur together, preventing visual flash.
+    if (m_pendingExitDelta != 0.0) {
+        QCPRange newRange;
+        {
+            // Block signals to prevent onXAxisRangeChanged from triggering
+            // an intermediate replot while graphs are being rebuilt.
+            QSignalBlocker blocker(customPlot->xAxis);
+            QCPRange oldRange = customPlot->xAxis->range();
+            newRange.lower = oldRange.lower - m_pendingExitDelta;
+            newRange.upper = oldRange.upper - m_pendingExitDelta;
+            customPlot->xAxis->setRange(newRange);
+        }
+
+        // Broadcast the updated range to interested listeners (e.g., map).
+        if (m_rangeModel) {
+            m_rangeModel->setRange(m_xAxisKey, newRange.lower, newRange.upper);
+        }
+
+        m_pendingExitDelta = 0.0;
+    }
+
     // Clear existing graphs and axes
     customPlot->clearPlottables();
     m_graphInfoMap.clear();
@@ -688,6 +714,30 @@ void PlotWidget::onCursorsChanged()
 
     // Show a vertical line only when all sessions share the same xPlot.
     m_crosshairManager->setExternalCursorMulti(xBySession, true);
+}
+
+void PlotWidget::onExitTimeChanged(const QString& sessionId, double deltaSeconds)
+{
+    // Only apply range adjustment in TimeFromExit mode.
+    // In absolute Time mode, exit time changes don't affect x-coordinates.
+    if (m_xAxisKey != SessionKeys::TimeFromExit)
+        return;
+
+    // Check if the changed session is the reference session.
+    // The adjustment should be based on the reference session only.
+    const SessionData* ref = referenceSession();
+    if (!ref)
+        return;
+
+    QString refId = ref->getAttribute(SessionKeys::SessionId).toString();
+    if (refId != sessionId)
+        return;
+
+    // Store the delta to be applied at the start of updatePlot().
+    // We don't adjust the range here because Qt may process a screen refresh
+    // between this signal and modelChanged, causing a visual flash where the
+    // x-axis is shifted but the graph data hasn't been rebuilt yet.
+    m_pendingExitDelta = deltaSeconds;
 }
 
 // Protected Methods

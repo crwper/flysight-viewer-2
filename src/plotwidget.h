@@ -117,6 +117,7 @@ private slots:
     void onHoveredSessionChanged(const QString& sessionId);
     void onCursorsChanged();
     void onPreferenceChanged(const QString &key, const QVariant &value);
+    void onExitTimeChanged(const QString& sessionId, double deltaSeconds);
 
 private:
     // Initialization
@@ -178,6 +179,9 @@ private:
     double m_lineThickness = 1.0;
     int m_textSize = 9;
     double m_yAxisPadding = 0.05;
+
+    // Pending x-axis adjustment from exit time change (applied in updatePlot)
+    double m_pendingExitDelta = 0.0;
 
     void applyXAxisChange(const QString& key, const QString& label);
 };

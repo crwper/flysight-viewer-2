@@ -57,6 +57,7 @@ public:
 signals:
     void modelChanged();
     void hoveredSessionChanged(const QString& sessionId);
+    void exitTimeChanged(const QString& sessionId, double deltaSeconds);
 
 private:
     QVector<SessionData> m_sessionData;
