@@ -192,11 +192,12 @@ The "U" key toggle would:
 ### Files to Create/Modify
 
 #### New Files
-- `src/units/unitdefinitions.h` - Unit type definitions and conversion factors
-- `src/units/unitconverter.h/.cpp` - Conversion service singleton
+- `src/units/unitdefinitions.h` - Unit type definitions and display conversion factors (SI → user units)
+- `src/units/unitconverter.h/.cpp` - Conversion service singleton for display
+- `src/units/unitconversion.h` - Import-time lookup table (file unit text → SI)
 
 #### Modified Files
-- `src/dataimporter.cpp` - Normalize sensor data to SI during import (g→m/s², gauss→T, etc.)
+- `src/dataimporter.cpp` - Normalize sensor data to SI during import using unit text from file headers
 - `src/plotregistry.h` - Add `measurementType` to PlotValue
 - `src/mainwindow.cpp` - Add measurementType to built-in plot registrations, add "U" shortcut
 - `src/plotwidget.cpp` - Apply conversions to axis labels and tick values
@@ -209,6 +210,8 @@ The "U" key toggle would:
 ### Resolved Decisions
 
 - **SI normalization**: All data normalized to SI at import; calculations operate on SI
+- **Unit-text-driven import**: Use unit text from file headers (FS1 row 2, FS2 $UNIT lines) to drive SI conversion, rather than hardcoding sensor/field names
+- **Temperature storage**: Keep as Celsius (not Kelvin) for simpler display layer logic
 - **Vertical speed**: Use mph for imperial (consistent with horizontal speed)
 - **Acceleration**: Display in g's for both systems (conventional for skydiving)
 - **System naming**: "Metric" and "Imperial"
@@ -238,7 +241,7 @@ After implementation, verify:
 | Phase | Name | Purpose | Dependencies |
 |-------|------|---------|--------------|
 | 1 | Core Unit System | Create UnitDefinitions and UnitConverter classes with all conversion logic | None |
-| 2 | Data Import Normalization | Normalize sensor data to SI units during import | None |
+| 2 | Data Import Normalization | Normalize sensor data to SI units during import using unit text from file headers | None |
 | 3 | PlotRegistry Extension | Add measurementType field to PlotValue and update registrations | Phase 1 |
 | 4 | Display Integration | Integrate UnitConverter with PlotWidget and LegendPresenter | Phase 1, 3 |
 | 5 | UI and Preferences | Wire GeneralSettingsPage to UnitConverter, add "U" keyboard shortcut | Phase 1, 4 |
@@ -296,11 +299,12 @@ All files that exemplify patterns relevant to this feature, grouped by category.
 
 ### Data Import and Storage
 - `src/dataimporter.h` — DataImporter interface
-- `src/dataimporter.cpp` — CSV parsing, measurement storage (current non-SI units)
+- `src/dataimporter.cpp` — CSV parsing, unit text capture from FS1 row 2 and FS2 $UNIT lines, SI normalization
 - `src/sessiondata.h` — SessionData container with getAttribute/getMeasurement
 - `src/sessiondata.cpp` — Measurement storage implementation
 - `src/sessionmodel.h` — Session model for UI binding
 - `src/sessionmodel.cpp` — Model implementation with signals
+- `src/imugnssekf.cpp` — Sensor fusion (currently has g→m/s² conversion that needs removal)
 
 ### Display Layer
 - `src/legendpresenter.h` — Legend presenter interface
@@ -353,14 +357,14 @@ All files that exemplify patterns relevant to this feature, grouped by category.
 
 ### Structure
 - Phases: 6
-- Total tasks: 31 across all phases
+- Total tasks: 32 across all phases
   - Phase 1: 6 tasks (Core Unit System)
-  - Phase 2: 4 tasks (Data Import Normalization)
+  - Phase 2: 5 tasks (Data Import Normalization - unit-text-driven)
   - Phase 3: 4 tasks (PlotRegistry Extension)
   - Phase 4: 8 tasks (Display Integration)
   - Phase 5: 5 tasks (UI and Preferences)
   - Phase 6: 4 tasks (Plugin Support)
-- Estimated complexity: 38 points (S=1, M=2, L=3)
+- Estimated complexity: 39 points (S=1, M=2, L=3)
 
 ### Parallel Execution Opportunities
 - **Wave 1**: Phases 1 and 2 can start immediately (no dependencies)
