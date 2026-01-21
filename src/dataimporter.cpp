@@ -1,6 +1,7 @@
 // import.cpp
 
 #include "dataimporter.h"
+#include "units/unitconversion.h"
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDebug>
@@ -107,16 +108,30 @@ void DataImporter::importSimple(QTextStream& in, SessionData& sessionData, const
         sensor[colName]; // Initialize empty QVector<double> for each column
     }
 
-    // Read the second line (units), ignore
+    // Read the second line (units) and capture for SI conversion
     if (in.atEnd()) {
         return;
     }
-    in.readLine();
+    QString unitLine = in.readLine();
+    QVector<QString> columnUnits;
+    for (const auto& part : unitLine.split(',')) {
+        columnUnits.append(part.trimmed());
+    }
 
     // Process data lines
     while (!in.atEnd()) {
         QString dataLine = in.readLine();
         importDataRow(dataLine, columnOrder, sessionData, sensorName);
+    }
+
+    // Apply SI normalization based on unit text
+    const QVector<QString>& cols = columnOrder[sensorName];
+    for (int i = 0; i < cols.size() && i < columnUnits.size(); ++i) {
+        const QString& unitText = columnUnits[i];
+        if (UnitConversion::requiresConversion(unitText)) {
+            QVector<double>& data = sessionData.m_sensors[sensorName][cols[i]];
+            UnitConversion::toSI(data, unitText);
+        }
     }
 }
 
@@ -126,10 +141,13 @@ void DataImporter::importFS2(QTextStream& in, SessionData& sessionData) {
     // Temporary map to store column order per sensor
     QMap<QString, QVector<QString>> columnOrder;
 
+    // Temporary map to store unit text per sensor (for SI conversion)
+    QMap<QString, QVector<QString>> columnUnits;
+
     // Read and process header lines
     while (!in.atEnd() && (section == FS_Section::HEADER)) {
         QString line = in.readLine();
-        section = importHeaderRow(line, columnOrder, sessionData);
+        section = importHeaderRow(line, columnOrder, columnUnits, sessionData);
     }
 
     // Process data lines
@@ -137,11 +155,28 @@ void DataImporter::importFS2(QTextStream& in, SessionData& sessionData) {
         QString line = in.readLine();
         importDataRow(line, columnOrder, sessionData, "");
     }
+
+    // Apply SI normalization based on unit text
+    for (auto sensorIt = columnUnits.constBegin();
+         sensorIt != columnUnits.constEnd(); ++sensorIt) {
+        const QString& sensor = sensorIt.key();
+        const QVector<QString>& units = sensorIt.value();
+        const QVector<QString>& cols = columnOrder.value(sensor);
+
+        for (int i = 0; i < cols.size() && i < units.size(); ++i) {
+            const QString& unitText = units[i];
+            if (UnitConversion::requiresConversion(unitText)) {
+                QVector<double>& data = sessionData.m_sensors[sensor][cols[i]];
+                UnitConversion::toSI(data, unitText);
+            }
+        }
+    }
 }
 
 DataImporter::FS_Section DataImporter::importHeaderRow(
     const QString& line,
     QMap<QString, QVector<QString>>& columnOrder,
+    QMap<QString, QVector<QString>>& columnUnits,
     SessionData& sessionData)
 {
     // By default, stay in HEADER section
@@ -181,7 +216,15 @@ DataImporter::FS_Section DataImporter::importHeaderRow(
                     }
                 }
             } else if (token0 == u"$UNIT") {
-                // Ignore $UNIT lines
+                // Parse and store unit text per sensor for SI conversion
+                if (it != tokenizer.end()) {
+                    QString sensorName = (*it++).toString();
+                    QVector<QString> units;
+                    for (; it != tokenizer.end(); ++it) {
+                        units.append(it->toString());
+                    }
+                    columnUnits[sensorName] = units;
+                }
             }
         }
     }

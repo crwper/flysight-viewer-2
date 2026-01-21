@@ -267,6 +267,8 @@ QVariant PlotModel::data(const QModelIndex& index, int role) const
         return makePlotId(plot->value);
     case CategoryRole:
         return plot->value.category;
+    case MeasurementTypeRole:
+        return plot->value.measurementType;
     default:
         return {};
     }
@@ -342,6 +344,7 @@ QHash<int, QByteArray> PlotModel::roleNames() const
     roles[PlotUnitsRole] = "plotUnits";
     roles[PlotValueIdRole] = "plotValueId";
     roles[CategoryRole] = "category";
+    roles[MeasurementTypeRole] = "measurementType";
     return roles;
 }
 

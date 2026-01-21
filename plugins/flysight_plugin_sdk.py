@@ -1,3 +1,51 @@
+"""
+FlySight Plugin SDK
+====================
+
+This module provides the Python SDK for creating FlySight Viewer plugins.
+Plugins can define custom attributes, measurements, and plots that integrate
+seamlessly with the FlySight Viewer application.
+
+Overview
+--------
+The SDK provides three main extension points:
+
+1. **AttributePlugin**: Compute single-value attributes from session data
+   (e.g., start time, duration, exit time)
+
+2. **MeasurementPlugin**: Compute array-based measurements that align with
+   sensor timestamps (e.g., derived calculations, filtered data)
+
+3. **SimplePlot**: Register plots that display measurements in the plot view
+   with automatic unit conversion support
+
+Unit Conversion
+---------------
+Plots can participate in the automatic unit conversion system by specifying
+a `measurement_type` when creating a SimplePlot. This allows the viewer to
+convert values between metric and imperial unit systems based on user
+preferences. See the SimplePlot class documentation for available measurement
+types and usage examples.
+
+Quick Start
+-----------
+To create a simple plugin that registers a plot:
+
+    from flysight_plugin_sdk import SimplePlot, register_plot
+
+    register_plot(SimplePlot(
+        category="My Plugins",
+        name="Ground Speed",
+        units="m/s",
+        color="#1E88E5",
+        sensor="GNSS",
+        measurement="vel2D",
+        measurement_type="speed"  # Enables m/s <-> mph conversion
+    ))
+
+For more complex calculations, subclass AttributePlugin or MeasurementPlugin
+and implement the `inputs()` and `compute()` methods.
+"""
 from __future__ import annotations
 import numpy as np
 from datetime import datetime, timezone
@@ -60,12 +108,57 @@ def register_measurement(plugin: MeasurementPlugin) -> None:
 
 @dataclass(frozen=True)
 class SimplePlot:
+    """
+    Defines a simple plot that displays a measurement from SessionData.
+
+    Attributes:
+        category: Category name for grouping in the plot selection UI (e.g., "GNSS", "IMU")
+        name: Display name of the plot (e.g., "Ground Speed", "Elevation")
+        units: Display units string for the y-axis (e.g., "m/s"). Set to None if unitless.
+               Note: This is the display string only; actual conversion uses measurement_type.
+        color: CSS color string for the plot line (e.g., "#1E88E5", "blue", "rgb(30,136,229)")
+        sensor: Sensor ID in SessionData (e.g., "GNSS", "IMU", "BARO")
+        measurement: Measurement ID within the sensor (e.g., "hMSL", "velN", "temperature")
+        measurement_type: Optional unit conversion category. When set, the UnitConverter
+            automatically converts values between metric and imperial systems.
+
+            Available measurement types:
+            - "distance": meters <-> feet (for horizontal distances, accuracy values)
+            - "altitude": meters <-> feet (for elevation, vertical position)
+            - "speed": m/s <-> mph (for horizontal speeds)
+            - "vertical_speed": m/s <-> mph (for vertical speeds)
+            - "acceleration": m/s^2 <-> g's (displayed as g in both systems)
+            - "temperature": Celsius <-> Fahrenheit
+            - "pressure": Pascals <-> inHg
+            - "rotation": deg/s (same in both systems)
+            - "angle": degrees (same in both systems)
+            - "magnetic_field": Tesla <-> gauss
+            - "voltage": Volts (same in both systems)
+            - "percentage": % (same in both systems)
+            - "time": seconds (same in both systems)
+            - "count": unitless integers (same in both systems)
+
+            Leave as None (default) for plots that should not be unit-converted.
+
+    Example:
+        # A speed plot that converts between m/s and mph:
+        register_plot(SimplePlot(
+            category="My Plugin",
+            name="Custom Speed",
+            units="m/s",  # Base metric units
+            color="#FF5722",
+            sensor="GNSS",
+            measurement="customSpeed",
+            measurement_type="speed"
+        ))
+    """
     category:    str
     name:        str
     units:       Optional[str]
-    color:       str     # CSS color string, e.g. "#1E88E5"
+    color:       str
     sensor:      str
     measurement: str
+    measurement_type: Optional[str] = None
 
 def register_plot(meta: SimplePlot) -> None:
     _simple_plots.append(meta)

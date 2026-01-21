@@ -194,6 +194,8 @@ set(PROJECT_SOURCES
   preferences/mapsettingspage.h     preferences/mapsettingspage.cpp
   preferences/markerssettingspage.h preferences/markerssettingspage.cpp
   preferences/plotssettingspage.h  preferences/plotssettingspage.cpp
+  units/unitdefinitions.h
+  units/unitconverter.h            units/unitconverter.cpp
   dependencykey.h
   crosshairmanager.h         crosshairmanager.cpp
   graphinfo.h

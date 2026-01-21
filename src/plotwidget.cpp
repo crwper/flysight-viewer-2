@@ -6,6 +6,7 @@
 #include "plotrangemodel.h"
 #include "preferences/preferencesmanager.h"
 #include "preferences/preferencekeys.h"
+#include "units/unitconverter.h"
 
 #include <QVBoxLayout>
 #include <QMouseEvent>
@@ -20,6 +21,45 @@
 #include "plottool/selecttool.h"
 #include "plottool/setexittool.h"
 #include "plottool/setgroundtool.h"
+
+namespace {
+
+/**
+ * @brief Custom axis ticker that converts SI values to display units.
+ *
+ * This ticker applies a linear transformation (scale + offset) to tick values
+ * to display them in the user's preferred unit system.
+ */
+class UnitConvertingTicker : public QCPAxisTicker
+{
+public:
+    void setMeasurementType(const QString &type) { m_measurementType = type; }
+    void setScale(double scale) { m_scale = scale; }
+    void setOffset(double offset) { m_offset = offset; }
+    void setPrecision(int precision) { m_precision = precision; }
+
+protected:
+    QString getTickLabel(double tick, const QLocale &locale, QChar formatChar, int precision) override
+    {
+        Q_UNUSED(locale)
+        Q_UNUSED(formatChar)
+
+        // Convert SI value to display units
+        double displayValue = (tick * m_scale) + m_offset;
+
+        // Use our precision, not the default
+        int usePrecision = (m_precision >= 0) ? m_precision : precision;
+        return QString::number(displayValue, 'f', usePrecision);
+    }
+
+private:
+    QString m_measurementType;
+    double m_scale = 1.0;
+    double m_offset = 0.0;
+    int m_precision = -1;
+};
+
+} // anonymous namespace
 
 namespace FlySight {
 
@@ -120,6 +160,10 @@ PlotWidget::PlotWidget(SessionModel *model,
     // Connect to preferences system
     connect(&PreferencesManager::instance(), &PreferencesManager::preferenceChanged,
             this, &PlotWidget::onPreferenceChanged);
+
+    // Connect to unit system changes for reactive updates
+    connect(&UnitConverter::instance(), &UnitConverter::systemChanged,
+            this, &PlotWidget::updatePlot);
 
     // Apply initial preferences
     applyPlotPreferences();
@@ -264,8 +308,18 @@ void PlotWidget::updatePlot()
         // Create a new y-axis if one doesn't exist for this plot value
         if (!m_plotValueAxes.contains(plotValueID)) {
             QCPAxis *newYAxis = customPlot->axisRect()->addAxis(QCPAxis::atLeft);
-            if (!plotUnits.isEmpty()) {
-                newYAxis->setLabel(plotName + " (" + plotUnits + ")");
+
+            // Determine display unit label based on measurementType
+            QString displayUnits = plotUnits; // Fallback to static plotUnits
+            if (!pv.measurementType.isEmpty()) {
+                QString convertedLabel = UnitConverter::instance().getUnitLabel(pv.measurementType);
+                if (!convertedLabel.isEmpty()) {
+                    displayUnits = convertedLabel;
+                }
+            }
+
+            if (!displayUnits.isEmpty()) {
+                newYAxis->setLabel(plotName + " (" + displayUnits + ")");
             } else {
                 newYAxis->setLabel(plotName);
             }
@@ -274,6 +328,22 @@ void PlotWidget::updatePlot()
             newYAxis->setBasePen(QPen(color));
             newYAxis->setTickPen(QPen(color));
             newYAxis->setSubTickPen(QPen(color));
+
+            // Configure unit-converting ticker for this axis
+            if (!pv.measurementType.isEmpty()) {
+                auto ticker = QSharedPointer<UnitConvertingTicker>::create();
+                ticker->setMeasurementType(pv.measurementType);
+
+                // Get conversion parameters: scale = convert(1) - convert(0), offset = convert(0)
+                double offset = UnitConverter::instance().convert(0.0, pv.measurementType);
+                double scale = UnitConverter::instance().convert(1.0, pv.measurementType) - offset;
+                ticker->setScale(scale);
+                ticker->setOffset(offset);
+                ticker->setPrecision(UnitConverter::instance().getPrecision(pv.measurementType));
+
+                newYAxis->setTicker(ticker);
+            }
+
             m_plotValueAxes.insert(plotValueID, newYAxis);
         }
 
@@ -301,8 +371,18 @@ void PlotWidget::updatePlot()
             info.sessionId = session.getAttribute(SessionKeys::SessionId).toString();
             info.sensorId = sensorID;
             info.measurementId = measurementID;
-            if (!plotUnits.isEmpty()) {
-                info.displayName = QString("%1 (%2)").arg(plotName).arg(plotUnits);
+
+            // Determine display unit label based on measurementType (same logic as Y-axis labels)
+            QString graphDisplayUnits = plotUnits; // Fallback
+            if (!pv.measurementType.isEmpty()) {
+                QString convertedLabel = UnitConverter::instance().getUnitLabel(pv.measurementType);
+                if (!convertedLabel.isEmpty()) {
+                    graphDisplayUnits = convertedLabel;
+                }
+            }
+
+            if (!graphDisplayUnits.isEmpty()) {
+                info.displayName = QString("%1 (%2)").arg(plotName).arg(graphDisplayUnits);
             } else {
                 info.displayName = plotName;
             }

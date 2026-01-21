@@ -15,6 +15,7 @@ struct PlotValue {
     QColor defaultColor;       // Default color for the plot
     QString sensorID;          // Sensor name (e.g., "GNSS")
     QString measurementID;     // Measurement name (e.g., "hMSL")
+    QString measurementType;   // Unit conversion category (e.g., "speed", "altitude")
 };
 
 class PlotRegistry {

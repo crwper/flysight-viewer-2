@@ -41,7 +41,6 @@ using symbol_shorthand::X;
 static constexpr double kDeg2Rad = M_PI / 180.0;
 static constexpr double kRad2Deg = 1.0 / kDeg2Rad;
 static constexpr double kG2ms2   = 9.80665;
-static constexpr double kms22G   = 1.0 / kG2ms2;
 static constexpr double kMinSigma = 1e-3;   // 1 mm floor to avoid singularities
 
 // ---- helpers -------------------------------------------------------------
@@ -141,7 +140,7 @@ static gtsam::Rot3 calculateInitialOrientation(
     }
 
     avgAcc /= count;
-    avgAcc *= kG2ms2;
+    // Input acceleration is already in m/s^2 (SI units) after import normalization
 
     double avgAccNorm = avgAcc.norm();
     if (avgAccNorm < kG2ms2 / 2.0 || avgAccNorm > kG2ms2 * 2.0 || avgAccNorm < 1e-9 ) {
@@ -331,7 +330,8 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
 #endif
                 continue;
             }
-            Vector3 acc(imuAx[currentImuIdx - 1] * kG2ms2, imuAy[currentImuIdx - 1] * kG2ms2, imuAz[currentImuIdx - 1] * kG2ms2);
+            // Acceleration is already in m/s^2 (SI units) after import normalization
+            Vector3 acc(imuAx[currentImuIdx - 1], imuAy[currentImuIdx - 1], imuAz[currentImuIdx - 1]);
             Vector3 gyr(imuWx[currentImuIdx - 1] * kDeg2Rad, imuWy[currentImuIdx - 1] * kDeg2Rad, imuWz[currentImuIdx - 1] * kDeg2Rad);
             pim->integrateMeasurement(acc, gyr, dt);
         }
@@ -420,9 +420,10 @@ FusionOutput runFusion(const QVector<double>& gnssTime,
         out.velN.append(vel.x());
         out.velE.append(vel.y());
         out.velD.append(vel.z());
-        out.accN.append(acc.x()*kms22G);
-        out.accE.append(acc.y()*kms22G);
-        out.accD.append(acc.z()*kms22G);
+        // Output acceleration in m/s^2 (SI units); display layer converts to g's
+        out.accN.append(acc.x());
+        out.accE.append(acc.y());
+        out.accD.append(acc.z());
         Vector3 rpy = pose.rotation().rpy();
         out.roll .append(rpy.x()*kRad2Deg);
         out.pitch.append(rpy.y()*kRad2Deg);

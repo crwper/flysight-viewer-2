@@ -70,6 +70,7 @@ private slots:
     void on_action_Delete_triggered();
     void on_action_Preferences_triggered();
     void on_action_Exit_triggered();
+    void on_action_ToggleUnits_triggered();
 
     void onPlotWidgetToolChanged(PlotWidget::Tool t);
 

@@ -326,7 +326,11 @@ void PluginHost::initialise(const QString& pluginDir)
                 plt.attr("color").cast<std::string>())),
             QString::fromStdString(plt.attr("sensor").cast<std::string>()),
             QString::fromStdString(
-                plt.attr("measurement").cast<std::string>())
+                plt.attr("measurement").cast<std::string>()),
+            // measurementType: optional, defaults to empty string (no conversion)
+            py::hasattr(plt, "measurement_type") && !plt.attr("measurement_type").is_none()
+                ? QString::fromStdString(plt.attr("measurement_type").cast<std::string>())
+                : QString{}
         });
     }
 

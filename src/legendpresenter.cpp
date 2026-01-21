@@ -6,6 +6,7 @@
 #include "plotviewsettingsmodel.h"
 #include "legendwidget.h"
 #include "sessiondata.h"
+#include "units/unitconverter.h"
 
 #include <QHash>
 #include <QDateTime>
@@ -24,8 +25,17 @@ constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 
 QString seriesDisplayName(const PlotValue &pv)
 {
-    if (!pv.plotUnits.isEmpty()) {
-        return QString("%1 (%2)").arg(pv.plotName).arg(pv.plotUnits);
+    QString displayUnits = pv.plotUnits; // Fallback
+
+    if (!pv.measurementType.isEmpty()) {
+        QString convertedLabel = UnitConverter::instance().getUnitLabel(pv.measurementType);
+        if (!convertedLabel.isEmpty()) {
+            displayUnits = convertedLabel;
+        }
+    }
+
+    if (!displayUnits.isEmpty()) {
+        return QString("%1 (%2)").arg(pv.plotName).arg(displayUnits);
     }
     return pv.plotName;
 }
@@ -70,17 +80,28 @@ double interpolateSessionMeasurement(const SessionData &session,
     return interpolateAtX(xData, yData, x);
 }
 
-QString formatValue(double value, const QString &measurementId)
+QString formatValue(double value, const QString &measurementId, const QString &measurementType)
 {
     if (std::isnan(value))
         return QStringLiteral("--");
 
-    int precision = 1;
-
+    // Preserve coordinate precision regardless of unit system (per constraints)
     const QString m = measurementId.toLower();
     if (m.contains(QStringLiteral("lat")) || m.contains(QStringLiteral("lon"))) {
-        precision = 6;
-    } else if (m.contains(QStringLiteral("time"))) {
+        return QString::number(value, 'f', 6);
+    }
+
+    // Apply unit conversion if measurementType is specified
+    if (!measurementType.isEmpty()) {
+        double displayValue = UnitConverter::instance().convert(value, measurementType);
+        int precision = UnitConverter::instance().getPrecision(measurementType);
+        if (precision < 0) precision = 1; // Fallback
+        return QString::number(displayValue, 'f', precision);
+    }
+
+    // Legacy fallback: use measurement-based heuristics
+    int precision = 1;
+    if (m.contains(QStringLiteral("time"))) {
         precision = 3;
     }
 
@@ -256,6 +277,10 @@ LegendPresenter::LegendPresenter(SessionModel *sessionModel,
                 this, &LegendPresenter::scheduleUpdate);
     }
 
+    // Connect to unit system changes for reactive updates
+    connect(&UnitConverter::instance(), &UnitConverter::systemChanged,
+            this, &LegendPresenter::scheduleUpdate);
+
     if (m_legendWidget) {
         m_legendWidget->clear();
     }
@@ -386,7 +411,7 @@ void LegendPresenter::recompute()
                 hasData = true;
             }
 
-            row.value = formatValue(v, pv.measurementID);
+            row.value = formatValue(v, pv.measurementID, pv.measurementType);
             rows.push_back(row);
         }
 
@@ -418,10 +443,17 @@ void LegendPresenter::recompute()
             const double alt = interpolateSessionMeasurement(*session, QStringLiteral("GNSS"), SessionKeys::Time, QStringLiteral("hMSL"), utcSecs);
 
             if (!std::isnan(lat) && !std::isnan(lon) && !std::isnan(alt)) {
-                coordsText = QStringLiteral("(%1 deg, %2 deg, %3 m)")
+                // Convert altitude to display units
+                double displayAlt = UnitConverter::instance().convert(alt, QStringLiteral("altitude"));
+                QString altUnit = UnitConverter::instance().getUnitLabel(QStringLiteral("altitude"));
+                int altPrecision = UnitConverter::instance().getPrecision(QStringLiteral("altitude"));
+                if (altPrecision < 0) altPrecision = 1; // Fallback
+
+                coordsText = QStringLiteral("(%1 deg, %2 deg, %3 %4)")
                                  .arg(lat, 0, 'f', 7)
                                  .arg(lon, 0, 'f', 7)
-                                 .arg(alt, 0, 'f', 3);
+                                 .arg(displayAlt, 0, 'f', altPrecision)
+                                 .arg(altUnit);
             }
         }
 
@@ -463,9 +495,9 @@ void LegendPresenter::recompute()
             const double avgVal = std::accumulate(valuesAtCursor.begin(), valuesAtCursor.end(), 0.0)
                                     / valuesAtCursor.size();
 
-            row.minValue = formatValue(minVal, pv.measurementID);
-            row.avgValue = formatValue(avgVal, pv.measurementID);
-            row.maxValue = formatValue(maxVal, pv.measurementID);
+            row.minValue = formatValue(minVal, pv.measurementID, pv.measurementType);
+            row.avgValue = formatValue(avgVal, pv.measurementID, pv.measurementType);
+            row.maxValue = formatValue(maxVal, pv.measurementID, pv.measurementType);
         } else {
             row.minValue = QStringLiteral("--");
             row.avgValue = QStringLiteral("--");

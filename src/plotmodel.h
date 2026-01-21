@@ -25,7 +25,8 @@ public:
 
         // Recommended additions (spec v1.1)
         PlotValueIdRole,   // sensorID + "/" + measurementID
-        CategoryRole
+        CategoryRole,
+        MeasurementTypeRole  // Returns measurementType for unit conversion
     };
 
     explicit PlotModel(QObject *parent = nullptr);

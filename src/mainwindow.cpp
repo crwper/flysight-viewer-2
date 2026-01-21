@@ -41,6 +41,7 @@ template class __declspec(dllimport) std::vector<size_t>;
 #include "markerregistry.h"
 #include "cursormodel.h"
 #include "plotrangemodel.h"
+#include "units/unitconverter.h"
 
 #include <GeographicLib/LocalCartesian.hpp>
 #include <boost/geometry.hpp>
@@ -687,67 +688,67 @@ void MainWindow::registerBuiltInPlots()
     // use the exact vector you already have…
     QVector<PlotValue> defaults = {
         // Category: GNSS
-        {"GNSS", "Elevation", "m", Qt::black, "GNSS", "z"},
-        {"GNSS", "Horizontal speed", "m/s", Qt::red, "GNSS", "velH"},
-        {"GNSS", "Vertical speed", "m/s", Qt::green, "GNSS", "velD"},
-        {"GNSS", "Total speed", "m/s", Qt::blue, "GNSS", "vel"},
-        {"GNSS", "Vertical acceleration", "m/s^2", Qt::green, "GNSS", "accD"},
-        {"GNSS", "Horizontal accuracy", "m", Qt::darkRed, "GNSS", "hAcc"},
-        {"GNSS", "Vertical accuracy", "m", Qt::darkGreen, "GNSS", "vAcc"},
-        {"GNSS", "Speed accuracy", "m/s", Qt::darkBlue, "GNSS", "sAcc"},
-        {"GNSS", "Number of satellites", "", Qt::darkMagenta, "GNSS", "numSV"},
+        {"GNSS", "Elevation", "m", Qt::black, "GNSS", "z", "altitude"},
+        {"GNSS", "Horizontal speed", "m/s", Qt::red, "GNSS", "velH", "speed"},
+        {"GNSS", "Vertical speed", "m/s", Qt::green, "GNSS", "velD", "vertical_speed"},
+        {"GNSS", "Total speed", "m/s", Qt::blue, "GNSS", "vel", "speed"},
+        {"GNSS", "Vertical acceleration", "m/s^2", Qt::green, "GNSS", "accD", "acceleration"},
+        {"GNSS", "Horizontal accuracy", "m", Qt::darkRed, "GNSS", "hAcc", "distance"},
+        {"GNSS", "Vertical accuracy", "m", Qt::darkGreen, "GNSS", "vAcc", "distance"},
+        {"GNSS", "Speed accuracy", "m/s", Qt::darkBlue, "GNSS", "sAcc", "speed"},
+        {"GNSS", "Number of satellites", "", Qt::darkMagenta, "GNSS", "numSV", "count"},
 
         // Category: IMU
-        {"IMU", "Acceleration X", "g", QColor::fromHsl(360 - group_a, 255, 128), "IMU", "ax"},
-        {"IMU", "Acceleration Y", "g", QColor::fromHsl(0, 255, 128), "IMU", "ay"},
-        {"IMU", "Acceleration Z", "g", QColor::fromHsl(group_a, 255, 128), "IMU", "az"},
-        {"IMU", "Total acceleration", "g", QColor::fromHsl(0, 255, 128), "IMU", "aTotal"},
+        {"IMU", "Acceleration X", "g", QColor::fromHsl(360 - group_a, 255, 128), "IMU", "ax", "acceleration"},
+        {"IMU", "Acceleration Y", "g", QColor::fromHsl(0, 255, 128), "IMU", "ay", "acceleration"},
+        {"IMU", "Acceleration Z", "g", QColor::fromHsl(group_a, 255, 128), "IMU", "az", "acceleration"},
+        {"IMU", "Total acceleration", "g", QColor::fromHsl(0, 255, 128), "IMU", "aTotal", "acceleration"},
 
-        {"IMU", "Rotation X", "deg/s", QColor::fromHsl(120 - group_a, 255, 128), "IMU", "wx"},
-        {"IMU", "Rotation Y", "deg/s", QColor::fromHsl(120, 255, 128), "IMU", "wy"},
-        {"IMU", "Rotation Z", "deg/s", QColor::fromHsl(120 + group_a, 255, 128), "IMU", "wz"},
-        {"IMU", "Total rotation", "deg/s", QColor::fromHsl(120, 255, 128), "IMU", "wTotal"},
+        {"IMU", "Rotation X", "deg/s", QColor::fromHsl(120 - group_a, 255, 128), "IMU", "wx", "rotation"},
+        {"IMU", "Rotation Y", "deg/s", QColor::fromHsl(120, 255, 128), "IMU", "wy", "rotation"},
+        {"IMU", "Rotation Z", "deg/s", QColor::fromHsl(120 + group_a, 255, 128), "IMU", "wz", "rotation"},
+        {"IMU", "Total rotation", "deg/s", QColor::fromHsl(120, 255, 128), "IMU", "wTotal", "rotation"},
 
-        {"IMU", "Temperature", "°C", QColor::fromHsl(45, 255, 128), "IMU", "temperature"},
+        {"IMU", "Temperature", QString::fromUtf8("\302\260C"), QColor::fromHsl(45, 255, 128), "IMU", "temperature", "temperature"},
 
         // Category: Magnetometer
-        {"Magnetometer", "Magnetic field X", "gauss", QColor::fromHsl(240 - group_a, 255, 128), "MAG", "x"},
-        {"Magnetometer", "Magnetic field Y", "gauss", QColor::fromHsl(240, 255, 128), "MAG", "y"},
-        {"Magnetometer", "Magnetic field Z", "gauss", QColor::fromHsl(240 + group_a, 255, 128), "MAG", "z"},
-        {"Magnetometer", "Total magnetic field", "gauss", QColor::fromHsl(240, 255, 128), "MAG", "total"},
+        {"Magnetometer", "Magnetic field X", "gauss", QColor::fromHsl(240 - group_a, 255, 128), "MAG", "x", "magnetic_field"},
+        {"Magnetometer", "Magnetic field Y", "gauss", QColor::fromHsl(240, 255, 128), "MAG", "y", "magnetic_field"},
+        {"Magnetometer", "Magnetic field Z", "gauss", QColor::fromHsl(240 + group_a, 255, 128), "MAG", "z", "magnetic_field"},
+        {"Magnetometer", "Total magnetic field", "gauss", QColor::fromHsl(240, 255, 128), "MAG", "total", "magnetic_field"},
 
-        {"Magnetometer", "Temperature", "°C", QColor::fromHsl(135, 255, 128), "MAG", "temperature"},
+        {"Magnetometer", "Temperature", QString::fromUtf8("\302\260C"), QColor::fromHsl(135, 255, 128), "MAG", "temperature", "temperature"},
 
         // Category: Barometer
-        {"Barometer", "Air pressure", "Pa", QColor::fromHsl(0, 0, 64), "BARO", "pressure"},
-        {"Barometer", "Temperature", "°C", QColor::fromHsl(225, 255, 128), "BARO", "temperature"},
+        {"Barometer", "Air pressure", "Pa", QColor::fromHsl(0, 0, 64), "BARO", "pressure", "pressure"},
+        {"Barometer", "Temperature", QString::fromUtf8("\302\260C"), QColor::fromHsl(225, 255, 128), "BARO", "temperature", "temperature"},
 
         // Category: Humidity
-        {"Humidity", "Humidity", "%", QColor::fromHsl(0, 0, 128), "HUM", "humidity"},
-        {"Humidity", "Temperature", "°C", QColor::fromHsl(315, 255, 128), "HUM", "temperature"},
+        {"Humidity", "Humidity", "%", QColor::fromHsl(0, 0, 128), "HUM", "humidity", "percentage"},
+        {"Humidity", "Temperature", QString::fromUtf8("\302\260C"), QColor::fromHsl(315, 255, 128), "HUM", "temperature", "temperature"},
 
         // Category: Battery
-        {"Battery", "Battery voltage", "V", QColor::fromHsl(30, 255, 128), "VBAT", "voltage"},
+        {"Battery", "Battery voltage", "V", QColor::fromHsl(30, 255, 128), "VBAT", "voltage", "voltage"},
 
         // Category: GNSS time
-        {"GNSS time", "Time of week", "s", QColor::fromHsl(0, 0, 64), "TIME", "tow"},
-        {"GNSS time", "Week number", "", QColor::fromHsl(0, 0, 128), "TIME", "week"},
+        {"GNSS time", "Time of week", "s", QColor::fromHsl(0, 0, 64), "TIME", "tow", "time"},
+        {"GNSS time", "Week number", "", QColor::fromHsl(0, 0, 128), "TIME", "week", "count"},
 
         // Category: Sensor fusion
-        {"Sensor fusion", "North position", "m", QColor::fromHsl(240 - group_a, 255, 128), SessionKeys::ImuGnssEkf, "posN"},
-        {"Sensor fusion", "East position", "m", QColor::fromHsl(240, 255, 128), SessionKeys::ImuGnssEkf, "posE"},
-        {"Sensor fusion", "Down position", "m", QColor::fromHsl(240 + group_a, 255, 128), SessionKeys::ImuGnssEkf, "posD"},
+        {"Sensor fusion", "North position", "m", QColor::fromHsl(240 - group_a, 255, 128), SessionKeys::ImuGnssEkf, "posN", "distance"},
+        {"Sensor fusion", "East position", "m", QColor::fromHsl(240, 255, 128), SessionKeys::ImuGnssEkf, "posE", "distance"},
+        {"Sensor fusion", "Down position", "m", QColor::fromHsl(240 + group_a, 255, 128), SessionKeys::ImuGnssEkf, "posD", "distance"},
 
-        {"Sensor fusion", "North velocity", "m/s", QColor::fromHsl(180 - group_a, 255, 128), SessionKeys::ImuGnssEkf, "velN"},
-        {"Sensor fusion", "East velocity", "m/s", QColor::fromHsl(180, 255, 128), SessionKeys::ImuGnssEkf, "velE"},
-        {"Sensor fusion", "Down velocity", "m/s", QColor::fromHsl(180 + group_a, 255, 128), SessionKeys::ImuGnssEkf, "velD"},
+        {"Sensor fusion", "North velocity", "m/s", QColor::fromHsl(180 - group_a, 255, 128), SessionKeys::ImuGnssEkf, "velN", "speed"},
+        {"Sensor fusion", "East velocity", "m/s", QColor::fromHsl(180, 255, 128), SessionKeys::ImuGnssEkf, "velE", "speed"},
+        {"Sensor fusion", "Down velocity", "m/s", QColor::fromHsl(180 + group_a, 255, 128), SessionKeys::ImuGnssEkf, "velD", "speed"},
 
-        {"Sensor fusion", "Horizontal acceleration", "g", Qt::magenta, SessionKeys::ImuGnssEkf, "accH"},
-        {"Sensor fusion", "Vertical acceleration", "g", Qt::cyan, SessionKeys::ImuGnssEkf, "accD"},
+        {"Sensor fusion", "Horizontal acceleration", "g", Qt::magenta, SessionKeys::ImuGnssEkf, "accH", "acceleration"},
+        {"Sensor fusion", "Vertical acceleration", "g", Qt::cyan, SessionKeys::ImuGnssEkf, "accD", "acceleration"},
 
-        {"Sensor fusion", "X rotation", "deg", QColor::fromHsl(120 - group_a, 255, 128), SessionKeys::ImuGnssEkf, "roll"},
-        {"Sensor fusion", "Y rotation", "deg", QColor::fromHsl(120, 255, 128), SessionKeys::ImuGnssEkf, "pitch"},
-        {"Sensor fusion", "Z rotation", "deg", QColor::fromHsl(120 + group_a, 255, 128), SessionKeys::ImuGnssEkf, "yaw"},
+        {"Sensor fusion", "X rotation", "deg", QColor::fromHsl(120 - group_a, 255, 128), SessionKeys::ImuGnssEkf, "roll", "angle"},
+        {"Sensor fusion", "Y rotation", "deg", QColor::fromHsl(120, 255, 128), SessionKeys::ImuGnssEkf, "pitch", "angle"},
+        {"Sensor fusion", "Z rotation", "deg", QColor::fromHsl(120 + group_a, 255, 128), SessionKeys::ImuGnssEkf, "yaw", "angle"},
     };
 
     for (auto &pv : defaults)
@@ -1777,6 +1778,14 @@ void MainWindow::initializePlotsMenu()
         // Add the action to the 'Plots' menu
         plotsMenu->addAction(action);
     }
+
+    // Add separator and units toggle at the end
+    plotsMenu->addSeparator();
+    QAction *toggleUnitsAction = new QAction(tr("Toggle Units"), this);
+    toggleUnitsAction->setShortcut(QKeySequence(Qt::Key_U));
+    connect(toggleUnitsAction, &QAction::triggered,
+            this, &MainWindow::on_action_ToggleUnits_triggered);
+    plotsMenu->addAction(toggleUnitsAction);
 }
 
 void MainWindow::initializeWindowMenu()
@@ -1862,6 +1871,26 @@ void MainWindow::setXAxisKey(const QString &key, const QString &label)
         return;
 
     m_plotViewSettingsModel->setXAxis(key, label);
+}
+
+void MainWindow::on_action_ToggleUnits_triggered()
+{
+    UnitConverter &converter = UnitConverter::instance();
+    QStringList systems = converter.availableSystems();
+
+    if (systems.isEmpty())
+        return;
+
+    // Find current system index
+    QString current = converter.currentSystem();
+    int currentIndex = systems.indexOf(current);
+
+    // Cycle to next system (wrap around)
+    int nextIndex = (currentIndex + 1) % systems.size();
+    QString nextSystem = systems.at(nextIndex);
+
+    // Apply the change
+    converter.setSystem(nextSystem);
 }
 
 } // namespace FlySight

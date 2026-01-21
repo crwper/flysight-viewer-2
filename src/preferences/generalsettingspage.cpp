@@ -2,6 +2,7 @@
 #include <QLabel>
 #include "generalsettingspage.h"
 #include "preferencesmanager.h"
+#include "units/unitconverter.h"
 
 namespace FlySight {
 
@@ -22,10 +23,10 @@ QGroupBox* GeneralSettingsPage::createUnitsGroup() {
     QHBoxLayout *unitsLayout = new QHBoxLayout(unitsGroup);
 
     unitsComboBox = new QComboBox(this);
-    unitsComboBox->addItems({"Metric", "Imperial"});
+    unitsComboBox->addItems(UnitConverter::instance().availableSystems());
 
-    // Initialize from settings
-    QString units = PreferencesManager::instance().getValue("general/units").toString();
+    // Initialize from current unit system (reflects changes via keyboard shortcut)
+    QString units = UnitConverter::instance().currentSystem();
     unitsComboBox->setCurrentText(units);
 
     unitsLayout->addWidget(unitsComboBox);
@@ -58,6 +59,9 @@ void GeneralSettingsPage::saveSettings() {
     PreferencesManager &prefs = PreferencesManager::instance();
     prefs.setValue("general/units", unitsComboBox->currentText());
     prefs.setValue("general/logbookFolder", logbookFolderLineEdit->text());
+
+    // Notify UnitConverter of the change
+    UnitConverter::instance().setSystem(unitsComboBox->currentText());
 }
 
 void GeneralSettingsPage::browseLogbookFolder() {

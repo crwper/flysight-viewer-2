@@ -28,7 +28,10 @@ private:
     // Private helper methods
     void importSimple(QTextStream& in, SessionData& sessionData, const QString &sensorName);
     void importFS2(QTextStream& in, SessionData& sessionData);
-    FS_Section importHeaderRow(const QString& line, QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData);
+    FS_Section importHeaderRow(const QString& line,
+                               QMap<QString, QVector<QString>>& columnOrder,
+                               QMap<QString, QVector<QString>>& columnUnits,
+                               SessionData& sessionData);
     void importDataRow(const QString& line, const QMap<QString, QVector<QString>>& columnOrder, SessionData& sessionData, QString key);
 
     // Helper function to extract device ID
