@@ -1778,6 +1778,13 @@ void MainWindow::initializePlotsMenu()
         plotsMenu->addAction(action);
     }
 
+    // Add Zoom to Extent action at the top of Tools menu
+    QAction *zoomToExtentAction = new QAction(tr("Zoom to Extent"), this);
+    zoomToExtentAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Z));
+    connect(zoomToExtentAction, &QAction::triggered, plotWidget, &PlotWidget::zoomToExtent);
+    ui->menu_Tools->insertAction(ui->action_Pan, zoomToExtentAction);
+    ui->menu_Tools->insertSeparator(ui->action_Pan);
+
     // Add separator and units toggle at the end
     ui->menu_Tools->addSeparator();
     QAction *toggleUnitsAction = new QAction(tr("Toggle Units"), this);

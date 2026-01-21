@@ -225,6 +225,35 @@ void PlotWidget::setXAxisRange(double min, double max)
     customPlot->xAxis->setRange(min, max);
 }
 
+void PlotWidget::zoomToExtent()
+{
+    double minX = std::numeric_limits<double>::max();
+    double maxX = std::numeric_limits<double>::lowest();
+    bool hasData = false;
+
+    const QVector<SessionData> &sessions = model->getAllSessions();
+
+    for (const SessionData &session : sessions) {
+        if (!session.isVisible())
+            continue;
+
+        QVector<double> xData = const_cast<SessionData &>(session)
+            .getMeasurement(QStringLiteral("GNSS"), m_xAxisKey);
+        if (xData.isEmpty())
+            continue;
+
+        auto [minIt, maxIt] = std::minmax_element(xData.begin(), xData.end());
+        minX = std::min(minX, *minIt);
+        maxX = std::max(maxX, *maxIt);
+        hasData = true;
+    }
+
+    if (!hasData || minX >= maxX)
+        return;
+
+    customPlot->xAxis->setRange(minX, maxX);
+}
+
 void PlotWidget::handleSessionsSelected(const QList<QString> &sessionIds)
 {
     // emit the sessionsSelected signal with the provided session IDs

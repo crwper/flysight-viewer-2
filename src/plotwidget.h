@@ -109,6 +109,7 @@ public slots:
     void updateMarkersOnly();
     void onXAxisRangeChanged(const QCPRange &newRange);
     void onXAxisKeyChanged(const QString &newKey, const QString &newLabel);
+    void zoomToExtent();
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
