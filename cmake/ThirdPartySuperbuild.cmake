@@ -31,13 +31,11 @@
 
 get_property(_is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 
-if(CMAKE_GENERATOR MATCHES "Visual Studio")
-    # Visual Studio generators need both -G and -A for proper configuration
-    set(_EP_GENERATOR_ARGS -G "${CMAKE_GENERATOR}" -A "${CMAKE_GENERATOR_PLATFORM}")
-else()
-    # Other generators (Ninja, Makefiles, etc.) only need -G
-    set(_EP_GENERATOR_ARGS -G "${CMAKE_GENERATOR}")
-endif()
+# Generator settings for ExternalProject
+# Note: We use CMAKE_GENERATOR and CMAKE_GENERATOR_PLATFORM as ExternalProject
+# parameters rather than passing -G/-A via CMAKE_ARGS. This avoids the
+# "Multiple -A options not allowed" error that occurs when both the parent
+# project's platform and an explicit -A argument are passed.
 
 # =============================================================================
 # Source Directory Variables
@@ -79,8 +77,9 @@ ExternalProject_Add(ext_oneTBB
     SOURCE_DIR "${ONETBB_SOURCE_DIR}"
     BINARY_DIR "${THIRD_PARTY_DIR}/oneTBB-build"
     INSTALL_DIR "${ONETBB_INSTALL_DIR}"
+    CMAKE_GENERATOR "${CMAKE_GENERATOR}"
+    CMAKE_GENERATOR_PLATFORM "${CMAKE_GENERATOR_PLATFORM}"
     CMAKE_ARGS
-        ${_EP_GENERATOR_ARGS}
         -DBUILD_SHARED_LIBS=ON
         -DTBB_TEST=OFF
         -DTBB_EXAMPLES=OFF
@@ -140,8 +139,9 @@ ExternalProject_Add(ext_GTSAM
     BINARY_DIR "${THIRD_PARTY_DIR}/gtsam-build"
     INSTALL_DIR "${GTSAM_INSTALL_DIR}"
     DEPENDS ext_oneTBB
+    CMAKE_GENERATOR "${CMAKE_GENERATOR}"
+    CMAKE_GENERATOR_PLATFORM "${CMAKE_GENERATOR_PLATFORM}"
     CMAKE_ARGS
-        ${_EP_GENERATOR_ARGS}
         -DGTSAM_INSTALL_GEOGRAPHICLIB=ON
         -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF
         -DGTSAM_BUILD_TESTS=OFF
@@ -182,8 +182,9 @@ ExternalProject_Add(ext_KDDockWidgets
     SOURCE_DIR "${KDDW_SOURCE_DIR}"
     BINARY_DIR "${KDDW_BINARY_DIR}"
     INSTALL_DIR "${KDDW_INSTALL_DIR}"
+    CMAKE_GENERATOR "${CMAKE_GENERATOR}"
+    CMAKE_GENERATOR_PLATFORM "${CMAKE_GENERATOR_PLATFORM}"
     CMAKE_ARGS
-        ${_EP_GENERATOR_ARGS}
         -DKDDockWidgets_QT6=ON
         -DKDDockWidgets_EXAMPLES=OFF
         -DKDDockWidgets_TESTS=OFF

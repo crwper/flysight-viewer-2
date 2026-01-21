@@ -42,11 +42,9 @@ secrets.h
 plugins/__pycache__/
 
 # Third party
-third-party/GeographicLib/build/
-third-party/GeographicLib-install/
-third-party/oneTBB/build/
+third-party/oneTBB-build/
 third-party/oneTBB-install/
-third-party/gtsam/build/
+third-party/gtsam-build/
 third-party/gtsam-install/
-third-party/KDDockWidgets/build/
+third-party/KDDockWidgets-build/
 third-party/KDDockWidgets-install/

@@ -13,12 +13,13 @@
 #include <vector>
 
 // --- FIX FOR GTSAM LINKING ERROR ---
-// GTSAM exports std::vector<size_t> (aka unsigned __int64) in its DLL.
-// Because mainwindow.cpp uses this type but doesn't include GTSAM headers,
-// MSVC generates a local copy, causing a collision (LNK2005).
-// This line forces the compiler to use the DLL version instead.
+// When GTSAM is built with TBB support, it uses tbb::tbb_allocator for its
+// FastVector types (including std::vector<size_t>). To avoid linker errors
+// (LNK2019) when this file uses std::vector<size_t> and indirectly pulls in
+// GTSAM's exported symbols, we must import the TBB-allocated version.
 #ifdef _MSC_VER
-template class __declspec(dllimport) std::vector<size_t>;
+#include <tbb/tbb_allocator.h>
+template class __declspec(dllimport) std::vector<size_t, tbb::tbb_allocator<size_t>>;
 #endif
 // -----------------------------------
 
