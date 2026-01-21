@@ -77,7 +77,7 @@ endforeach()
 
 ExternalProject_Add(ext_oneTBB
     SOURCE_DIR "${ONETBB_SOURCE_DIR}"
-    BINARY_DIR "${ONETBB_SOURCE_DIR}/build"
+    BINARY_DIR "${THIRD_PARTY_DIR}/oneTBB-build"
     INSTALL_DIR "${ONETBB_INSTALL_DIR}"
     CMAKE_ARGS
         ${_EP_GENERATOR_ARGS}
@@ -137,7 +137,7 @@ endif()
 
 ExternalProject_Add(ext_GTSAM
     SOURCE_DIR "${GTSAM_SOURCE_DIR}"
-    BINARY_DIR "${GTSAM_SOURCE_DIR}/build"
+    BINARY_DIR "${THIRD_PARTY_DIR}/gtsam-build"
     INSTALL_DIR "${GTSAM_INSTALL_DIR}"
     DEPENDS ext_oneTBB
     CMAKE_ARGS
@@ -214,13 +214,13 @@ ExternalProject_Add(ext_KDDockWidgets
 #
 
 add_custom_target(clean-oneTBB
-    COMMAND ${CMAKE_COMMAND} -E remove_directory "${ONETBB_SOURCE_DIR}/build"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${THIRD_PARTY_DIR}/oneTBB-build"
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${ONETBB_INSTALL_DIR}"
     COMMENT "Cleaning oneTBB build and install directories..."
 )
 
 add_custom_target(clean-GTSAM
-    COMMAND ${CMAKE_COMMAND} -E remove_directory "${GTSAM_SOURCE_DIR}/build"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${THIRD_PARTY_DIR}/gtsam-build"
     COMMAND ${CMAKE_COMMAND} -E remove_directory "${GTSAM_INSTALL_DIR}"
     COMMENT "Cleaning GTSAM build and install directories..."
 )

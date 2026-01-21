@@ -197,9 +197,9 @@ For a complete reset, manually delete the build and install directories:
 Remove-Item -Recurse -Force build
 
 # Remove third-party build artifacts
-Remove-Item -Recurse -Force third-party\oneTBB\build
+Remove-Item -Recurse -Force third-party\oneTBB-build
 Remove-Item -Recurse -Force third-party\oneTBB-install
-Remove-Item -Recurse -Force third-party\gtsam\build
+Remove-Item -Recurse -Force third-party\gtsam-build
 Remove-Item -Recurse -Force third-party\GTSAM-install
 Remove-Item -Recurse -Force third-party\KDDockWidgets-build
 Remove-Item -Recurse -Force third-party\KDDockWidgets-install
@@ -209,9 +209,9 @@ Remove-Item -Recurse -Force third-party\KDDockWidgets-install
 
 ```batch
 rmdir /s /q build
-rmdir /s /q third-party\oneTBB\build
+rmdir /s /q third-party\oneTBB-build
 rmdir /s /q third-party\oneTBB-install
-rmdir /s /q third-party\gtsam\build
+rmdir /s /q third-party\gtsam-build
 rmdir /s /q third-party\GTSAM-install
 rmdir /s /q third-party\KDDockWidgets-build
 rmdir /s /q third-party\KDDockWidgets-install
@@ -221,9 +221,9 @@ rmdir /s /q third-party\KDDockWidgets-install
 
 ```bash
 rm -rf build
-rm -rf third-party/oneTBB/build
+rm -rf third-party/oneTBB-build
 rm -rf third-party/oneTBB-install
-rm -rf third-party/gtsam/build
+rm -rf third-party/gtsam-build
 rm -rf third-party/GTSAM-install
 rm -rf third-party/KDDockWidgets-build
 rm -rf third-party/KDDockWidgets-install
@@ -233,8 +233,8 @@ rm -rf third-party/KDDockWidgets-install
 
 | Target | Description |
 |--------|-------------|
-| `clean-oneTBB` | Removes `third-party/oneTBB/build` and `third-party/oneTBB-install` |
-| `clean-GTSAM` | Removes `third-party/gtsam/build` and `third-party/GTSAM-install` |
+| `clean-oneTBB` | Removes `third-party/oneTBB-build` and `third-party/oneTBB-install` |
+| `clean-GTSAM` | Removes `third-party/gtsam-build` and `third-party/GTSAM-install` |
 | `clean-KDDockWidgets` | Removes `third-party/KDDockWidgets-build` and `third-party/KDDockWidgets-install` |
 | `clean-third-party` | Cleans all third-party components |
 | `clean-all` | Alias for `clean-third-party` (available when building from `third-party/`) |
