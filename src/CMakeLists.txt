@@ -279,23 +279,202 @@ endif()
 # ─────────────────────────────── install rules
 include(GNUInstallDirs)
 
+# Define cmake module directory for deployment scripts
+set(FLYSIGHT_CMAKE_DIR "${CMAKE_CURRENT_LIST_DIR}/../cmake")
+
+# On Windows, use a flat directory structure (all files in root)
+# On other platforms, use standard GNU directory layout
+if(WIN32)
+  set(FLYSIGHT_INSTALL_BINDIR ".")
+  set(FLYSIGHT_INSTALL_LIBDIR ".")
+else()
+  set(FLYSIGHT_INSTALL_BINDIR "${CMAKE_INSTALL_BINDIR}")
+  set(FLYSIGHT_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}")
+endif()
+
 install(TARGETS FlySightViewer
   BUNDLE  DESTINATION .
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+  LIBRARY DESTINATION ${FLYSIGHT_INSTALL_LIBDIR}
+  RUNTIME DESTINATION ${FLYSIGHT_INSTALL_BINDIR}
 )
 
 install(TARGETS flysight_cpp_bridge
-  LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+  LIBRARY DESTINATION ${FLYSIGHT_INSTALL_BINDIR}
+  RUNTIME DESTINATION ${FLYSIGHT_INSTALL_BINDIR}
 )
 
-install(DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/../python_src/"
-  DESTINATION python/Lib/site-packages
-  PATTERN "__pycache__" EXCLUDE
+# Install Python SDK files to site-packages
+# The flysight_plugin_sdk.py is in the plugins/ directory
+install(FILES "${CMAKE_CURRENT_LIST_DIR}/../plugins/flysight_plugin_sdk.py"
+  DESTINATION "python/Lib/site-packages"
 )
+
+# Create empty plugins directory for user plugins
+install(DIRECTORY DESTINATION "plugins")
+
+# ─────────────────────────────── Qt deployment (Qt 6.3+)
+# On all platforms with Qt 6, use the built-in deployment API to bundle Qt libraries
+if(QT_VERSION_MAJOR GREATER_EQUAL 6)
+  qt_generate_deploy_app_script(
+    TARGET FlySightViewer
+    OUTPUT_SCRIPT deploy_script
+    NO_UNSUPPORTED_PLATFORM_ERROR
+  )
+  install(SCRIPT ${deploy_script})
+endif()
+
+# ─────────────────────────────── Windows Deployment
+if(WIN32)
+  # Bundle Python embeddable package
+  include("${FLYSIGHT_CMAKE_DIR}/BundlePythonWindows.cmake")
+
+  # Deploy third-party DLLs (TBB, GTSAM, KDDockWidgets, Boost)
+  include("${FLYSIGHT_CMAKE_DIR}/DeployThirdPartyWindows.cmake")
+endif()
+
+# ─────────────────────────────── macOS App Bundle Deployment
+if(APPLE)
+  # Set RPATH for the executable to find libraries in Frameworks
+  set_target_properties(FlySightViewer PROPERTIES
+    BUILD_RPATH "@executable_path/../Frameworks"
+    INSTALL_RPATH "@executable_path/../Frameworks"
+    BUILD_WITH_INSTALL_RPATH TRUE
+    MACOSX_RPATH TRUE
+  )
+
+  # Set RPATH for the pybind11 module
+  set_target_properties(flysight_cpp_bridge PROPERTIES
+    BUILD_RPATH "@loader_path/../Frameworks;@executable_path/../Frameworks"
+    INSTALL_RPATH "@loader_path/../Frameworks;@executable_path/../Frameworks"
+    BUILD_WITH_INSTALL_RPATH TRUE
+    MACOSX_RPATH TRUE
+  )
+
+  # Set app bundle properties
+  set_target_properties(FlySightViewer PROPERTIES
+    MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_GUI_IDENTIFIER "com.flysight.viewer"
+    MACOSX_BUNDLE_BUNDLE_NAME "FlySight Viewer"
+    MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in"
+  )
+
+  # Include macOS-specific deployment modules
+  include("${FLYSIGHT_CMAKE_DIR}/BundlePythonMacOS.cmake" OPTIONAL)
+  if(COMMAND bundle_python_macos)
+    bundle_python_macos(TARGET FlySightViewer)
+  endif()
+
+  # Deploy third-party libraries (TBB, GTSAM, KDDockWidgets)
+  include("${FLYSIGHT_CMAKE_DIR}/DeployThirdPartyMacOS.cmake" OPTIONAL)
+  if(COMMAND deploy_third_party_macos)
+    deploy_third_party_macos(
+      TARGET FlySightViewer
+      TBB_ROOT "${TBB_ROOT}"
+      GTSAM_ROOT "${GTSAM_ROOT}"
+      KDDW_ROOT "${KDDW_ROOT}"
+    )
+  endif()
+
+  # Run rpath fixing script after installation
+  install(CODE "
+    message(STATUS \"Fixing macOS rpaths...\")
+    set(FIX_SCRIPT \"${FLYSIGHT_CMAKE_DIR}/fix_macos_rpaths.sh\")
+    if(EXISTS \"\${FIX_SCRIPT}\")
+      execute_process(
+        COMMAND chmod +x \"\${FIX_SCRIPT}\"
+        COMMAND bash \"\${FIX_SCRIPT}\" \"\${CMAKE_INSTALL_PREFIX}/FlySightViewer.app\"
+        RESULT_VARIABLE _fix_result
+      )
+      if(NOT _fix_result EQUAL 0)
+        message(WARNING \"rpath fixing script returned: \${_fix_result}\")
+      endif()
+    else()
+      message(STATUS \"Skipping rpath fix (script not found)\")
+    endif()
+  " COMPONENT Runtime)
+endif()
+
+# ─────────────────────────────── Linux AppImage Deployment
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  # Set RPATH for the executable to find libraries relative to its location
+  set_target_properties(FlySightViewer PROPERTIES
+    INSTALL_RPATH "$ORIGIN/../lib"
+    BUILD_WITH_INSTALL_RPATH FALSE
+  )
+
+  # Set RPATH for the pybind11 module
+  set_target_properties(flysight_cpp_bridge PROPERTIES
+    INSTALL_RPATH "$ORIGIN/../lib"
+    BUILD_WITH_INSTALL_RPATH FALSE
+  )
+
+  # AppDir structure creation
+  include("${FLYSIGHT_CMAKE_DIR}/CreateAppDir.cmake" OPTIONAL)
+
+  # Python bundling for Linux
+  include("${FLYSIGHT_CMAKE_DIR}/BundlePythonLinux.cmake" OPTIONAL)
+
+  # Third-party library deployment
+  include("${FLYSIGHT_CMAKE_DIR}/DeployThirdPartyLinux.cmake" OPTIONAL)
+
+  # linuxdeployqt integration (optional enhancement)
+  include("${FLYSIGHT_CMAKE_DIR}/RunLinuxDeployQt.cmake" OPTIONAL)
+
+  # AppImage generation
+  include("${FLYSIGHT_CMAKE_DIR}/CreateAppImage.cmake" OPTIONAL)
+endif()
 
 # ─────────────────────────────── packaging
-set(CPACK_GENERATOR          ZIP)
-set(CPACK_PACKAGE_FILE_NAME  "FlySightViewer-${PROJECT_VERSION}")
+# Determine architecture for package filename
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+  set(FLYSIGHT_ARCH "x64")
+else()
+  set(FLYSIGHT_ARCH "x86")
+endif()
+
+# Determine platform name for package filename
+if(WIN32)
+  set(FLYSIGHT_PLATFORM "Windows")
+elseif(APPLE)
+  set(FLYSIGHT_PLATFORM "macOS")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(FLYSIGHT_PLATFORM "Linux")
+else()
+  set(FLYSIGHT_PLATFORM "${CMAKE_SYSTEM_NAME}")
+endif()
+
+# Platform-specific generator selection
+if(APPLE)
+  # Use DMG on macOS for a professional installer experience
+  set(CPACK_GENERATOR DragNDrop)
+  set(CPACK_DMG_FORMAT UDZO)  # Compressed DMG
+  set(CPACK_DMG_VOLUME_NAME "FlySightViewer ${PROJECT_VERSION}")
+  # Don't include top-level directory for DMG (app bundle goes directly in DMG)
+  set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
+else()
+  # Use ZIP on Windows and Linux (Linux AppImage handled separately)
+  set(CPACK_GENERATOR ZIP)
+  set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY ON)
+endif()
+
+set(CPACK_PACKAGE_NAME "FlySightViewer")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_FILE_NAME "FlySightViewer-${PROJECT_VERSION}-${FLYSIGHT_PLATFORM}-${FLYSIGHT_ARCH}")
+set(CPACK_PACKAGE_VENDOR "FlySight")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "FlySight GPS Data Viewer")
+
+# Include LICENSE file if it exists
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../LICENSE")
+  set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_LIST_DIR}/../LICENSE")
+endif()
+
+# macOS-specific app bundle settings
+if(APPLE)
+  set(CPACK_BUNDLE_NAME "FlySightViewer")
+  set(CPACK_BUNDLE_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist")
+  set(CPACK_BUNDLE_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/FlySightViewer.icns")
+endif()
+
 include(CPack)

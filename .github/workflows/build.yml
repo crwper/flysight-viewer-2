@@ -1,0 +1,384 @@
+# =============================================================================
+# FlySight Viewer - GitHub Actions CI/CD Workflow
+# =============================================================================
+#
+# This workflow builds FlySight Viewer on Windows, macOS (ARM64), and Linux,
+# creating platform-specific packages (ZIP, DMG, AppImage) for distribution.
+#
+# Triggers:
+# - Push to any branch
+# - Pull requests to any branch
+# - Manual workflow dispatch
+# - Tags starting with 'v' trigger release creation
+#
+# =============================================================================
+
+name: Build
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+# Cancel redundant builds for the same branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Qt version to use across all platforms
+  QT_VERSION: '6.7.3'
+  # Boost version for Windows (match existing local development setup)
+  BOOST_VERSION: '1.87.0'
+  BOOST_VERSION_UNDERSCORE: '1_87_0'
+
+jobs:
+  # ===========================================================================
+  # Build Job - Runs on all three platforms
+  # ===========================================================================
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            platform: Windows
+            arch: x64
+            artifact_ext: zip
+          - os: macos-14
+            platform: macOS
+            arch: arm64
+            artifact_ext: dmg
+          - os: ubuntu-22.04
+            platform: Linux
+            arch: x86_64
+            artifact_ext: AppImage
+
+    steps:
+      # =========================================================================
+      # Task 4.2: Checkout and Submodule Initialization
+      # =========================================================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0  # Full history for version tags
+
+      # =========================================================================
+      # Task 4.11: Cache Third-Party Dependencies
+      # =========================================================================
+      - name: Generate cache key
+        id: cache-key
+        shell: bash
+        run: |
+          # Create hash from CMake files and submodule definitions
+          HASH=$(cat cmake/ThirdPartySuperbuild.cmake .gitmodules | sha256sum | cut -d' ' -f1)
+          echo "hash=${HASH:0:16}" >> $GITHUB_OUTPUT
+
+      - name: Cache third-party dependencies
+        id: cache-third-party
+        uses: actions/cache@v4
+        with:
+          path: |
+            third-party/oneTBB-install
+            third-party/GTSAM-install
+            third-party/KDDockWidgets-install
+          key: third-party-${{ matrix.os }}-${{ steps.cache-key.outputs.hash }}
+          restore-keys: |
+            third-party-${{ matrix.os }}-
+
+      # =========================================================================
+      # Task 4.3: Platform-Specific Dependency Installation - Windows
+      # =========================================================================
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Ninja (Windows)
+        if: runner.os == 'Windows'
+        uses: turtlesec-no/get-ninja@main
+
+      # =========================================================================
+      # Task 4.5: Configure Boost Installation for Windows
+      # =========================================================================
+      - name: Install Boost (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $BOOST_ROOT = "C:\hostedtoolcache\windows\Boost\$env:BOOST_VERSION\x64"
+
+          # Download prebuilt Boost binaries for MSVC 14.3 (VS 2022)
+          $BOOST_URL = "https://sourceforge.net/projects/boost/files/boost-binaries/$env:BOOST_VERSION/boost_$env:BOOST_VERSION_UNDERSCORE-msvc-14.3-64.exe/download"
+
+          Write-Host "Downloading Boost from: $BOOST_URL"
+
+          # Create WebClient with appropriate settings
+          $wc = New-Object System.Net.WebClient
+          $wc.Headers.Add("User-Agent", "Other")
+          $wc.DownloadFile($BOOST_URL, "$env:TEMP\boost.exe")
+
+          Write-Host "Installing Boost to: $BOOST_ROOT"
+          Start-Process -Wait -FilePath "$env:TEMP\boost.exe" -ArgumentList "/SILENT","/SP-","/SUPPRESSMSGBOXES","/DIR=$BOOST_ROOT"
+
+          # Export environment variables for subsequent steps
+          echo "BOOST_ROOT=$BOOST_ROOT" >> $env:GITHUB_ENV
+          echo "BOOST_LIBRARYDIR=$BOOST_ROOT\lib64-msvc-14.3" >> $env:GITHUB_ENV
+
+          Write-Host "Boost installed successfully"
+          Get-ChildItem $BOOST_ROOT -Directory | Select-Object -First 5
+
+      # =========================================================================
+      # Task 4.3: Platform-Specific Dependency Installation - macOS
+      # =========================================================================
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ninja boost
+
+      # =========================================================================
+      # Task 4.3: Platform-Specific Dependency Installation - Linux
+      # =========================================================================
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build \
+            libboost-all-dev \
+            libxcb-cursor0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-shape0 \
+            libxcb-xinerama0 \
+            libxcb-xkb1 \
+            libxkbcommon-x11-0 \
+            libfuse2 \
+            libgl1-mesa-dev \
+            libegl1-mesa-dev
+
+      # =========================================================================
+      # Task 4.4: Configure Qt Installation
+      # =========================================================================
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtlocation qtpositioning qtmultimedia
+          cache: true
+
+      # =========================================================================
+      # Task 4.6: Configure CMake Build Steps - Third Party
+      # =========================================================================
+      - name: Configure third-party superbuild
+        if: steps.cache-third-party.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          cmake -G Ninja -B build-third-party -S . \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DFLYSIGHT_BUILD_THIRD_PARTY=ON \
+            -DFLYSIGHT_THIRD_PARTY_ONLY=ON
+
+      - name: Build third-party dependencies
+        if: steps.cache-third-party.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          cmake --build build-third-party --parallel
+
+      # =========================================================================
+      # Task 4.6: Configure CMake Build Steps - Main Application
+      # =========================================================================
+      - name: Configure main application
+        shell: bash
+        run: |
+          # Configure the main application build
+          # Use src/ directory directly since we have pre-built third-party deps
+          cmake -G Ninja -B build -S src \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=build/install \
+            -DTHIRD_PARTY_DIR="${GITHUB_WORKSPACE}/third-party" \
+            -DGTSAM_ROOT="${GITHUB_WORKSPACE}/third-party/GTSAM-install" \
+            -DTBB_ROOT="${GITHUB_WORKSPACE}/third-party/oneTBB-install" \
+            -DKDDW_ROOT="${GITHUB_WORKSPACE}/third-party/KDDockWidgets-install"
+
+      - name: Build main application
+        shell: bash
+        run: |
+          cmake --build build --parallel --config Release
+
+      # =========================================================================
+      # Task 4.7: Implement Installation and Deployment Steps
+      # =========================================================================
+      - name: Install application
+        shell: bash
+        run: |
+          cmake --install build --config Release
+
+      - name: Verify deployment output (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "=== Verifying Windows deployment ==="
+          ls -la build/install/ || true
+          ls -la build/install/python/ || true
+          echo "Checking for executable..."
+          test -f build/install/FlySightViewer.exe && echo "FlySightViewer.exe found" || echo "WARNING: FlySightViewer.exe not found"
+
+      - name: Verify deployment output (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          echo "=== Verifying macOS deployment ==="
+          ls -la build/install/ || true
+          ls -la build/install/FlySightViewer.app/Contents/MacOS/ || true
+          ls -la build/install/FlySightViewer.app/Contents/Frameworks/ || true
+          echo "Checking for app bundle..."
+          test -d build/install/FlySightViewer.app && echo "FlySightViewer.app found" || echo "WARNING: FlySightViewer.app not found"
+
+      - name: Verify deployment output (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          echo "=== Verifying Linux deployment ==="
+          ls -la build/install/ || true
+          ls -la build/install/FlySightViewer.AppDir/ || true
+          ls -la build/install/FlySightViewer.AppDir/usr/bin/ || true
+          echo "Checking for AppDir..."
+          test -d build/install/FlySightViewer.AppDir && echo "FlySightViewer.AppDir found" || echo "WARNING: FlySightViewer.AppDir not found"
+
+      # =========================================================================
+      # Task 4.7: Linux AppImage Creation
+      # =========================================================================
+      - name: Create AppImage (Linux)
+        if: runner.os == 'Linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: |
+          echo "=== Creating AppImage ==="
+
+          # Run the appimage target if available, otherwise create manually
+          if cmake --build build --target appimage 2>/dev/null; then
+            echo "AppImage created via CMake target"
+          else
+            echo "Creating AppImage manually..."
+
+            # Download appimagetool
+            APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+            wget -q -O appimagetool "$APPIMAGETOOL_URL"
+            chmod +x appimagetool
+
+            # Create AppImage
+            APPDIR="build/install/FlySightViewer.AppDir"
+            if [ -d "$APPDIR" ]; then
+              ./appimagetool "$APPDIR" "FlySightViewer-${{ matrix.arch }}.AppImage"
+              mv "FlySightViewer-${{ matrix.arch }}.AppImage" build/
+            else
+              echo "ERROR: AppDir not found at $APPDIR"
+              exit 1
+            fi
+          fi
+
+          echo "AppImage creation complete"
+          ls -la build/*.AppImage || true
+
+      # =========================================================================
+      # Task 4.8: Implement Artifact Packaging
+      # =========================================================================
+      - name: Package with CPack (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        working-directory: build
+        run: |
+          cpack -G ZIP -C Release
+          echo "=== CPack output ==="
+          ls -la *.zip || true
+
+      - name: Package with CPack (macOS)
+        if: runner.os == 'macOS'
+        working-directory: build
+        run: |
+          cpack -G DragNDrop -C Release
+          echo "=== CPack output ==="
+          ls -la *.dmg || true
+
+      # =========================================================================
+      # Task 4.8: Collect Artifacts
+      # =========================================================================
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            cp build/*.zip artifacts/ 2>/dev/null || true
+            # Fallback: create zip manually if CPack didn't work
+            if [ ! -f artifacts/*.zip ]; then
+              cd build/install && zip -r ../../artifacts/FlySightViewer-${{ matrix.platform }}-${{ matrix.arch }}.zip . && cd ../..
+            fi
+          elif [ "${{ runner.os }}" == "macOS" ]; then
+            cp build/*.dmg artifacts/ 2>/dev/null || true
+            # Fallback: create dmg manually if CPack didn't work
+            if [ ! -f artifacts/*.dmg ]; then
+              hdiutil create -volname "FlySightViewer" -srcfolder build/install/FlySightViewer.app -ov -format UDZO artifacts/FlySightViewer-${{ matrix.platform }}-${{ matrix.arch }}.dmg 2>/dev/null || true
+            fi
+          elif [ "${{ runner.os }}" == "Linux" ]; then
+            cp build/*.AppImage artifacts/ 2>/dev/null || true
+          fi
+
+          echo "=== Collected artifacts ==="
+          ls -la artifacts/
+
+      # =========================================================================
+      # Task 4.9: Implement Artifact Upload
+      # =========================================================================
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlySightViewer-${{ matrix.platform }}-${{ matrix.arch }}
+          path: artifacts/*
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ===========================================================================
+  # Task 4.10: Release Publishing Job
+  # ===========================================================================
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: |
+          echo "=== Downloaded artifacts ==="
+          find release-artifacts -type f -ls
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            release-artifacts/*
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

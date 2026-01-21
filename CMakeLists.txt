@@ -126,23 +126,37 @@ endif()
 if(FLYSIGHT_BUILD_APP)
     message(STATUS "Application build enabled")
 
-    # Placeholder for ExternalProject_Add call
-    # This will be implemented when the main application integration is ready.
-    # The structure will be similar to:
-    #
-    # ExternalProject_Add(FlySightViewer
-    #     SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src"
-    #     CMAKE_ARGS
-    #         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-    #         -DTHIRD_PARTY_DIR=${THIRD_PARTY_DIR}
-    #         -DGTSAM_ROOT=${GTSAM_INSTALL_DIR}
-    #         -DTBB_ROOT=${ONETBB_INSTALL_DIR}
-    #         -DKDDW_ROOT=${KDDW_INSTALL_DIR}
-    #     INSTALL_COMMAND ""
-    #     DEPENDS ${THIRD_PARTY_TARGETS}
-    # )
-    #
-    message(STATUS "Note: Application ExternalProject will be configured in a future phase")
+    # Collect third-party targets for DEPENDS clause
+    set(THIRD_PARTY_TARGETS "")
+    if(FLYSIGHT_BUILD_THIRD_PARTY)
+        if(TARGET ext_oneTBB)
+            list(APPEND THIRD_PARTY_TARGETS ext_oneTBB)
+        endif()
+        if(TARGET ext_GTSAM)
+            list(APPEND THIRD_PARTY_TARGETS ext_GTSAM)
+        endif()
+        if(TARGET ext_KDDockWidgets)
+            list(APPEND THIRD_PARTY_TARGETS ext_KDDockWidgets)
+        endif()
+    endif()
+
+    # Build the main FlySight Viewer application
+    ExternalProject_Add(FlySightViewer
+        SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        BINARY_DIR "${CMAKE_BINARY_DIR}/FlySightViewer-build"
+        INSTALL_DIR "${CMAKE_BINARY_DIR}/install"
+        CMAKE_GENERATOR "${CMAKE_GENERATOR}"
+        CMAKE_GENERATOR_PLATFORM "${CMAKE_GENERATOR_PLATFORM}"
+        CMAKE_ARGS
+            -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+            -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+            -DTHIRD_PARTY_DIR=${THIRD_PARTY_DIR}
+            -DGTSAM_ROOT=${GTSAM_INSTALL_DIR}
+            -DTBB_ROOT=${ONETBB_INSTALL_DIR}
+            -DKDDW_ROOT=${KDDW_INSTALL_DIR}
+        BUILD_ALWAYS TRUE
+        DEPENDS ${THIRD_PARTY_TARGETS}
+    )
 else()
     message(STATUS "Application build disabled")
 endif()

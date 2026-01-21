@@ -72,9 +72,40 @@ void PluginHost::initialise(const QString& pluginDir)
     if (m_interp)                       // already initialised
         return;
 
-    const QString appDir   = QCoreApplication::applicationDirPath();
-    const QString embedDir = QDir(appDir).filePath(QStringLiteral("python"));
-    const bool    useEmbed = QDir(embedDir).exists();
+    const QString appDir = QCoreApplication::applicationDirPath();
+
+    /* Determine embedded Python location based on platform:
+     * - Windows:        <exe>/python
+     * - Linux AppImage: <exe>/../share/python (appDir is AppDir/usr/bin)
+     * - Linux dev:      <exe>/python
+     * - macOS bundle:   Contents/Resources/python (appDir is Contents/MacOS)
+     * - macOS dev:      <exe>/python
+     */
+    QString embedDir;
+#ifdef Q_OS_MACOS
+    // On macOS, check for bundle structure first
+    const QString bundlePythonDir = QDir(appDir).filePath(QStringLiteral("../Resources/python"));
+    if (QDir(bundlePythonDir).exists()) {
+        embedDir = QDir(bundlePythonDir).canonicalPath();
+    } else {
+        // Fall back to same-directory layout for development builds
+        embedDir = QDir(appDir).filePath(QStringLiteral("python"));
+    }
+#elif defined(Q_OS_LINUX)
+    // On Linux AppImage, Python is in usr/share/python relative to usr/bin
+    const QString appImagePythonDir = QDir(appDir).filePath(QStringLiteral("../share/python"));
+    if (QDir(appImagePythonDir).exists()) {
+        embedDir = QDir(appImagePythonDir).canonicalPath();
+    } else {
+        // Fall back to same-directory layout for development builds
+        embedDir = QDir(appDir).filePath(QStringLiteral("python"));
+    }
+#else
+    // Windows: Python is in <exe>/python
+    embedDir = QDir(appDir).filePath(QStringLiteral("python"));
+#endif
+
+    const bool useEmbed = QDir(embedDir).exists();
 
     /* ------------------------------------------------------------------ */
     /* 1. Boot CPython                                                    */
@@ -85,13 +116,9 @@ void PluginHost::initialise(const QString& pluginDir)
             PyConfig cfg;
             PyConfig_InitPythonConfig(&cfg);          // "normal" configuration
 
-#ifdef _WIN32
+            // PyConfig_SetString requires wide strings (wchar_t*) on all platforms
             const std::wstring wHome = embedDir.toStdWString();
             PyStatus st = PyConfig_SetString(&cfg, &cfg.home, wHome.c_str());
-#else
-            const std::string  home  = embedDir.toStdString();
-            PyStatus st = PyConfig_SetString(&cfg, &cfg.home, home.c_str());
-#endif
             if (PyStatus_Exception(st)) {
                 qCritical().noquote() << "PyConfig_SetString failed:"
                                       << pyStatusToString(st);
@@ -99,19 +126,37 @@ void PluginHost::initialise(const QString& pluginDir)
                 return;
             }
 
-            /* Add runtime-local import paths */
+            /* Add runtime-local import paths
+             * Note: PyWideStringList_Append requires wide strings on all platforms.
+             * PyStringList_Append does not exist in Python C API.
+             *
+             * Directory structures:
+             * - Windows: <exe>/python/pythonXY.zip, <exe>/python/Lib/site-packages
+             * - macOS/Linux: <python>/lib/python3.XX/, <python>/lib/python3.XX/site-packages
+             */
 #ifdef _WIN32
-            const std::wstring zip  = wHome + L"\\python313.zip";
-            const std::wstring site = wHome + L"\\site-packages";
+            // Build the python zip filename dynamically from the detected version
+            // The embeddable package uses pythonXY.zip naming (e.g., python313.zip)
+            const std::wstring pyVersion = std::to_wstring(PY_MAJOR_VERSION) + std::to_wstring(PY_MINOR_VERSION);
+            const std::wstring zip  = wHome + L"\\python" + pyVersion + L".zip";
+            // Site-packages is in Lib/site-packages for the embeddable package
+            const std::wstring site = wHome + L"\\Lib\\site-packages";
             PyWideStringList_Append(&cfg.module_search_paths, wHome.c_str());
             PyWideStringList_Append(&cfg.module_search_paths, zip.c_str());
             PyWideStringList_Append(&cfg.module_search_paths, site.c_str());
 #else
-            const std::string zip  = home + "/python313.zip";
-            const std::string site = home + "/site-packages";
-            PyStringList_Append(&cfg.module_search_paths, home.c_str());
-            PyStringList_Append(&cfg.module_search_paths, zip.c_str());
-            PyStringList_Append(&cfg.module_search_paths, site.c_str());
+            // macOS bundle / Linux AppImage: Python stdlib in lib/python3.XX/
+            // Build the path dynamically from the detected Python version
+            const std::wstring pyVersionStr = L"python" + std::to_wstring(PY_MAJOR_VERSION) + L"." + std::to_wstring(PY_MINOR_VERSION);
+            const std::wstring lib = wHome + L"/lib/" + pyVersionStr;
+            const std::wstring zip = lib + L".zip";
+            const std::wstring site = lib + L"/site-packages";
+            const std::wstring libDynload = lib + L"/lib-dynload";  // C extension modules
+            PyWideStringList_Append(&cfg.module_search_paths, wHome.c_str());
+            PyWideStringList_Append(&cfg.module_search_paths, lib.c_str());
+            PyWideStringList_Append(&cfg.module_search_paths, zip.c_str());
+            PyWideStringList_Append(&cfg.module_search_paths, site.c_str());
+            PyWideStringList_Append(&cfg.module_search_paths, libDynload.c_str());
 #endif
             cfg.module_search_paths_set = 1;
 
