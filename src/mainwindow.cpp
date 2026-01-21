@@ -1671,12 +1671,11 @@ void MainWindow::initializeXAxisMenu()
         QString menuText;
         QString key;
         QString axisLabel;
-        QKeySequence shortcut;
     };
 
     QVector<AxisChoice> choices = {
-        {tr("Time from exit (s)"), SessionKeys::TimeFromExit, tr("Time from exit (s)"), QKeySequence("Ctrl+1")},
-        {tr("UTC time (s)"),      SessionKeys::Time,        tr("Time (s)"),           QKeySequence("Ctrl+2")}
+        {tr("Time from exit (s)"), SessionKeys::TimeFromExit, tr("Time from exit (s)")},
+        {tr("UTC time (s)"),      SessionKeys::Time,        tr("Time (s)")}
     };
 
     QMenu *plotsMenu = ui->menuPlots;
@@ -1692,7 +1691,6 @@ void MainWindow::initializeXAxisMenu()
     for (const AxisChoice &ch : choices) {
         QAction *a = xAxisMenu->addAction(ch.menuText);
         a->setCheckable(true);
-        a->setShortcut(ch.shortcut);
         a->setData(ch.key);
         a->setProperty("axisLabel", ch.axisLabel);
         axisGroup->addAction(a);
