@@ -19,6 +19,10 @@ A desktop application for viewing and analyzing FlySight GPS data with advanced 
 - [Project Structure](#project-structure)
 - [Troubleshooting](#troubleshooting)
 - [Legacy Build Scripts](#legacy-build-scripts)
+- [Deployment](#deployment)
+  - [Windows Deployment](#windows-deployment)
+  - [macOS Deployment](#macos-deployment)
+  - [Linux Deployment](#linux-deployment)
 
 ## Quick Start
 
@@ -406,3 +410,211 @@ We recommend migrating to the CMake-based build system for the following advanta
 4. **Flexible builds:** Easy control over what gets built via CMake options
 5. **Clean targets:** Proper clean targets for individual or all components
 6. **Parallel builds:** Better support for parallel compilation
+
+## Deployment
+
+FlySight Viewer can be deployed as a standalone application with a bundled Python interpreter, requiring no user-installed dependencies. The deployment process uses platform-specific tools to bundle Qt libraries, third-party dependencies, and the Python runtime.
+
+### Deployment Overview
+
+| Platform | Qt Tool | Python Bundle | Package Format |
+|----------|---------|---------------|----------------|
+| Windows | `windeployqt` | Embeddable package | ZIP |
+| macOS | `macdeployqt` | python-build-standalone | DMG |
+| Linux | `linuxdeployqt` | python-build-standalone | AppImage |
+
+### Windows Deployment
+
+#### Step 1: Build Release
+
+```bash
+cmake -G "Visual Studio 17 2022" -A x64 -B build -S .
+cmake --build build --config Release
+```
+
+#### Step 2: Install to Deployment Directory
+
+```bash
+cmake --install build --config Release --prefix deploy/FlySightViewer
+```
+
+#### Step 3: Run windeployqt
+
+```bash
+windeployqt deploy/FlySightViewer/bin/FlySightViewer.exe
+```
+
+This copies all required Qt DLLs, plugins, and platform files.
+
+#### Step 4: Copy Third-Party Libraries
+
+Copy the following DLLs to the deployment directory alongside the executable:
+
+- `tbb12.dll` from `third-party/oneTBB-install/bin/`
+- GTSAM DLLs from `third-party/GTSAM-install/bin/`
+- KDDockWidgets DLL from `third-party/KDDockWidgets-install/bin/`
+
+#### Step 5: Bundle Python (Optional, for Plugin Support)
+
+Download the [Python embeddable package](https://www.python.org/downloads/windows/) and extract to `deploy/FlySightViewer/python/`:
+
+```
+python/
+├── python313.dll
+├── python3.dll
+├── python313.zip
+├── python313._pth
+└── Lib/
+    └── site-packages/
+        └── numpy/  (install with: pip install numpy --target .)
+```
+
+#### Final Windows Package Structure
+
+```
+FlySightViewer/
+├── FlySightViewer.exe
+├── flysight_cpp_bridge.pyd
+├── Qt6Core.dll, Qt6Widgets.dll, ...
+├── platforms/qwindows.dll
+├── imageformats/*.dll
+├── tls/*.dll
+├── tbb12.dll
+├── gtsam.dll, ...
+├── python/
+│   ├── python313.dll
+│   ├── python313.zip
+│   └── Lib/site-packages/
+└── plugins/
+```
+
+### macOS Deployment
+
+#### Step 1: Build Release
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+
+#### Step 2: Run macdeployqt
+
+```bash
+macdeployqt build/FlySightViewer.app -dmg
+```
+
+This creates a `.app` bundle with all Qt frameworks and generates a DMG.
+
+#### Step 3: Bundle Third-Party Libraries
+
+Copy dylibs to `FlySightViewer.app/Contents/Frameworks/` and fix paths:
+
+```bash
+# Copy libraries
+cp third-party/oneTBB-install/lib/*.dylib FlySightViewer.app/Contents/Frameworks/
+cp third-party/GTSAM-install/lib/*.dylib FlySightViewer.app/Contents/Frameworks/
+
+# Fix rpaths
+install_name_tool -change @rpath/libtbb.12.dylib @executable_path/../Frameworks/libtbb.12.dylib FlySightViewer.app/Contents/MacOS/FlySightViewer
+```
+
+#### Step 4: Bundle Python (Optional)
+
+Download [python-build-standalone](https://github.com/indygreg/python-build-standalone) and install to:
+
+```
+FlySightViewer.app/Contents/Frameworks/Python.framework/
+```
+
+Or use a portable Python installation in:
+
+```
+FlySightViewer.app/Contents/Resources/python/
+```
+
+#### Step 5: Code Signing (Required for Distribution)
+
+```bash
+codesign --deep --force --verify --verbose --sign "Developer ID Application: Your Name" FlySightViewer.app
+```
+
+For notarization (required for Gatekeeper):
+
+```bash
+xcrun notarytool submit FlySightViewer.dmg --apple-id your@email.com --team-id XXXXXXXXXX --password @keychain:notary-password --wait
+xcrun stapler staple FlySightViewer.dmg
+```
+
+### Linux Deployment
+
+#### Step 1: Build Release
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+
+#### Step 2: Create AppDir Structure
+
+```bash
+mkdir -p FlySightViewer.AppDir/usr/{bin,lib,share}
+cp build/FlySightViewer FlySightViewer.AppDir/usr/bin/
+```
+
+#### Step 3: Run linuxdeployqt
+
+Download [linuxdeployqt](https://github.com/probonopd/linuxdeployqt) and run:
+
+```bash
+./linuxdeployqt-continuous-x86_64.AppImage FlySightViewer.AppDir/usr/bin/FlySightViewer -appimage
+```
+
+This bundles Qt libraries and creates an AppImage.
+
+#### Step 4: Bundle Third-Party Libraries
+
+```bash
+cp third-party/oneTBB-install/lib/*.so* FlySightViewer.AppDir/usr/lib/
+cp third-party/GTSAM-install/lib/*.so* FlySightViewer.AppDir/usr/lib/
+```
+
+#### Step 5: Bundle Python (Optional)
+
+Download [python-build-standalone](https://github.com/indygreg/python-build-standalone) for Linux and extract to:
+
+```
+FlySightViewer.AppDir/usr/share/python/
+```
+
+#### Final Linux Package Structure
+
+```
+FlySightViewer.AppDir/
+├── AppRun
+├── FlySightViewer.desktop
+├── FlySightViewer.png
+└── usr/
+    ├── bin/FlySightViewer
+    ├── lib/
+    │   ├── libQt6*.so.*
+    │   ├── libtbb.so.*
+    │   └── libgtsam.so.*
+    └── share/
+        ├── python/
+        └── plugins/
+```
+
+### Deployment Tips
+
+1. **Python Version Matching**: The bundled Python version must exactly match the version used to build pybind11 bindings. Version mismatch causes crashes.
+
+2. **Package Sizes**: Expect approximately 80-120 MB per platform (includes Qt, Python, and NumPy).
+
+3. **Testing**: Always test the deployed package on a clean machine without development tools installed.
+
+4. **CI/CD**: Consider setting up GitHub Actions to automate builds and deployment for all platforms. See [docs/deployment-feature-plan.md](docs/deployment-feature-plan.md) for a sample workflow.
+
+5. **Debug Symbols**: For crash analysis, keep debug symbols but strip them from the release package:
+   - Windows: PDB files can be archived separately
+   - Linux: Use `objcopy --only-keep-debug` to extract symbols
+   - macOS: Use `dsymutil` to generate dSYM bundles
