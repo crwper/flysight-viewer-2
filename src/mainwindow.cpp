@@ -1780,12 +1780,12 @@ void MainWindow::initializePlotsMenu()
     }
 
     // Add separator and units toggle at the end
-    plotsMenu->addSeparator();
+    ui->menu_Tools->addSeparator();
     QAction *toggleUnitsAction = new QAction(tr("Toggle Units"), this);
     toggleUnitsAction->setShortcut(QKeySequence(Qt::Key_U));
     connect(toggleUnitsAction, &QAction::triggered,
             this, &MainWindow::on_action_ToggleUnits_triggered);
-    plotsMenu->addAction(toggleUnitsAction);
+    ui->menu_Tools->addAction(toggleUnitsAction);
 }
 
 void MainWindow::initializeWindowMenu()
