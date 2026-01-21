@@ -551,13 +551,15 @@ void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
         }
     }
 
-    updateReferenceMarkers(UpdateMode::Reflow);
+    customPlot->replot();
 
-    // Update crosshairs to match new axis range before replot (avoids flicker)
+    // Position markers and crosshairs AFTER replot so coord/pixel conversion uses
+    // correct axis rect geometry. Y-axis range changes (above) affect label widths,
+    // which affect axisRect layout.
+    updateReferenceMarkers(UpdateMode::Reflow);
     if (m_crosshairManager)
         m_crosshairManager->updateIfOverPlotArea();
-
-    customPlot->replot();
+    customPlot->replot(QCustomPlot::rpQueuedReplot);
 
     if (m_xAxisKey == SessionKeys::Time)
         updateXAxisTicker();      // update format when span changes
