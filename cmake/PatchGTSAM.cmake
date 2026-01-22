@@ -31,25 +31,23 @@ file(READ "${TARGET_FILE}" FILE_CONTENT)
 string(FIND "${FILE_CONTENT}" "#add_subdirectory (js)" PATCHED_POS)
 if(NOT PATCHED_POS EQUAL -1)
     message(STATUS "GeographicLib CMakeLists.txt is already patched - no changes needed.")
-    return()
+else()
+    # 5. Check if unpatched line exists
+    # NOTE: The exact syntax has a space before the opening parenthesis: "add_subdirectory (js)"
+    string(FIND "${FILE_CONTENT}" "add_subdirectory (js)" UNPATCHED_POS)
+    if(UNPATCHED_POS EQUAL -1)
+        message(WARNING
+            "Could not find 'add_subdirectory (js)' line in ${TARGET_FILE}.\n"
+            "The file may have been modified in an unexpected way.")
+    else()
+        # 6. Apply patch - comment out the add_subdirectory (js) line
+        string(REPLACE "add_subdirectory (js)" "#add_subdirectory (js)" FILE_CONTENT "${FILE_CONTENT}")
+
+        # 7. Write patched content back to file
+        file(WRITE "${TARGET_FILE}" "${FILE_CONTENT}")
+        message(STATUS "Successfully patched GeographicLib CMakeLists.txt - commented out 'add_subdirectory (js)'")
+    endif()
 endif()
-
-# 5. Check if unpatched line exists
-# NOTE: The exact syntax has a space before the opening parenthesis: "add_subdirectory (js)"
-string(FIND "${FILE_CONTENT}" "add_subdirectory (js)" UNPATCHED_POS)
-if(UNPATCHED_POS EQUAL -1)
-    message(WARNING
-        "Could not find 'add_subdirectory (js)' line in ${TARGET_FILE}.\n"
-        "The file may have been modified in an unexpected way.")
-    return()
-endif()
-
-# 6. Apply patch - comment out the add_subdirectory (js) line
-string(REPLACE "add_subdirectory (js)" "#add_subdirectory (js)" FILE_CONTENT "${FILE_CONTENT}")
-
-# 7. Write patched content back to file
-file(WRITE "${TARGET_FILE}" "${FILE_CONTENT}")
-message(STATUS "Successfully patched GeographicLib CMakeLists.txt - commented out 'add_subdirectory (js)'")
 
 # =============================================================================
 # Patch 2: Geoid.hpp - fix std::ios::streamoff -> std::streamoff
