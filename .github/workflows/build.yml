@@ -212,7 +212,9 @@ jobs:
             -DTHIRD_PARTY_DIR="${GITHUB_WORKSPACE}/third-party" \
             -DGTSAM_ROOT="${GITHUB_WORKSPACE}/third-party/GTSAM-install" \
             -DTBB_ROOT="${GITHUB_WORKSPACE}/third-party/oneTBB-install" \
-            -DKDDW_ROOT="${GITHUB_WORKSPACE}/third-party/KDDockWidgets-install"
+            -DKDDW_ROOT="${GITHUB_WORKSPACE}/third-party/KDDockWidgets-install" \
+            ${BOOST_ROOT:+-DBOOST_ROOT="$BOOST_ROOT"} \
+            ${BOOST_LIBRARYDIR:+-DBOOST_LIBRARYDIR="$BOOST_LIBRARYDIR"}
 
       - name: Build main application
         shell: bash
