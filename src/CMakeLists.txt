@@ -162,18 +162,22 @@ set(_TBB_LIB_DIR "${TBB_ROOT}/lib")
 
 # Find TBB libraries using CMake's find_library for cross-platform support
 find_library(TBB_MAIN_RELEASE tbb PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
-find_library(TBB_12_RELEASE tbb12 PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
 find_library(TBB_MALLOC_RELEASE tbbmalloc PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
 
 find_library(TBB_MAIN_DEBUG tbb_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
-find_library(TBB_12_DEBUG tbb12_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
 find_library(TBB_MALLOC_DEBUG tbbmalloc_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
+
+# tbb12 only exists on Windows
+if(WIN32)
+  find_library(TBB_12_RELEASE tbb12 PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
+  find_library(TBB_12_DEBUG tbb12_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
+endif()
 
 # Fall back to release libs if debug not found
 if(NOT TBB_MAIN_DEBUG)
   set(TBB_MAIN_DEBUG "${TBB_MAIN_RELEASE}")
 endif()
-if(NOT TBB_12_DEBUG)
+if(WIN32 AND NOT TBB_12_DEBUG)
   set(TBB_12_DEBUG "${TBB_12_RELEASE}")
 endif()
 if(NOT TBB_MALLOC_DEBUG)
@@ -182,13 +186,19 @@ endif()
 
 target_link_libraries(flysight_tbb INTERFACE
   $<$<CONFIG:Debug>:${TBB_MAIN_DEBUG}>
-  $<$<CONFIG:Debug>:${TBB_12_DEBUG}>
   $<$<CONFIG:Debug>:${TBB_MALLOC_DEBUG}>
 
   $<$<NOT:$<CONFIG:Debug>>:${TBB_MAIN_RELEASE}>
-  $<$<NOT:$<CONFIG:Debug>>:${TBB_12_RELEASE}>
   $<$<NOT:$<CONFIG:Debug>>:${TBB_MALLOC_RELEASE}>
 )
+
+# tbb12 only exists on Windows
+if(WIN32)
+  target_link_libraries(flysight_tbb INTERFACE
+    $<$<CONFIG:Debug>:${TBB_12_DEBUG}>
+    $<$<NOT:$<CONFIG:Debug>>:${TBB_12_RELEASE}>
+  )
+endif()
 
 # Boost (need Serialization; use imported targets, no link_directories)
 set(BOOST_ROOT "C:/Program Files/Boost/boost_1_87_0"
