@@ -299,18 +299,21 @@ install(TARGETS FlySightViewer
 )
 
 install(TARGETS flysight_cpp_bridge
-  LIBRARY DESTINATION ${FLYSIGHT_INSTALL_BINDIR}
-  RUNTIME DESTINATION ${FLYSIGHT_INSTALL_BINDIR}
+  LIBRARY DESTINATION "python/Lib/site-packages"
+  RUNTIME DESTINATION "python/Lib/site-packages"
 )
 
-# Install Python SDK files to site-packages
-# The flysight_plugin_sdk.py is in the plugins/ directory
-install(FILES "${CMAKE_CURRENT_LIST_DIR}/../plugins/flysight_plugin_sdk.py"
-  DESTINATION "python/Lib/site-packages"
+# Install Python SDK files to plugin directory (where PluginHost looks for it)
+install(FILES "${CMAKE_CURRENT_LIST_DIR}/../python_plugins/flysight_plugin_sdk.py"
+  DESTINATION "python_plugins"
 )
 
-# Create empty plugins directory for user plugins
-install(DIRECTORY DESTINATION "plugins")
+# Install bundled Python plugins
+install(FILES
+  "${CMAKE_CURRENT_LIST_DIR}/../python_plugins/pitot_tube.py"
+  "${CMAKE_CURRENT_LIST_DIR}/../python_plugins/allan_variance.py"
+  DESTINATION "python_plugins"
+)
 
 # ─────────────────────────────── Qt deployment (Qt 6.3+)
 # On all platforms with Qt 6, use the built-in deployment API to bundle Qt libraries
@@ -321,6 +324,87 @@ if(QT_VERSION_MAJOR GREATER_EQUAL 6)
     NO_UNSUPPORTED_PLATFORM_ERROR
   )
   install(SCRIPT ${deploy_script})
+endif()
+
+# ─────────────────────────────── Qt Location geoservices plugins
+# These are not included by qt_generate_deploy_app_script by default
+if(QT_VERSION_MAJOR GREATER_EQUAL 6)
+  # Get Qt's plugin directory from the Qt6::Core target
+  get_target_property(_qt6_core_location Qt6::Core LOCATION)
+  get_filename_component(_qt6_lib_dir "${_qt6_core_location}" DIRECTORY)
+  if(WIN32)
+    # On Windows, Qt6Core.dll is in bin/, plugins are in ../plugins/
+    get_filename_component(_qt6_prefix "${_qt6_lib_dir}" DIRECTORY)
+    set(_qt6_plugins_dir "${_qt6_prefix}/plugins")
+    set(_geoservices_pattern "*.dll")
+    set(_geoservices_dest "plugins")
+  elseif(APPLE)
+    # On macOS, Qt6Core is in lib/, plugins are in ../plugins/ or share/qt6/plugins
+    get_filename_component(_qt6_prefix "${_qt6_lib_dir}" DIRECTORY)
+    set(_qt6_plugins_dir "${_qt6_prefix}/share/qt6/plugins")
+    if(NOT EXISTS "${_qt6_plugins_dir}")
+      set(_qt6_plugins_dir "${_qt6_prefix}/plugins")
+    endif()
+    set(_geoservices_pattern "*.dylib")
+    set(_geoservices_dest "FlySightViewer.app/Contents/PlugIns")
+  else()
+    # On Linux, plugins are typically in lib/qt6/plugins or plugins/
+    get_filename_component(_qt6_prefix "${_qt6_lib_dir}" DIRECTORY)
+    set(_qt6_plugins_dir "${_qt6_prefix}/plugins")
+    if(NOT EXISTS "${_qt6_plugins_dir}")
+      set(_qt6_plugins_dir "${_qt6_prefix}/lib/qt6/plugins")
+    endif()
+    set(_geoservices_pattern "*.so")
+    set(_geoservices_dest "plugins")
+  endif()
+
+  if(EXISTS "${_qt6_plugins_dir}/geoservices")
+    install(DIRECTORY "${_qt6_plugins_dir}/geoservices"
+      DESTINATION "${_geoservices_dest}"
+      FILES_MATCHING PATTERN "${_geoservices_pattern}"
+    )
+  else()
+    message(WARNING "Qt geoservices plugins not found at ${_qt6_plugins_dir}/geoservices")
+  endif()
+endif()
+
+# ─────────────────────────────── Qt QML modules deployment
+# QtLocation and QtPositioning QML modules are required for MapDock.qml
+if(QT_VERSION_MAJOR GREATER_EQUAL 6)
+  # Get Qt's QML directory from the Qt6::Core target location
+  get_target_property(_qt6_core_location Qt6::Core LOCATION)
+  get_filename_component(_qt6_lib_dir "${_qt6_core_location}" DIRECTORY)
+
+  if(WIN32)
+    get_filename_component(_qt6_prefix "${_qt6_lib_dir}" DIRECTORY)
+    set(_qt6_qml_dir "${_qt6_prefix}/qml")
+    set(_qml_dest "qml")
+  elseif(APPLE)
+    get_filename_component(_qt6_prefix "${_qt6_lib_dir}" DIRECTORY)
+    set(_qt6_qml_dir "${_qt6_prefix}/qml")
+    if(NOT EXISTS "${_qt6_qml_dir}")
+      set(_qt6_qml_dir "${_qt6_prefix}/share/qt6/qml")
+    endif()
+    set(_qml_dest "FlySightViewer.app/Contents/Resources/qml")
+  else()
+    get_filename_component(_qt6_prefix "${_qt6_lib_dir}" DIRECTORY)
+    set(_qt6_qml_dir "${_qt6_prefix}/qml")
+    if(NOT EXISTS "${_qt6_qml_dir}")
+      set(_qt6_qml_dir "${_qt6_prefix}/lib/qt6/qml")
+    endif()
+    set(_qml_dest "qml")
+  endif()
+
+  # Deploy required QML modules for map functionality
+  foreach(_qml_module QtLocation QtPositioning)
+    if(EXISTS "${_qt6_qml_dir}/${_qml_module}")
+      install(DIRECTORY "${_qt6_qml_dir}/${_qml_module}"
+        DESTINATION "${_qml_dest}"
+      )
+    else()
+      message(WARNING "Qt QML module ${_qml_module} not found at ${_qt6_qml_dir}/${_qml_module}")
+    endif()
+  endforeach()
 endif()
 
 # ─────────────────────────────── Windows Deployment

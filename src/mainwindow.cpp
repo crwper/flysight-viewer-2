@@ -75,7 +75,7 @@ MainWindow::MainWindow(QWidget *parent)
     registerBuiltInMarkers();
 
     // Initialize plugins (may register additional plots/markers)
-    QString defaultDir = QCoreApplication::applicationDirPath() + "/plugins";
+    QString defaultDir = QCoreApplication::applicationDirPath() + "/python_plugins";
     QString pluginDir = qEnvironmentVariable("FLYSIGHT_PLUGINS", defaultDir);
     PluginHost::instance().initialise(pluginDir);
 

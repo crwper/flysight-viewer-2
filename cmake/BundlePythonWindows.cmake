@@ -105,20 +105,38 @@ if(NOT EXISTS "${PYTHON_EMBED_DIR}/python.exe")
     file(MAKE_DIRECTORY "${PYTHON_EMBED_DIR}/Lib/site-packages")
 
     # =============================================================================
-    # Install pip
+    # Install pip using get-pip.py (ensurepip is not available in embeddable Python)
     # =============================================================================
 
-    message(STATUS "Installing pip into bundled Python...")
+    set(GET_PIP_URL "https://bootstrap.pypa.io/get-pip.py")
+    set(GET_PIP_PATH "${CMAKE_BINARY_DIR}/python-embed/get-pip.py")
+
+    message(STATUS "Downloading get-pip.py...")
+    if(NOT EXISTS "${GET_PIP_PATH}")
+        file(DOWNLOAD
+            "${GET_PIP_URL}"
+            "${GET_PIP_PATH}"
+            SHOW_PROGRESS
+            STATUS getpip_download_status
+            TLS_VERIFY ON
+        )
+        list(GET getpip_download_status 0 getpip_code)
+        list(GET getpip_download_status 1 getpip_message)
+        if(NOT getpip_code EQUAL 0)
+            message(FATAL_ERROR "Failed to download get-pip.py: ${getpip_message}")
+        endif()
+    endif()
+
+    message(STATUS "Installing pip into bundled Python using get-pip.py...")
     execute_process(
-        COMMAND "${PYTHON_EMBED_DIR}/python.exe" -m ensurepip --upgrade
+        COMMAND "${PYTHON_EMBED_DIR}/python.exe" "${GET_PIP_PATH}" --no-warn-script-location
         WORKING_DIRECTORY "${PYTHON_EMBED_DIR}"
         RESULT_VARIABLE pip_result
         OUTPUT_VARIABLE pip_output
         ERROR_VARIABLE pip_error
     )
     if(NOT pip_result EQUAL 0)
-        message(WARNING "Failed to install pip: ${pip_error}")
-        message(STATUS "pip output: ${pip_output}")
+        message(FATAL_ERROR "Failed to install pip:\nOutput: ${pip_output}\nError: ${pip_error}")
     else()
         message(STATUS "pip installed successfully")
     endif()
@@ -136,8 +154,7 @@ if(NOT EXISTS "${PYTHON_EMBED_DIR}/python.exe")
         ERROR_VARIABLE numpy_error
     )
     if(NOT numpy_result EQUAL 0)
-        message(WARNING "Failed to install NumPy: ${numpy_error}")
-        message(STATUS "NumPy output: ${numpy_output}")
+        message(FATAL_ERROR "Failed to install NumPy:\nOutput: ${numpy_output}\nError: ${numpy_error}")
     else()
         message(STATUS "NumPy installed successfully")
     endif()
@@ -151,11 +168,11 @@ endif()
 # =============================================================================
 
 # Install Python runtime files to <install>/python/
-# This includes python.exe, pythonXX.dll, pythonXX.zip, and the ._pth file
+# This includes python.exe, pythonXX.dll, pythonXX.zip, the ._pth file,
+# and site-packages (including NumPy with its .pyd extensions)
 install(
     DIRECTORY "${PYTHON_EMBED_DIR}/"
     DESTINATION "python"
-    PATTERN "*.pyd" EXCLUDE  # Don't install test .pyd files
     PATTERN "__pycache__" EXCLUDE
     PATTERN "*.pyc" EXCLUDE
 )

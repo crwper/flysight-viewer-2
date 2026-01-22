@@ -12,6 +12,7 @@
 #include <QQmlEngine>
 #include <QVBoxLayout>
 #include <QDebug>
+#include <QCoreApplication>
 
 namespace FlySight {
 
@@ -40,6 +41,9 @@ MapWidget::MapWidget(SessionModel *sessionModel,
 
     auto *view = new QQuickWidget(this);
     view->setResizeMode(QQuickWidget::SizeRootObjectToView);
+
+    // Add QML import path for deployed modules (QtLocation, QtPositioning)
+    view->engine()->addImportPath(QCoreApplication::applicationDirPath() + "/qml");
 
     // Expose the model(s) + proxy to QML as context properties
     view->engine()->rootContext()->setContextProperty(QStringLiteral("trackModel"), m_trackModel);
