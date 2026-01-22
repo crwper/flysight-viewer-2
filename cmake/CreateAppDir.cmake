@@ -44,28 +44,28 @@ set(APPRUN_CONTENT [=[#!/bin/bash
 # Sets up environment variables and launches the application
 
 # Get the directory where AppRun is located (the AppDir root)
-HERE="$(dirname "$(readlink -f "${0}")")"
+HERE="\$(dirname "\$(readlink -f "\${0}")")"
 
 # Library paths for Qt, third-party libs, and Python
-export LD_LIBRARY_PATH="${HERE}/usr/lib:${HERE}/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="\${HERE}/usr/lib:\${HERE}/usr/lib/x86_64-linux-gnu:\${LD_LIBRARY_PATH}"
 
 # Qt plugin paths
-export QT_PLUGIN_PATH="${HERE}/usr/plugins:${HERE}/usr/lib/qt6/plugins:${QT_PLUGIN_PATH}"
+export QT_PLUGIN_PATH="\${HERE}/usr/plugins:\${HERE}/usr/lib/qt6/plugins:\${QT_PLUGIN_PATH}"
 
 # Qt QML paths
-export QML2_IMPORT_PATH="${HERE}/usr/qml:${HERE}/usr/lib/qt6/qml:${QML2_IMPORT_PATH}"
+export QML2_IMPORT_PATH="\${HERE}/usr/qml:\${HERE}/usr/lib/qt6/qml:\${QML2_IMPORT_PATH}"
 
 # Python environment for bundled runtime
-if [ -d "${HERE}/usr/share/python" ]; then
-    export PYTHONHOME="${HERE}/usr/share/python"
-    export PYTHONPATH="${HERE}/usr/share/python/lib/python3.13/site-packages:${PYTHONPATH}"
+if [ -d "\${HERE}/usr/share/python" ]; then
+    export PYTHONHOME="\${HERE}/usr/share/python"
+    export PYTHONPATH="\${HERE}/usr/share/python/lib/python3.13/site-packages:\${PYTHONPATH}"
 fi
 
 # XDG paths for desktop integration
-export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export XDG_DATA_DIRS="\${HERE}/usr/share:\${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
 # Launch the application
-exec "${HERE}/usr/bin/FlySightViewer" "$@"
+exec "\${HERE}/usr/bin/FlySightViewer" "\$@"
 ]=])
 
 # =============================================================================
