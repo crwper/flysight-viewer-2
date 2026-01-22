@@ -63,7 +63,7 @@ public:
         double utcSeconds = 0.0; // Only valid when count == 1
     };
 
-    // Constructor
+    // Constructor / Destructor
     PlotWidget(SessionModel *model,
             PlotModel *plotModel,
             MarkerModel *markerModel,
@@ -71,6 +71,7 @@ public:
             CursorModel *cursorModel,
             PlotRangeModel *rangeModel,
             QWidget *parent = nullptr);
+    ~PlotWidget();
 
     // Public Methods
     void setCurrentTool(Tool tool);

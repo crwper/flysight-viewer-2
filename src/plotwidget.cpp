@@ -175,6 +175,8 @@ PlotWidget::PlotWidget(SessionModel *model,
     updateXAxisTicker();
 }
 
+PlotWidget::~PlotWidget() = default;
+
 // Public Methods
 void PlotWidget::setCurrentTool(Tool tool)
 {
