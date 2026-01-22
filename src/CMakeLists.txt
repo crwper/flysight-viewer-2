@@ -107,16 +107,42 @@ add_library(flysight_gtsam INTERFACE)
 target_include_directories(flysight_gtsam INTERFACE "${GTSAM_ROOT}/include")
 
 set(_GTSAM_LIB_DIR "${GTSAM_ROOT}/lib")
-target_link_libraries(flysight_gtsam INTERFACE
-  $<$<CONFIG:Debug>:${_GTSAM_LIB_DIR}/cephes-gtsamDebug.lib>
-  $<$<CONFIG:Debug>:${_GTSAM_LIB_DIR}/gtsamDebug.lib>
-  $<$<CONFIG:Debug>:${_GTSAM_LIB_DIR}/metis-gtsamDebug.lib>
-  $<$<CONFIG:Debug>:${_GTSAM_LIB_DIR}/Geographic_d.lib>
 
-  $<$<NOT:$<CONFIG:Debug>>:${_GTSAM_LIB_DIR}/cephes-gtsam.lib>
-  $<$<NOT:$<CONFIG:Debug>>:${_GTSAM_LIB_DIR}/gtsam.lib>
-  $<$<NOT:$<CONFIG:Debug>>:${_GTSAM_LIB_DIR}/metis-gtsam.lib>
-  $<$<NOT:$<CONFIG:Debug>>:${_GTSAM_LIB_DIR}/Geographic.lib>
+# Find GTSAM libraries using CMake's find_library for cross-platform support
+find_library(GTSAM_CEPHES_RELEASE cephes-gtsam PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
+find_library(GTSAM_MAIN_RELEASE gtsam PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
+find_library(GTSAM_METIS_RELEASE metis-gtsam PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
+find_library(GTSAM_GEOGRAPHIC_RELEASE Geographic PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
+
+find_library(GTSAM_CEPHES_DEBUG cephes-gtsamDebug PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH)
+find_library(GTSAM_MAIN_DEBUG gtsamDebug PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH)
+find_library(GTSAM_METIS_DEBUG metis-gtsamDebug PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH)
+find_library(GTSAM_GEOGRAPHIC_DEBUG Geographic_d PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH)
+
+# Fall back to release libs if debug not found
+if(NOT GTSAM_CEPHES_DEBUG)
+  set(GTSAM_CEPHES_DEBUG "${GTSAM_CEPHES_RELEASE}")
+endif()
+if(NOT GTSAM_MAIN_DEBUG)
+  set(GTSAM_MAIN_DEBUG "${GTSAM_MAIN_RELEASE}")
+endif()
+if(NOT GTSAM_METIS_DEBUG)
+  set(GTSAM_METIS_DEBUG "${GTSAM_METIS_RELEASE}")
+endif()
+if(NOT GTSAM_GEOGRAPHIC_DEBUG)
+  set(GTSAM_GEOGRAPHIC_DEBUG "${GTSAM_GEOGRAPHIC_RELEASE}")
+endif()
+
+target_link_libraries(flysight_gtsam INTERFACE
+  $<$<CONFIG:Debug>:${GTSAM_CEPHES_DEBUG}>
+  $<$<CONFIG:Debug>:${GTSAM_MAIN_DEBUG}>
+  $<$<CONFIG:Debug>:${GTSAM_METIS_DEBUG}>
+  $<$<CONFIG:Debug>:${GTSAM_GEOGRAPHIC_DEBUG}>
+
+  $<$<NOT:$<CONFIG:Debug>>:${GTSAM_CEPHES_RELEASE}>
+  $<$<NOT:$<CONFIG:Debug>>:${GTSAM_MAIN_RELEASE}>
+  $<$<NOT:$<CONFIG:Debug>>:${GTSAM_METIS_RELEASE}>
+  $<$<NOT:$<CONFIG:Debug>>:${GTSAM_GEOGRAPHIC_RELEASE}>
 )
 
 # GTSAM uses Boost headers and may trigger Boost.Serialization autolink.
@@ -133,14 +159,35 @@ add_library(flysight_tbb INTERFACE)
 target_include_directories(flysight_tbb INTERFACE "${TBB_ROOT}/include")
 
 set(_TBB_LIB_DIR "${TBB_ROOT}/lib")
-target_link_libraries(flysight_tbb INTERFACE
-  $<$<CONFIG:Debug>:${_TBB_LIB_DIR}/tbb_debug.lib>
-  $<$<CONFIG:Debug>:${_TBB_LIB_DIR}/tbb12_debug.lib>
-  $<$<CONFIG:Debug>:${_TBB_LIB_DIR}/tbbmalloc_debug.lib>
 
-  $<$<NOT:$<CONFIG:Debug>>:${_TBB_LIB_DIR}/tbb.lib>
-  $<$<NOT:$<CONFIG:Debug>>:${_TBB_LIB_DIR}/tbb12.lib>
-  $<$<NOT:$<CONFIG:Debug>>:${_TBB_LIB_DIR}/tbbmalloc.lib>
+# Find TBB libraries using CMake's find_library for cross-platform support
+find_library(TBB_MAIN_RELEASE tbb PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
+find_library(TBB_12_RELEASE tbb12 PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
+find_library(TBB_MALLOC_RELEASE tbbmalloc PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
+
+find_library(TBB_MAIN_DEBUG tbb_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
+find_library(TBB_12_DEBUG tbb12_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
+find_library(TBB_MALLOC_DEBUG tbbmalloc_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
+
+# Fall back to release libs if debug not found
+if(NOT TBB_MAIN_DEBUG)
+  set(TBB_MAIN_DEBUG "${TBB_MAIN_RELEASE}")
+endif()
+if(NOT TBB_12_DEBUG)
+  set(TBB_12_DEBUG "${TBB_12_RELEASE}")
+endif()
+if(NOT TBB_MALLOC_DEBUG)
+  set(TBB_MALLOC_DEBUG "${TBB_MALLOC_RELEASE}")
+endif()
+
+target_link_libraries(flysight_tbb INTERFACE
+  $<$<CONFIG:Debug>:${TBB_MAIN_DEBUG}>
+  $<$<CONFIG:Debug>:${TBB_12_DEBUG}>
+  $<$<CONFIG:Debug>:${TBB_MALLOC_DEBUG}>
+
+  $<$<NOT:$<CONFIG:Debug>>:${TBB_MAIN_RELEASE}>
+  $<$<NOT:$<CONFIG:Debug>>:${TBB_12_RELEASE}>
+  $<$<NOT:$<CONFIG:Debug>>:${TBB_MALLOC_RELEASE}>
 )
 
 # Boost (need Serialization; use imported targets, no link_directories)
