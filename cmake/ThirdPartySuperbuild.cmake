@@ -15,8 +15,9 @@
 #   2. GTSAM      - Depends on oneTBB (for TBB integration)
 #   3. KDDockWidgets - Independent, can build in parallel with GTSAM
 #
-# Each library is built in both Debug and Release configurations, with
-# outputs installed to separate install directories.
+# Each library is built in the configuration specified by CMAKE_BUILD_TYPE.
+# For local development requiring both Debug and Release, run the build twice
+# with different CMAKE_BUILD_TYPE values.
 #
 # =============================================================================
 
@@ -84,13 +85,8 @@ ExternalProject_Add(ext_oneTBB
         -DTBB_TEST=OFF
         -DTBB_EXAMPLES=OFF
         -DTBB_STRICT=OFF
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
-    BUILD_COMMAND
-        ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
-        COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Debug
-    INSTALL_COMMAND
-        ${CMAKE_COMMAND} --install <BINARY_DIR> --config Release --prefix <INSTALL_DIR>
-        COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config Debug --prefix <INSTALL_DIR>
     UPDATE_COMMAND ""
     PATCH_COMMAND ""
 )
@@ -147,14 +143,9 @@ ExternalProject_Add(ext_GTSAM
         -DGTSAM_BUILD_TESTS=OFF
         -DGTSAM_WITH_TBB=ON
         -DTBB_DIR=${TBB_CMAKE_DIR}
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
     PATCH_COMMAND ${_GTSAM_PATCH_COMMAND}
-    BUILD_COMMAND
-        ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
-        COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Debug
-    INSTALL_COMMAND
-        ${CMAKE_COMMAND} --install <BINARY_DIR> --config Release --prefix <INSTALL_DIR>
-        COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config Debug --prefix <INSTALL_DIR>
     UPDATE_COMMAND ""
 )
 
@@ -189,13 +180,8 @@ ExternalProject_Add(ext_KDDockWidgets
         -DKDDockWidgets_EXAMPLES=OFF
         -DKDDockWidgets_TESTS=OFF
         -DKDDockWidgets_DOCS=OFF
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
-    BUILD_COMMAND
-        ${CMAKE_COMMAND} --build <BINARY_DIR> --config Release
-        COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config Debug
-    INSTALL_COMMAND
-        ${CMAKE_COMMAND} --install <BINARY_DIR> --config Release --prefix <INSTALL_DIR>
-        COMMAND ${CMAKE_COMMAND} --install <BINARY_DIR> --config Debug --prefix <INSTALL_DIR>
     UPDATE_COMMAND ""
     PATCH_COMMAND ""
 )
