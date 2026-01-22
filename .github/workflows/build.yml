@@ -80,7 +80,8 @@ jobs:
         shell: bash
         run: |
           # Create hash from CMake files and submodule definitions
-          HASH=$(cat cmake/ThirdPartySuperbuild.cmake .gitmodules | sha256sum | cut -d' ' -f1)
+          # Use openssl which is available on all platforms (Linux, macOS, Windows Git Bash)
+          HASH=$(cat cmake/ThirdPartySuperbuild.cmake .gitmodules | openssl dgst -sha256 | awk '{print $NF}')
           echo "hash=${HASH:0:16}" >> $GITHUB_OUTPUT
 
       - name: Cache third-party dependencies
