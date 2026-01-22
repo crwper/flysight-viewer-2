@@ -158,6 +158,13 @@ set(Boost_USE_STATIC_RUNTIME OFF)
 
 find_package(Boost REQUIRED COMPONENTS serialization timer chrono system)
 
+# Disable Boost auto-linking on MSVC - CMake handles linking via Boost::* targets
+# This prevents LNK1104 errors when using dynamic Boost libraries, as auto-linking
+# defaults to static library names (libboost_*.lib) instead of import libs (boost_*.lib)
+if(MSVC)
+  add_compile_definitions(BOOST_ALL_NO_LIB)
+endif()
+
 # KDDockWidgets (KDDW)
 find_package(KDDockWidgets-qt6 CONFIG REQUIRED)
 
