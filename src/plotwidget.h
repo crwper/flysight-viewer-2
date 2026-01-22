@@ -7,7 +7,7 @@
 #include <QPointer>
 #include <QSet>
 #include <memory>
-#include "qcustomplot/qcustomplot.h"
+#include "QCustomPlot/qcustomplot.h"
 #include "sessionmodel.h"
 #include "graphinfo.h"
 #include "crosshairmanager.h"
