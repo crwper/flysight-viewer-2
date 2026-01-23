@@ -216,7 +216,7 @@ install(CODE "
     set(APPDIR_USR \"${FLYSIGHT_APPDIR_USR}\")
     set(PYTHON_VERSION \"${BUNDLE_PYTHON_VERSION}\")
     set(SITE_PACKAGES \"\${APPDIR_USR}/share/python/lib/python\${PYTHON_VERSION}/site-packages\")
-    set(PYTHON_SRC_DIR \"${CMAKE_CURRENT_SOURCE_DIR}/../plugins\")
+    set(PYTHON_SRC_DIR \"${CMAKE_CURRENT_SOURCE_DIR}/../python_plugins\")
 
     file(MAKE_DIRECTORY \"\${SITE_PACKAGES}\")
 

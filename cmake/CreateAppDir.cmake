@@ -169,7 +169,7 @@ install(CODE "
 # Note: The Python version path is set by BundlePythonLinux.cmake
 # Default to 3.13 but this will be populated correctly when Python is bundled
 set(BUNDLE_PYTHON_VERSION "3.13" CACHE STRING "Python version for site-packages path")
-install(DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/../plugins/"
+install(DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/../python_plugins/"
     DESTINATION "${APPDIR_NAME}/usr/share/python/lib/python${BUNDLE_PYTHON_VERSION}/site-packages"
     COMPONENT AppImage
     PATTERN "__pycache__" EXCLUDE
