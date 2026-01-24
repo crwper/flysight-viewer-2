@@ -132,8 +132,10 @@ jobs:
           Start-Process -Wait -FilePath "$env:TEMP\boost.exe" -ArgumentList "/SILENT","/SP-","/SUPPRESSMSGBOXES","/DIR=$BOOST_ROOT"
 
           # Export environment variables for subsequent steps
-          echo "BOOST_ROOT=$BOOST_ROOT" >> $env:GITHUB_ENV
-          echo "BOOST_LIBRARYDIR=$BOOST_ROOT\lib64-msvc-14.3" >> $env:GITHUB_ENV
+          # Normalize paths to forward slashes to avoid CMake escape sequence issues
+          $BOOST_ROOT_NORMALIZED = $BOOST_ROOT -replace '\\', '/'
+          echo "BOOST_ROOT=$BOOST_ROOT_NORMALIZED" >> $env:GITHUB_ENV
+          echo "BOOST_LIBRARYDIR=$BOOST_ROOT_NORMALIZED/lib64-msvc-14.3" >> $env:GITHUB_ENV
 
           Write-Host "Boost installed successfully"
           Get-ChildItem $BOOST_ROOT -Directory | Select-Object -First 5

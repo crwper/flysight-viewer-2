@@ -171,9 +171,13 @@ install(CODE "
 # This ensures PYTHONPATH uses the same version as BUNDLE_PYTHON_VERSION
 string(REPLACE "@BUNDLE_PYTHON_VERSION@" "${BUNDLE_PYTHON_VERSION}" APPRUN_CONTENT_CONFIGURED "${APPRUN_CONTENT}")
 
+# Escape $ characters so bash variables survive CMake's install(CODE) substitution
+# Without this, ${XDG_DATA_DIRS:-...} would be parsed as an invalid CMake variable
+string(REPLACE "$" "\\$" APPRUN_CONTENT_ESCAPED "${APPRUN_CONTENT_CONFIGURED}")
+
 # Write the AppRun script
 install(CODE "
-    set(APPRUN_CONTENT \"${APPRUN_CONTENT_CONFIGURED}\")
+    set(APPRUN_CONTENT \"${APPRUN_CONTENT_ESCAPED}\")
     file(WRITE \"${APPDIR_PATH}/AppRun\" \"\${APPRUN_CONTENT}\")
     # Make AppRun executable
     execute_process(COMMAND chmod +x \"${APPDIR_PATH}/AppRun\")
