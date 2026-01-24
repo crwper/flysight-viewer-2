@@ -12,11 +12,27 @@
 #   ├── FlySightViewer.desktop    (desktop entry file)
 #   ├── FlySightViewer.png        (application icon)
 #   └── usr/
-#       ├── bin/                  (executables)
-#       ├── lib/                  (shared libraries)
+#       ├── bin/                  (executables + qt.conf)
+#       ├── lib/                  (shared libraries with RPATH $ORIGIN/../lib)
+#       ├── plugins/              (Qt plugins - platforms, geoservices, etc.)
+#       ├── qml/                  (QML modules - QtLocation, QtPositioning)
 #       └── share/
 #           ├── python/           (bundled Python runtime)
-#           └── applications/     (desktop files)
+#           │   ├── bin/
+#           │   └── lib/python3.XX/site-packages/
+#           │       └── flysight_cpp_bridge.so  (pybind11 module)
+#           └── applications/     (desktop files for XDG)
+#
+# Troubleshooting:
+#   - "error while loading shared libraries": Check RPATH with patchelf --print-rpath
+#   - "Qt plugin not found": Verify qt.conf paths and QT_PLUGIN_PATH in AppRun
+#   - "Python import error": Check PYTHONPATH matches actual Python version
+#   - "cannot execute binary file": Ensure AppRun is executable (chmod +x)
+#
+# Related files:
+#   - cmake/DeployThirdPartyLinux.cmake - Library copying and RPATH
+#   - cmake/BundlePythonLinux.cmake - Python runtime bundling
+#   - cmake/CreateAppImage.cmake - AppImage generation
 #
 # =============================================================================
 
@@ -38,34 +54,84 @@ set(FLYSIGHT_APPDIR_USR "${APPDIR_USR}" CACHE INTERNAL "Path to AppDir/usr")
 # =============================================================================
 # The AppRun script is the entry point for the AppImage. It sets up the
 # environment variables needed to locate libraries, Qt plugins, and Python.
+# The Python version is substituted from BUNDLE_PYTHON_VERSION at configure time.
 
 set(APPRUN_CONTENT [=[#!/bin/bash
 # AppRun launcher for FlySight Viewer AppImage
 # Sets up environment variables and launches the application
 
 # Get the directory where AppRun is located (the AppDir root)
-HERE="\$(dirname "\$(readlink -f "\${0}")")"
+HERE="$(dirname "$(readlink -f "${0}")")"
 
 # Library paths for Qt, third-party libs, and Python
-export LD_LIBRARY_PATH="\${HERE}/usr/lib:\${HERE}/usr/lib/x86_64-linux-gnu:\${LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="${HERE}/usr/lib:${HERE}/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
 
 # Qt plugin paths
-export QT_PLUGIN_PATH="\${HERE}/usr/plugins:\${HERE}/usr/lib/qt6/plugins:\${QT_PLUGIN_PATH}"
+export QT_PLUGIN_PATH="${HERE}/usr/plugins:${HERE}/usr/lib/qt6/plugins:${QT_PLUGIN_PATH}"
 
 # Qt QML paths
-export QML2_IMPORT_PATH="\${HERE}/usr/qml:\${HERE}/usr/lib/qt6/qml:\${QML2_IMPORT_PATH}"
+export QML2_IMPORT_PATH="${HERE}/usr/qml:${HERE}/usr/lib/qt6/qml:${QML2_IMPORT_PATH}"
 
 # Python environment for bundled runtime
-if [ -d "\${HERE}/usr/share/python" ]; then
-    export PYTHONHOME="\${HERE}/usr/share/python"
-    export PYTHONPATH="\${HERE}/usr/share/python/lib/python3.13/site-packages:\${PYTHONPATH}"
+# Note: Python version is substituted by CMake at configure time
+if [ -d "${HERE}/usr/share/python" ]; then
+    export PYTHONHOME="${HERE}/usr/share/python"
+    export PYTHONPATH="${HERE}/usr/share/python/lib/python@BUNDLE_PYTHON_VERSION@/site-packages:${PYTHONPATH}"
 fi
 
 # XDG paths for desktop integration
-export XDG_DATA_DIRS="\${HERE}/usr/share:\${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+
+# Debug mode: set FLYSIGHT_DEBUG=1 to see library loading info
+if [ -n "${FLYSIGHT_DEBUG}" ]; then
+    echo "=== FlySight Viewer Debug Mode ==="
+    echo "AppDir: ${HERE}"
+    echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
+    echo "QT_PLUGIN_PATH: ${QT_PLUGIN_PATH}"
+    echo "QML2_IMPORT_PATH: ${QML2_IMPORT_PATH}"
+    echo "PYTHONHOME: ${PYTHONHOME}"
+    echo "PYTHONPATH: ${PYTHONPATH}"
+    echo ""
+    echo "=== Library directory contents ==="
+    ls -la "${HERE}/usr/lib/" 2>/dev/null | head -20
+    echo ""
+    echo "=== Checking critical libraries ==="
+    for lib in libtbb libgtsam libkddockwidgets libGeographic; do
+        found=$(find "${HERE}/usr/lib" -name "${lib}*.so*" 2>/dev/null | head -1)
+        if [ -n "$found" ]; then
+            echo "  $lib: $(basename $found)"
+        else
+            echo "  $lib: NOT FOUND"
+        fi
+    done
+    echo ""
+    echo "=== Checking Qt plugins ==="
+    if [ -d "${HERE}/usr/plugins/platforms" ]; then
+        echo "  Platform plugins: $(ls "${HERE}/usr/plugins/platforms/" 2>/dev/null)"
+    else
+        echo "  Platform plugins: MISSING"
+    fi
+    echo ""
+    echo "=== Checking Python bundle ==="
+    if [ -d "${HERE}/usr/share/python" ]; then
+        echo "  Python bundle: Found"
+        if [ -x "${HERE}/usr/share/python/bin/python3" ]; then
+            echo "  Python version: $("${HERE}/usr/share/python/bin/python3" --version 2>&1)"
+        fi
+        BRIDGE=$(find "${HERE}/usr/share/python" -name "flysight_cpp_bridge*.so" 2>/dev/null | head -1)
+        if [ -n "$BRIDGE" ]; then
+            echo "  Bridge module: $(basename $BRIDGE)"
+        else
+            echo "  Bridge module: NOT FOUND"
+        fi
+    else
+        echo "  Python bundle: MISSING"
+    fi
+    echo "=================================="
+fi
 
 # Launch the application
-exec "\${HERE}/usr/bin/FlySightViewer" "\$@"
+exec "${HERE}/usr/bin/FlySightViewer" "$@"
 ]=])
 
 # =============================================================================
@@ -101,13 +167,17 @@ install(CODE "
     file(MAKE_DIRECTORY \"${APPDIR_USR}/qml\")
 ")
 
+# Substitute Python version into AppRun content
+# This ensures PYTHONPATH uses the same version as BUNDLE_PYTHON_VERSION
+string(REPLACE "@BUNDLE_PYTHON_VERSION@" "${BUNDLE_PYTHON_VERSION}" APPRUN_CONTENT_CONFIGURED "${APPRUN_CONTENT}")
+
 # Write the AppRun script
 install(CODE "
-    set(APPRUN_CONTENT \"${APPRUN_CONTENT}\")
+    set(APPRUN_CONTENT \"${APPRUN_CONTENT_CONFIGURED}\")
     file(WRITE \"${APPDIR_PATH}/AppRun\" \"\${APPRUN_CONTENT}\")
     # Make AppRun executable
     execute_process(COMMAND chmod +x \"${APPDIR_PATH}/AppRun\")
-    message(STATUS \"Created AppRun script\")
+    message(STATUS \"Created AppRun script with Python ${BUNDLE_PYTHON_VERSION}\")
 ")
 
 # Write the desktop file
@@ -119,15 +189,42 @@ install(CODE "
     message(STATUS \"Created desktop file\")
 ")
 
+# =============================================================================
+# Qt Configuration File (qt.conf)
+# =============================================================================
+# Helps Qt find plugins at runtime within the AppDir structure.
+# Paths are relative to the binary directory (usr/bin/).
+
+set(QTCONF_CONTENT "[Paths]
+Prefix = ..
+Plugins = plugins
+Qml2Imports = qml
+")
+
+install(CODE "
+    message(STATUS \"Creating qt.conf for AppDir...\")
+
+    set(QTCONF_PATH \"${APPDIR_USR}/bin/qt.conf\")
+    file(WRITE \"\${QTCONF_PATH}\" \"${QTCONF_CONTENT}\")
+
+    message(STATUS \"  Created: \${QTCONF_PATH}\")
+")
+
 # Install the executable to AppDir/usr/bin
 install(TARGETS FlySightViewer
     RUNTIME DESTINATION "${APPDIR_NAME}/usr/bin"
     COMPONENT AppImage
 )
 
-# Install the pybind11 bridge module to AppDir/usr/bin (next to executable)
+# Install the pybind11 bridge module to Python site-packages
+# The module must be in site-packages for Python's import system to find it reliably
+# BUNDLE_PYTHON_VERSION is set by BundlePythonLinux.cmake (included before this file)
+if(NOT DEFINED BUNDLE_PYTHON_VERSION)
+    set(BUNDLE_PYTHON_VERSION "3.13")
+    message(WARNING "BUNDLE_PYTHON_VERSION not set, using default: ${BUNDLE_PYTHON_VERSION}")
+endif()
 install(TARGETS flysight_cpp_bridge
-    LIBRARY DESTINATION "${APPDIR_NAME}/usr/bin"
+    LIBRARY DESTINATION "${APPDIR_NAME}/usr/share/python/lib/python${BUNDLE_PYTHON_VERSION}/site-packages"
     COMPONENT AppImage
 )
 
@@ -166,9 +263,11 @@ install(CODE "
 ")
 
 # Install plugin SDK and Python sources to site-packages
-# Note: The Python version path is set by BundlePythonLinux.cmake
-# Default to 3.13 but this will be populated correctly when Python is bundled
-set(BUNDLE_PYTHON_VERSION "3.13" CACHE STRING "Python version for site-packages path")
+# Python version is set by BundlePythonLinux.cmake (included before this file).
+# Provide fallback if that module wasn't included.
+if(NOT DEFINED BUNDLE_PYTHON_VERSION)
+    set(BUNDLE_PYTHON_VERSION "3.13")
+endif()
 install(DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/../python_plugins/"
     DESTINATION "${APPDIR_NAME}/usr/share/python/lib/python${BUNDLE_PYTHON_VERSION}/site-packages"
     COMPONENT AppImage

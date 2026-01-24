@@ -26,15 +26,69 @@
 
 include_guard(GLOBAL)
 
+# =============================================================================
+# Helper function for robust file download with retries
+# =============================================================================
+function(_download_with_retry URL OUTPUT_PATH MAX_RETRIES)
+    set(_retry_count 0)
+    set(_download_success FALSE)
+
+    while(NOT _download_success AND _retry_count LESS ${MAX_RETRIES})
+        math(EXPR _retry_count "${_retry_count} + 1")
+        message(STATUS "Download attempt ${_retry_count}/${MAX_RETRIES}: ${URL}")
+
+        file(DOWNLOAD
+            "${URL}"
+            "${OUTPUT_PATH}"
+            SHOW_PROGRESS
+            STATUS _download_status
+            TLS_VERIFY ON
+            TIMEOUT 300  # 5 minute timeout per attempt
+        )
+
+        list(GET _download_status 0 _download_error)
+        if(_download_error EQUAL 0)
+            set(_download_success TRUE)
+        else()
+            list(GET _download_status 1 _download_message)
+            message(WARNING "Download attempt ${_retry_count} failed: ${_download_message}")
+            if(_retry_count LESS ${MAX_RETRIES})
+                # Remove partial download
+                file(REMOVE "${OUTPUT_PATH}")
+                message(STATUS "Retrying in a moment...")
+            endif()
+        endif()
+    endwhile()
+
+    if(NOT _download_success)
+        message(FATAL_ERROR
+            "Failed to download after ${MAX_RETRIES} attempts.\n"
+            "URL: ${URL}\n"
+            "Please check network connectivity and try again."
+        )
+    endif()
+endfunction()
+
 # Python-build-standalone release information
-# Update these when upgrading Python version
+# PBS_RELEASE_TAG corresponds to the release date from python-build-standalone
 set(PYTHON_STANDALONE_VERSION "20241206" CACHE STRING "python-build-standalone release date")
-set(PYTHON_STANDALONE_PYTHON_VERSION "3.13.1" CACHE STRING "Python version in the standalone build")
+
+# Use build-time Python version for consistency with pybind11
+# Fall back to default if called before find_package(Python)
+if(DEFINED FLYSIGHT_PYTHON_FULL_VERSION)
+    set(PYTHON_STANDALONE_PYTHON_VERSION "${FLYSIGHT_PYTHON_FULL_VERSION}" CACHE STRING "Python version in the standalone build")
+else()
+    set(PYTHON_STANDALONE_PYTHON_VERSION "3.13.1" CACHE STRING "Python version in the standalone build")
+    message(WARNING "BundlePythonMacOS: Using default Python version. Call find_package(Python) first for consistency.")
+endif()
 
 # Base URL for python-build-standalone releases
 set(PYTHON_STANDALONE_BASE_URL
     "https://github.com/indygreg/python-build-standalone/releases/download/${PYTHON_STANDALONE_VERSION}"
 )
+
+# NumPy version (optional pin for reproducibility)
+set(NUMPY_VERSION "" CACHE STRING "Specific NumPy version to install (empty for latest)")
 
 # =============================================================================
 # bundle_python_macos()
@@ -90,12 +144,48 @@ function(bundle_python_macos)
         set(_pbs_arch "x86_64")
     endif()
 
+    # Validate architecture against CMAKE_SYSTEM_PROCESSOR and provide diagnostic output
+    message(STATUS "BundlePythonMacOS: System processor: ${CMAKE_SYSTEM_PROCESSOR}")
+    message(STATUS "BundlePythonMacOS: OSX architectures: ${CMAKE_OSX_ARCHITECTURES}")
+    message(STATUS "BundlePythonMacOS: Selected PBS architecture: ${_pbs_arch}")
+
+    # Warn if cross-compiling and architecture might not match
+    if(CMAKE_CROSSCOMPILING)
+        message(WARNING "Cross-compiling detected. Ensure Python architecture (${_pbs_arch}) matches target.")
+    endif()
+
     # Construct download URL
     # Format: cpython-X.Y.Z+YYYYMMDD-ARCH-apple-darwin-install_only.tar.gz
     set(_python_archive_name
         "cpython-${PYTHON_STANDALONE_PYTHON_VERSION}+${PYTHON_STANDALONE_VERSION}-${_pbs_arch}-apple-darwin-install_only.tar.gz"
     )
     set(_python_download_url "${PYTHON_STANDALONE_BASE_URL}/${_python_archive_name}")
+
+    # =======================================================================
+    # Pre-download URL validation
+    # =======================================================================
+    # Validate Python version is plausibly available in python-build-standalone
+    if(NOT PYTHON_STANDALONE_PYTHON_VERSION MATCHES "^3\\.(1[0-9]|[89])\\.[0-9]+$")
+        message(WARNING
+            "Python version ${PYTHON_STANDALONE_PYTHON_VERSION} may not be available in python-build-standalone.\n"
+            "Supported versions are typically 3.8.x through 3.13.x.\n"
+            "Check https://github.com/indygreg/python-build-standalone/releases for available versions."
+        )
+    endif()
+
+    # Validate architecture
+    if(NOT _pbs_arch MATCHES "^(x86_64|aarch64)$")
+        message(FATAL_ERROR
+            "Unsupported architecture '${_pbs_arch}' for python-build-standalone.\n"
+            "Supported architectures: x86_64, aarch64"
+        )
+    endif()
+
+    # Note: PBS_RELEASE_TAG must correspond to a release that includes the requested Python version
+    # If the download fails with 404, check:
+    # 1. The release tag exists: https://github.com/indygreg/python-build-standalone/releases
+    # 2. The Python version is included in that release
+    # 3. The architecture is supported for that Python version
 
     # Download directory in the build tree
     set(_download_dir "${CMAKE_BINARY_DIR}/_python_standalone")
@@ -120,23 +210,9 @@ function(bundle_python_macos)
         # Create download directory
         file(MAKE_DIRECTORY "${_download_dir}")
 
-        # Download archive
+        # Download archive with retry logic
         if(NOT EXISTS "${_archive_path}")
-            file(DOWNLOAD
-                "${_python_download_url}"
-                "${_archive_path}"
-                SHOW_PROGRESS
-                STATUS _download_status
-                TLS_VERIFY ON
-            )
-            list(GET _download_status 0 _download_error)
-            if(_download_error)
-                list(GET _download_status 1 _download_message)
-                message(FATAL_ERROR
-                    "Failed to download python-build-standalone: ${_download_message}\n"
-                    "URL: ${_python_download_url}"
-                )
-            endif()
+            _download_with_retry("${_python_download_url}" "${_archive_path}" 3)
         endif()
 
         # Extract archive
@@ -197,8 +273,98 @@ function(bundle_python_macos)
     endif()
 
     # =======================================================================
+    # Fix libpython dylib paths at install time
+    # =======================================================================
+    # The bundled libpython needs its library ID set to @rpath/libpython3.XX.dylib
+    # so that other binaries can find it using RPATH references.
+
+    set(_fix_libpython_script "${CMAKE_BINARY_DIR}/fix_libpython_macos.cmake")
+    file(WRITE "${_fix_libpython_script}" "
+# Fix libpython library ID for app bundle
+set(BUNDLE_DIR \"\${CMAKE_INSTALL_PREFIX}/$<TARGET_BUNDLE_DIR:${ARG_TARGET}>\")
+set(FRAMEWORKS_DIR \"\${BUNDLE_DIR}/Contents/Frameworks\")
+
+message(STATUS \"Fixing libpython dylib paths...\")
+
+# Find all libpython dylibs (real files, not symlinks)
+file(GLOB PYTHON_DYLIBS \"\${FRAMEWORKS_DIR}/libpython*.dylib\")
+
+foreach(DYLIB \${PYTHON_DYLIBS})
+    # Skip symlinks
+    if(IS_SYMLINK \"\${DYLIB}\")
+        continue()
+    endif()
+
+    get_filename_component(DYLIB_NAME \"\${DYLIB}\" NAME)
+    message(STATUS \"  Processing: \${DYLIB_NAME}\")
+
+    # Strip code signature before modifying (required on macOS 12+)
+    execute_process(
+        COMMAND codesign --remove-signature \"\${DYLIB}\"
+        ERROR_QUIET
+    )
+
+    # Set library ID to @rpath/libpython3.XX.dylib
+    execute_process(
+        COMMAND install_name_tool -id \"@rpath/\${DYLIB_NAME}\" \"\${DYLIB}\"
+        RESULT_VARIABLE _id_result
+        ERROR_VARIABLE _id_error
+    )
+    if(_id_result AND NOT _id_result EQUAL 0)
+        message(STATUS \"    Note: Could not set id: \${_id_error}\")
+    endif()
+
+    # Verify the change
+    execute_process(
+        COMMAND otool -D \"\${DYLIB}\"
+        OUTPUT_VARIABLE _new_id
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    # Extract just the ID line (second line of output)
+    string(REGEX REPLACE \"^[^\\n]*\\n\" \"\" _new_id \"\${_new_id}\")
+    message(STATUS \"    New ID: \${_new_id}\")
+
+    # Fix any dependencies that might be absolute paths
+    execute_process(
+        COMMAND otool -L \"\${DYLIB}\"
+        OUTPUT_VARIABLE _deps
+        ERROR_QUIET
+    )
+
+    string(REGEX MATCHALL \"[^\\n\\t ]+\\\\.dylib\" DEP_LIST \"\${_deps}\")
+
+    foreach(DEP \${DEP_LIST})
+        # Skip system libraries and already-correct references
+        if(DEP MATCHES \"^/usr/lib\" OR DEP MATCHES \"^/System/Library\" OR DEP MATCHES \"^@\")
+            continue()
+        endif()
+
+        get_filename_component(DEP_NAME \"\${DEP}\" NAME)
+
+        if(EXISTS \"\${FRAMEWORKS_DIR}/\${DEP_NAME}\")
+            execute_process(
+                COMMAND install_name_tool -change \"\${DEP}\" \"@rpath/\${DEP_NAME}\" \"\${DYLIB}\"
+                ERROR_QUIET
+            )
+            message(STATUS \"    Fixed dep: \${DEP_NAME}\")
+        endif()
+    endforeach()
+endforeach()
+
+message(STATUS \"libpython fixing complete\")
+")
+    install(SCRIPT "${_fix_libpython_script}" COMPONENT ${ARG_INSTALL_COMPONENT})
+
+    # =======================================================================
     # Install NumPy using pip at install time
     # =======================================================================
+
+    # Determine NumPy package spec
+    if(NUMPY_VERSION)
+        set(_numpy_spec "numpy==${NUMPY_VERSION}")
+    else()
+        set(_numpy_spec "numpy")
+    endif()
 
     # Create a script that installs NumPy into the bundled Python
     set(_install_numpy_script "${CMAKE_BINARY_DIR}/install_numpy_macos.cmake")
@@ -207,20 +373,35 @@ function(bundle_python_macos)
 set(BUNDLE_PYTHON_DIR \"\${CMAKE_INSTALL_PREFIX}/$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Resources/python\")
 set(PYTHON_EXE \"\${BUNDLE_PYTHON_DIR}/bin/python3\")
 set(SITE_PACKAGES \"\${BUNDLE_PYTHON_DIR}/lib/python${CMAKE_MATCH_1}.${CMAKE_MATCH_2}/site-packages\")
+set(NUMPY_SPEC \"${_numpy_spec}\")
 
 message(STATUS \"Installing NumPy to bundled Python...\")
 message(STATUS \"  Python: \${PYTHON_EXE}\")
 message(STATUS \"  Site-packages: \${SITE_PACKAGES}\")
+message(STATUS \"  NumPy spec: \${NUMPY_SPEC}\")
 
-# Ensure pip is available and install numpy
+# Verify pip is available
 execute_process(
-    COMMAND \"\${PYTHON_EXE}\" -m ensurepip --upgrade
-    RESULT_VARIABLE _pip_result
-    OUTPUT_VARIABLE _pip_output
-    ERROR_VARIABLE _pip_error
+    COMMAND \"\${PYTHON_EXE}\" -m pip --version
+    RESULT_VARIABLE _pip_check_result
+    OUTPUT_VARIABLE _pip_version
+    ERROR_QUIET
 )
-if(_pip_result)
-    message(WARNING \"ensurepip failed: \${_pip_error}\")
+if(_pip_check_result)
+    message(STATUS \"pip not available, attempting to bootstrap...\")
+    # Try ensurepip first (available in python-build-standalone)
+    execute_process(
+        COMMAND \"\${PYTHON_EXE}\" -m ensurepip --upgrade
+        RESULT_VARIABLE _ensurepip_result
+        OUTPUT_VARIABLE _ensurepip_output
+        ERROR_VARIABLE _ensurepip_error
+    )
+    if(_ensurepip_result)
+        message(WARNING \"ensurepip failed: \${_ensurepip_error}\")
+    endif()
+else()
+    string(STRIP \"\${_pip_version}\" _pip_version)
+    message(STATUS \"pip available: \${_pip_version}\")
 endif()
 
 execute_process(
@@ -229,7 +410,7 @@ execute_process(
 )
 
 execute_process(
-    COMMAND \"\${PYTHON_EXE}\" -m pip install numpy --target \"\${SITE_PACKAGES}\"
+    COMMAND \"\${PYTHON_EXE}\" -m pip install \${NUMPY_SPEC} --target \"\${SITE_PACKAGES}\"
     RESULT_VARIABLE _numpy_result
     OUTPUT_VARIABLE _numpy_output
     ERROR_VARIABLE _numpy_error
@@ -265,6 +446,57 @@ endif()
             PATTERN "__pycache__" EXCLUDE
         )
     endif()
+
+    # =======================================================================
+    # Verify bundled Python installation
+    # =======================================================================
+    set(_verify_python_script "${CMAKE_BINARY_DIR}/verify_python_macos.cmake")
+    file(WRITE "${_verify_python_script}" "
+message(STATUS \"Verifying bundled Python installation...\")
+set(PYTHON_EXE \"\${CMAKE_INSTALL_PREFIX}/$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Resources/python/bin/python3\")
+
+# Test Python interpreter
+execute_process(
+    COMMAND \"\${PYTHON_EXE}\" -c \"import sys; print(f'Python {sys.version}')\"
+    RESULT_VARIABLE _verify_result
+    OUTPUT_VARIABLE _verify_output
+    ERROR_VARIABLE _verify_error
+)
+if(_verify_result)
+    message(WARNING \"Bundled Python verification failed: \${_verify_error}\")
+else()
+    string(STRIP \"\${_verify_output}\" _verify_output)
+    message(STATUS \"  \${_verify_output}\")
+endif()
+
+# Test NumPy import
+execute_process(
+    COMMAND \"\${PYTHON_EXE}\" -c \"import numpy; print(f'NumPy {numpy.__version__}')\"
+    RESULT_VARIABLE _numpy_result
+    OUTPUT_VARIABLE _numpy_output
+    ERROR_VARIABLE _numpy_error
+)
+if(_numpy_result)
+    message(WARNING \"NumPy import failed: \${_numpy_error}\")
+else()
+    string(STRIP \"\${_numpy_output}\" _numpy_output)
+    message(STATUS \"  \${_numpy_output}\")
+endif()
+
+# Test that site-packages is accessible
+execute_process(
+    COMMAND \"\${PYTHON_EXE}\" -c \"import site; print(f'Site packages: {site.getsitepackages()}')\"
+    RESULT_VARIABLE _site_result
+    OUTPUT_VARIABLE _site_output
+)
+if(NOT _site_result)
+    string(STRIP \"\${_site_output}\" _site_output)
+    message(STATUS \"  \${_site_output}\")
+endif()
+
+message(STATUS \"Python bundle verification complete\")
+")
+    install(SCRIPT "${_verify_python_script}" COMPONENT ${ARG_INSTALL_COMPONENT})
 
     # =======================================================================
     # Store Python paths for other modules to use

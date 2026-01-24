@@ -145,6 +145,14 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install ninja boost
+          # Export Boost location for CMake
+          # On Apple Silicon (arm64), Homebrew installs to /opt/homebrew
+          # On Intel Macs, Homebrew installs to /usr/local
+          if [ "$(uname -m)" = "arm64" ]; then
+            echo "BOOST_ROOT=/opt/homebrew" >> $GITHUB_ENV
+          else
+            echo "BOOST_ROOT=/usr/local" >> $GITHUB_ENV
+          fi
 
       # =========================================================================
       # Task 4.3: Platform-Specific Dependency Installation - Linux
@@ -155,6 +163,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             ninja-build \
+            patchelf \
             libboost-all-dev \
             libcups2-dev \
             libxcb-cursor0 \
@@ -170,6 +179,32 @@ jobs:
             libfuse2 \
             libgl1-mesa-dev \
             libegl1-mesa-dev
+          # Export Boost location for CMake
+          # On Ubuntu, Boost is installed via apt-get to /usr
+          echo "BOOST_ROOT=/usr" >> $GITHUB_ENV
+
+      - name: Verify build tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          echo "=== Verifying required build tools ==="
+
+          # patchelf - required for RPATH modification
+          if command -v patchelf &> /dev/null; then
+            echo "patchelf: $(patchelf --version)"
+          else
+            echo "ERROR: patchelf not found"
+            exit 1
+          fi
+
+          # file - used for library identification
+          if command -v file &> /dev/null; then
+            echo "file: $(file --version | head -1)"
+          else
+            echo "ERROR: file command not found"
+            exit 1
+          fi
+
+          echo "=== All required tools available ==="
 
       # =========================================================================
       # Task 4.4: Configure Qt Installation
@@ -180,6 +215,74 @@ jobs:
           version: ${{ env.QT_VERSION }}
           modules: qtlocation qtpositioning qtmultimedia
           cache: true
+
+      # =========================================================================
+      # Task 8.9: Python Version Consistency
+      # =========================================================================
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Verify Python configuration
+        shell: bash
+        run: |
+          echo "=== Python Configuration ==="
+          python --version
+          python -c "import sys; print(f'Prefix: {sys.prefix}')"
+          python -c "import sys; print(f'Executable: {sys.executable}')"
+
+          # Verify pybind11 will find this Python
+          which python
+          python -c "import sysconfig; print(f'Include path: {sysconfig.get_path(\"include\")}')"
+
+          # Export Python root for CMake
+          PYTHON_ROOT_DIR=$(python -c "import sys; print(sys.prefix)")
+          echo "PYTHON_ROOT_DIR=$PYTHON_ROOT_DIR" >> $GITHUB_ENV
+          echo "Python root directory: $PYTHON_ROOT_DIR"
+
+      # =========================================================================
+      # Task 7.4: Debug Qt Installation Paths
+      # =========================================================================
+      - name: Debug Qt installation paths
+        shell: bash
+        run: |
+          echo "=== Qt Environment Variables ==="
+          echo "Qt6_DIR: $Qt6_DIR"
+
+          if [ -n "$Qt6_DIR" ]; then
+            # Qt6_DIR points to <prefix>/lib/cmake/Qt6/
+            QT6_PREFIX=$(cd "$Qt6_DIR/../../.." 2>/dev/null && pwd)
+            echo "Derived Qt6 prefix: $QT6_PREFIX"
+
+            # Export for later steps
+            echo "QT6_INSTALL_PREFIX=$QT6_PREFIX" >> $GITHUB_ENV
+
+            echo ""
+            echo "=== Checking for plugins directory ==="
+            for dir in "$QT6_PREFIX/plugins" "$QT6_PREFIX/share/qt6/plugins" "$QT6_PREFIX/lib/qt6/plugins"; do
+              if [ -d "$dir" ]; then
+                echo "Found plugins at: $dir"
+                if [ -d "$dir/geoservices" ]; then
+                  echo "  Geoservices: $(ls "$dir/geoservices" 2>/dev/null | wc -l) files"
+                else
+                  echo "  Geoservices: directory not found"
+                fi
+              fi
+            done
+
+            echo ""
+            echo "=== Checking for QML directory ==="
+            for dir in "$QT6_PREFIX/qml" "$QT6_PREFIX/share/qt6/qml" "$QT6_PREFIX/lib/qt6/qml"; do
+              if [ -d "$dir" ]; then
+                echo "Found QML at: $dir"
+                echo "  QtLocation: $(test -d "$dir/QtLocation" && echo "present" || echo "missing")"
+                echo "  QtPositioning: $(test -d "$dir/QtPositioning" && echo "present" || echo "missing")"
+              fi
+            done
+          else
+            echo "WARNING: Qt6_DIR is not set"
+          fi
 
       # =========================================================================
       # Task 4.6: Configure CMake Build Steps - Third Party
@@ -200,6 +303,112 @@ jobs:
           cmake --build build-third-party --parallel
 
       # =========================================================================
+      # Task 5.4/6.6: Verify Third-Party Installations (TBB, GTSAM, KDDockWidgets)
+      # =========================================================================
+      - name: Verify third-party installations
+        shell: bash
+        run: |
+          echo "=== Verifying Third-Party Builds ==="
+
+          # ------------------------------------------------------------------
+          # Check TBB
+          # ------------------------------------------------------------------
+          echo ""
+          echo "--- TBB Libraries ---"
+          TBB_ROOT="${GITHUB_WORKSPACE}/third-party/oneTBB-install"
+          if [ -d "$TBB_ROOT/lib" ]; then
+            ls -la "$TBB_ROOT/lib/" || echo "TBB lib directory listing failed"
+          else
+            echo "WARNING: TBB lib directory not found at $TBB_ROOT/lib"
+          fi
+
+          echo ""
+          echo "--- TBB CMake Config ---"
+          if [ -d "$TBB_ROOT/lib/cmake/TBB" ]; then
+            ls "$TBB_ROOT/lib/cmake/TBB/" || echo "TBB CMake config listing failed"
+          else
+            echo "WARNING: TBB CMake config not found at $TBB_ROOT/lib/cmake/TBB"
+          fi
+
+          # ------------------------------------------------------------------
+          # Check GTSAM
+          # ------------------------------------------------------------------
+          echo ""
+          echo "--- GTSAM Libraries ---"
+          GTSAM_ROOT="${GITHUB_WORKSPACE}/third-party/GTSAM-install"
+          if [ -d "$GTSAM_ROOT/lib" ]; then
+            ls -la "$GTSAM_ROOT/lib/" || echo "GTSAM lib directory listing failed"
+          else
+            echo "WARNING: GTSAM lib directory not found at $GTSAM_ROOT/lib"
+          fi
+
+          # Verify expected GTSAM libraries exist
+          echo ""
+          echo "--- GTSAM Library Verification ---"
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            for lib in gtsam.lib metis-gtsam.lib cephes-gtsam.lib Geographic.lib; do
+              if [ -f "$GTSAM_ROOT/lib/$lib" ]; then
+                echo "Found: $lib"
+              else
+                echo "MISSING: $lib"
+              fi
+            done
+          else
+            # macOS uses .dylib, Linux uses .so
+            for lib in libgtsam libmetis-gtsam libcephes-gtsam libGeographic; do
+              found=$(find "$GTSAM_ROOT/lib" -name "${lib}.*" 2>/dev/null | head -1)
+              if [ -n "$found" ]; then
+                echo "Found: $(basename $found)"
+              else
+                echo "MISSING: ${lib}"
+              fi
+            done
+          fi
+
+          # Check GTSAM includes
+          echo ""
+          echo "--- GTSAM Headers ---"
+          if [ -d "$GTSAM_ROOT/include/gtsam" ]; then
+            echo "GTSAM headers found"
+          else
+            echo "WARNING: GTSAM headers MISSING at $GTSAM_ROOT/include/gtsam"
+          fi
+          if [ -d "$GTSAM_ROOT/include/GeographicLib" ]; then
+            echo "GeographicLib headers found"
+          else
+            echo "WARNING: GeographicLib headers MISSING at $GTSAM_ROOT/include/GeographicLib"
+          fi
+
+          # ------------------------------------------------------------------
+          # Check KDDockWidgets
+          # ------------------------------------------------------------------
+          echo ""
+          echo "--- KDDockWidgets ---"
+          KDDW_ROOT="${GITHUB_WORKSPACE}/third-party/KDDockWidgets-install"
+
+          if [ -d "$KDDW_ROOT" ]; then
+            echo "KDDW_ROOT exists: $KDDW_ROOT"
+            ls -la "$KDDW_ROOT/lib/" 2>/dev/null || echo "KDDockWidgets lib directory not found"
+
+            # Check for CMake config
+            if [ -f "$KDDW_ROOT/lib/cmake/KDDockWidgets-qt6/KDDockWidgets-qt6Config.cmake" ]; then
+              echo "CMake config found in lib/cmake"
+            elif [ -f "$KDDW_ROOT/lib64/cmake/KDDockWidgets-qt6/KDDockWidgets-qt6Config.cmake" ]; then
+              echo "CMake config found in lib64/cmake"
+            else
+              echo "WARNING: KDDockWidgets CMake config not found"
+              echo "Searching for cmake files..."
+              find "$KDDW_ROOT" -name "*.cmake" 2>/dev/null | head -20 || true
+            fi
+          else
+            echo "ERROR: KDDW_ROOT does not exist: $KDDW_ROOT"
+            exit 1
+          fi
+
+          echo ""
+          echo "=== Third-Party Verification Complete ==="
+
+      # =========================================================================
       # Task 4.6: Configure CMake Build Steps - Main Application
       # =========================================================================
       - name: Configure main application
@@ -213,9 +422,46 @@ jobs:
             -DTHIRD_PARTY_DIR="${GITHUB_WORKSPACE}/third-party" \
             -DGTSAM_ROOT="${GITHUB_WORKSPACE}/third-party/GTSAM-install" \
             -DTBB_ROOT="${GITHUB_WORKSPACE}/third-party/oneTBB-install" \
+            -DTBB_DIR="${GITHUB_WORKSPACE}/third-party/oneTBB-install/lib/cmake/TBB" \
             -DKDDW_ROOT="${GITHUB_WORKSPACE}/third-party/KDDockWidgets-install" \
+            ${PYTHON_ROOT_DIR:+-DPython_ROOT_DIR="$PYTHON_ROOT_DIR"} \
+            ${QT6_INSTALL_PREFIX:+-DQT6_INSTALL_PREFIX="$QT6_INSTALL_PREFIX"} \
             ${BOOST_ROOT:+-DBOOST_ROOT="$BOOST_ROOT"} \
             ${BOOST_LIBRARYDIR:+-DBOOST_LIBRARYDIR="$BOOST_LIBRARYDIR"}
+
+      # =========================================================================
+      # Task 3.5: Verify Boost Discovery
+      # =========================================================================
+      - name: Verify Boost discovery
+        shell: bash
+        run: |
+          echo "=== Boost Discovery Verification ==="
+
+          # Check CMakeCache.txt for Boost variables
+          if [ -f "build/CMakeCache.txt" ]; then
+            echo "BOOST_ROOT:"
+            grep "^BOOST_ROOT:" build/CMakeCache.txt || echo "  (not set)"
+
+            echo "BOOST_LIBRARYDIR:"
+            grep "^BOOST_LIBRARYDIR:" build/CMakeCache.txt || echo "  (not set)"
+
+            echo "Boost_FOUND:"
+            grep "Boost_FOUND" build/CMakeCache.txt || echo "  (not in cache)"
+
+            echo "Boost_VERSION:"
+            grep "Boost_VERSION:" build/CMakeCache.txt || echo "  (not set)"
+
+            echo "Boost_INCLUDE_DIRS:"
+            grep "Boost_INCLUDE_DIR" build/CMakeCache.txt | head -3 || echo "  (not set)"
+
+            echo "Boost component libraries found:"
+            grep "Boost_.*_LIBRARY" build/CMakeCache.txt | head -10 || echo "  (none found)"
+          else
+            echo "ERROR: build/CMakeCache.txt not found"
+            exit 1
+          fi
+
+          echo "=== Boost verification complete ==="
 
       - name: Build main application
         shell: bash
@@ -240,27 +486,309 @@ jobs:
           echo "Checking for executable..."
           test -f build/install/FlySightViewer.exe && echo "FlySightViewer.exe found" || echo "WARNING: FlySightViewer.exe not found"
 
+          echo ""
+          echo "=== Checking Qt plugins ==="
+          if [ -d "build/install/plugins/geoservices" ]; then
+            echo "Geoservices plugins found:"
+            ls -la build/install/plugins/geoservices/
+          else
+            echo "WARNING: Geoservices plugins not found"
+          fi
+
+          echo ""
+          echo "=== Checking QML modules ==="
+          for mod in QtLocation QtPositioning; do
+            if [ -d "build/install/qml/$mod" ]; then
+              echo "$mod: Found"
+            else
+              echo "WARNING: $mod not found"
+            fi
+          done
+
+          echo ""
+          echo "=== Checking qt.conf ==="
+          if [ -f "build/install/qt.conf" ]; then
+            echo "qt.conf found:"
+            cat build/install/qt.conf
+          else
+            echo "WARNING: qt.conf not found"
+          fi
+
+      # =========================================================================
+      # Phase 9: Comprehensive macOS RPATH Verification
+      # =========================================================================
       - name: Verify deployment output (macOS)
         if: runner.os == 'macOS'
         shell: bash
         run: |
           echo "=== Verifying macOS deployment ==="
-          ls -la build/install/ || true
-          ls -la build/install/FlySightViewer.app/Contents/MacOS/ || true
-          ls -la build/install/FlySightViewer.app/Contents/Frameworks/ || true
-          echo "Checking for app bundle..."
-          test -d build/install/FlySightViewer.app && echo "FlySightViewer.app found" || echo "WARNING: FlySightViewer.app not found"
+          BUNDLE="build/install/FlySightViewer.app"
+
+          echo ""
+          echo "--- Bundle Structure ---"
+          ls -la "$BUNDLE/Contents/" || true
+          ls -la "$BUNDLE/Contents/MacOS/" || true
+          ls -la "$BUNDLE/Contents/Frameworks/" | head -20 || true
+
+          echo ""
+          echo "--- Executable RPATH Verification ---"
+          EXE="$BUNDLE/Contents/MacOS/FlySightViewer"
+          if [ -f "$EXE" ]; then
+            echo "Executable rpaths:"
+            otool -l "$EXE" | grep -A2 "LC_RPATH" || echo "No LC_RPATH found"
+
+            echo ""
+            echo "Executable dependencies:"
+            otool -L "$EXE" | head -20
+
+            echo ""
+            echo "Checking for absolute paths (potential issues):"
+            otool -L "$EXE" | grep -v "@" | grep -v "/usr/lib" | grep -v "/System" | grep "dylib" || echo "No problematic paths found"
+          else
+            echo "WARNING: Executable not found"
+          fi
+
+          echo ""
+          echo "--- Frameworks Library IDs ---"
+          FRAMEWORKS_DIR="$BUNDLE/Contents/Frameworks"
+          for dylib in "$FRAMEWORKS_DIR"/*.dylib; do
+            [ -L "$dylib" ] && continue  # Skip symlinks
+            [ -f "$dylib" ] || continue
+            name=$(basename "$dylib")
+            id=$(otool -D "$dylib" 2>/dev/null | tail -1)
+            if [[ "$id" == "@rpath/"* ]]; then
+              echo "OK: $name -> $id"
+            else
+              echo "WARN: $name -> $id (should be @rpath/...)"
+            fi
+          done
+
+          echo ""
+          echo "--- Checking Third-Party Libraries ---"
+          for lib in libgtsam libmetis-gtsam libcephes-gtsam libGeographic libtbb; do
+            found=$(find "$FRAMEWORKS_DIR" -name "${lib}*.dylib" ! -type l 2>/dev/null | head -1)
+            if [ -n "$found" ]; then
+              echo "Found: $(basename "$found")"
+              # Check for problematic dependencies
+              bad_deps=$(otool -L "$found" | grep -v "@" | grep -v "/usr/lib" | grep -v "/System" | grep "dylib" || true)
+              if [ -n "$bad_deps" ]; then
+                echo "  WARNING: Has absolute paths:"
+                echo "$bad_deps" | sed 's/^/    /'
+              fi
+            else
+              echo "MISSING: ${lib}*.dylib"
+            fi
+          done
+
+          echo ""
+          echo "--- Checking libpython ---"
+          libpython=$(find "$FRAMEWORKS_DIR" -name "libpython*.dylib" ! -type l 2>/dev/null | head -1)
+          if [ -n "$libpython" ]; then
+            echo "Found: $(basename "$libpython")"
+            echo "ID: $(otool -D "$libpython" | tail -1)"
+          else
+            echo "MISSING: libpython*.dylib"
+          fi
+
+          echo ""
+          echo "--- Checking pybind11 Module ---"
+          bridge=$(find "$BUNDLE" -name "flysight_cpp_bridge*.so" 2>/dev/null | head -1)
+          if [ -n "$bridge" ]; then
+            echo "Found: $bridge"
+            echo "Dependencies:"
+            otool -L "$bridge" | head -10
+            echo "RPaths:"
+            otool -l "$bridge" | grep -A2 "LC_RPATH" || echo "No LC_RPATH"
+          else
+            echo "MISSING: flysight_cpp_bridge module"
+          fi
+
+          echo ""
+          echo "--- Checking Qt Plugins ---"
+          if [ -d "$BUNDLE/Contents/PlugIns/geoservices" ]; then
+            echo "Geoservices plugins:"
+            for plugin in "$BUNDLE/Contents/PlugIns/geoservices"/*.dylib; do
+              [ -f "$plugin" ] || continue
+              name=$(basename "$plugin")
+              bad_deps=$(otool -L "$plugin" | grep -v "@" | grep -v "/usr/lib" | grep -v "/System" | grep "dylib" || true)
+              if [ -z "$bad_deps" ]; then
+                echo "  OK: $name"
+              else
+                echo "  WARN: $name has absolute paths"
+              fi
+            done
+          else
+            echo "No geoservices plugins found"
+          fi
+
+          echo ""
+          echo "--- Checking QML modules ---"
+          for mod in QtLocation QtPositioning; do
+            if [ -d "$BUNDLE/Contents/Resources/qml/$mod" ]; then
+              echo "$mod: Found"
+            else
+              echo "WARNING: $mod not found"
+            fi
+          done
+
+          echo ""
+          echo "--- Checking qt.conf ---"
+          if [ -f "$BUNDLE/Contents/Resources/qt.conf" ]; then
+            echo "qt.conf found:"
+            cat "$BUNDLE/Contents/Resources/qt.conf"
+          else
+            echo "WARNING: qt.conf not found"
+          fi
+
+          echo ""
+          echo "=== macOS Verification Complete ==="
 
       - name: Verify deployment output (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
           echo "=== Verifying Linux deployment ==="
-          ls -la build/install/ || true
-          ls -la build/install/FlySightViewer.AppDir/ || true
-          ls -la build/install/FlySightViewer.AppDir/usr/bin/ || true
-          echo "Checking for AppDir..."
-          test -d build/install/FlySightViewer.AppDir && echo "FlySightViewer.AppDir found" || echo "WARNING: FlySightViewer.AppDir not found"
+          APPDIR="build/install/FlySightViewer.AppDir"
+
+          # Check AppDir structure
+          echo "--- AppDir Structure ---"
+          for dir in usr/bin usr/lib usr/plugins usr/qml usr/share/python; do
+            if [ -d "$APPDIR/$dir" ]; then
+              echo "  $dir: OK ($(ls -1 "$APPDIR/$dir" 2>/dev/null | wc -l) items)"
+            else
+              echo "  $dir: MISSING"
+            fi
+          done
+
+          echo ""
+          echo "--- AppRun and Desktop Files ---"
+          test -x "$APPDIR/AppRun" && echo "  AppRun: OK (executable)" || echo "  AppRun: MISSING or not executable"
+          test -f "$APPDIR/FlySightViewer.desktop" && echo "  Desktop file: OK" || echo "  Desktop file: MISSING"
+          test -f "$APPDIR/FlySightViewer.png" && echo "  Icon: OK" || echo "  Icon: MISSING"
+
+          echo ""
+          echo "--- Third-Party Libraries ---"
+          for lib in libtbb libgtsam libmetis-gtsam libcephes-gtsam libGeographic libkddockwidgets; do
+            found=$(find "$APPDIR/usr/lib" -name "${lib}*.so*" 2>/dev/null | head -1)
+            if [ -n "$found" ]; then
+              echo "  $lib: $(basename $found)"
+            else
+              echo "  $lib: NOT FOUND"
+            fi
+          done
+
+          echo ""
+          echo "--- Qt Components ---"
+          if [ -d "$APPDIR/usr/plugins/platforms" ]; then
+            echo "  Platform plugins: $(ls "$APPDIR/usr/plugins/platforms/" 2>/dev/null)"
+          else
+            echo "  Platform plugins: MISSING"
+          fi
+          if [ -d "$APPDIR/usr/plugins/geoservices" ]; then
+            echo "  Geoservices plugins: $(ls "$APPDIR/usr/plugins/geoservices/" 2>/dev/null | wc -l) files"
+          else
+            echo "  Geoservices plugins: MISSING"
+          fi
+          for mod in QtLocation QtPositioning; do
+            test -d "$APPDIR/usr/qml/$mod" && echo "  QML $mod: OK" || echo "  QML $mod: MISSING"
+          done
+          test -f "$APPDIR/usr/bin/qt.conf" && echo "  qt.conf: OK" || echo "  qt.conf: MISSING"
+
+          echo ""
+          echo "--- Python Bundle ---"
+          PYTHON_DIR="$APPDIR/usr/share/python"
+          if [ -d "$PYTHON_DIR" ]; then
+            echo "  Python directory: OK"
+            PYTHON_BIN="$PYTHON_DIR/bin/python3"
+            if [ -x "$PYTHON_BIN" ]; then
+              echo "  Python version: $("$PYTHON_BIN" --version 2>&1)"
+            else
+              echo "  Python executable: MISSING"
+            fi
+
+            # Check for bridge module
+            BRIDGE=$(find "$PYTHON_DIR" -name "flysight_cpp_bridge*.so" 2>/dev/null | head -1)
+            if [ -n "$BRIDGE" ]; then
+              echo "  Bridge module: $(basename $BRIDGE)"
+              # Verify RPATH
+              RPATH=$(patchelf --print-rpath "$BRIDGE" 2>/dev/null)
+              echo "  Bridge RPATH: $RPATH"
+            else
+              echo "  Bridge module: NOT FOUND"
+            fi
+          else
+            echo "  Python bundle: MISSING"
+          fi
+
+          echo ""
+          echo "--- Executable RPATH ---"
+          EXE="$APPDIR/usr/bin/FlySightViewer"
+          if [ -f "$EXE" ]; then
+            RPATH=$(patchelf --print-rpath "$EXE" 2>/dev/null)
+            echo "  FlySightViewer RPATH: $RPATH"
+          fi
+
+          echo ""
+          echo "=== Verification Complete ==="
+
+      # =========================================================================
+      # Phase 4: TBB Runtime Verification
+      # =========================================================================
+      - name: Verify TBB deployment (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          echo "=== Verifying TBB libraries in macOS bundle ==="
+          FRAMEWORKS_DIR="build/install/FlySightViewer.app/Contents/Frameworks"
+
+          # Check for TBB libraries
+          if ls "$FRAMEWORKS_DIR"/libtbb*.dylib 1>/dev/null 2>&1; then
+            echo "TBB libraries found:"
+            ls -la "$FRAMEWORKS_DIR"/libtbb*.dylib
+          else
+            echo "WARNING: TBB libraries not found in Frameworks directory"
+          fi
+
+          # Verify library IDs use @rpath
+          echo ""
+          echo "=== Checking TBB library IDs ==="
+          for lib in "$FRAMEWORKS_DIR"/libtbb*.dylib; do
+            if [ -f "$lib" ] && [ ! -L "$lib" ]; then
+              echo "Library: $(basename $lib)"
+              otool -D "$lib" | tail -1
+            fi
+          done
+
+          # Check executable dependencies
+          echo ""
+          echo "=== Checking executable TBB dependencies ==="
+          otool -L build/install/FlySightViewer.app/Contents/MacOS/FlySightViewer | grep -i tbb || echo "No TBB references found in executable"
+
+      - name: Verify TBB deployment (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          echo "=== Verifying TBB libraries in Linux AppDir ==="
+          LIB_DIR="build/install/FlySightViewer.AppDir/usr/lib"
+
+          # Check for TBB libraries
+          if ls "$LIB_DIR"/libtbb*.so* 1>/dev/null 2>&1; then
+            echo "TBB libraries found:"
+            ls -la "$LIB_DIR"/libtbb*.so*
+          else
+            echo "WARNING: TBB libraries not found in AppDir lib directory"
+          fi
+
+          # Check executable can find TBB
+          echo ""
+          echo "=== Checking executable TBB dependencies ==="
+          EXECUTABLE="build/install/FlySightViewer.AppDir/usr/bin/FlySightViewer"
+          if [ -f "$EXECUTABLE" ]; then
+            # Set library path temporarily to check if linking works
+            LD_LIBRARY_PATH="$LIB_DIR:$LD_LIBRARY_PATH" ldd "$EXECUTABLE" 2>&1 | grep -i tbb || echo "No TBB references found"
+          else
+            echo "WARNING: Executable not found at $EXECUTABLE"
+          fi
 
       # =========================================================================
       # Task 4.7: Linux AppImage Creation
@@ -296,6 +824,68 @@ jobs:
 
           echo "AppImage creation complete"
           ls -la build/*.AppImage || true
+
+      - name: Verify AppImage (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          echo "=== Verifying AppImage ==="
+
+          APPIMAGE=$(find build -name "*.AppImage" -type f 2>/dev/null | head -1)
+          if [ -z "$APPIMAGE" ]; then
+            echo "WARNING: No AppImage found in build/"
+            ls -la build/
+            exit 0
+          fi
+
+          echo "AppImage: $APPIMAGE"
+          echo "Size: $(ls -lh "$APPIMAGE" | awk '{print $5}')"
+
+          # Test extraction (doesn't require FUSE)
+          echo ""
+          echo "--- Testing AppImage extraction ---"
+          export APPIMAGE_EXTRACT_AND_RUN=1
+
+          # Extract to temporary directory
+          EXTRACT_DIR=$(mktemp -d)
+          cd "$EXTRACT_DIR"
+          "$GITHUB_WORKSPACE/$APPIMAGE" --appimage-extract >/dev/null 2>&1
+
+          if [ -d "squashfs-root" ]; then
+            echo "Extraction: OK"
+            echo "Contents:"
+            ls -la squashfs-root/
+
+            # Quick sanity check
+            echo ""
+            echo "--- Sanity checks ---"
+            test -x squashfs-root/AppRun && echo "AppRun: OK" || echo "AppRun: FAILED"
+            test -x squashfs-root/usr/bin/FlySightViewer && echo "Executable: OK" || echo "Executable: FAILED"
+            test -f squashfs-root/usr/bin/qt.conf && echo "qt.conf: OK" || echo "qt.conf: MISSING"
+
+            # Check RPATH in extracted files
+            echo ""
+            echo "--- RPATH verification ---"
+            if [ -f squashfs-root/usr/bin/FlySightViewer ]; then
+              RPATH=$(patchelf --print-rpath squashfs-root/usr/bin/FlySightViewer 2>/dev/null)
+              echo "FlySightViewer RPATH: $RPATH"
+            fi
+
+            BRIDGE=$(find squashfs-root/usr/share/python -name "flysight_cpp_bridge*.so" 2>/dev/null | head -1)
+            if [ -n "$BRIDGE" ]; then
+              BRIDGE_RPATH=$(patchelf --print-rpath "$BRIDGE" 2>/dev/null)
+              echo "Bridge module RPATH: $BRIDGE_RPATH"
+            fi
+          else
+            echo "Extraction: FAILED"
+          fi
+
+          # Cleanup
+          cd "$GITHUB_WORKSPACE"
+          rm -rf "$EXTRACT_DIR"
+
+          echo ""
+          echo "=== AppImage Verification Complete ==="
 
       # =========================================================================
       # Task 4.8: Implement Artifact Packaging

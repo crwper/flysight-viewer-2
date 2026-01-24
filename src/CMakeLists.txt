@@ -10,12 +10,35 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Install into <build>/install by default so devs don’t need admin rights
+# Install into <build>/install by default so devs don't need admin rights
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
   set(CMAKE_INSTALL_PREFIX
       "${CMAKE_BINARY_DIR}/install"
       CACHE PATH "Install path prefix." FORCE)
 endif()
+
+# =============================================================================
+# Variable Definition Conventions
+# =============================================================================
+#
+# Third-party path variables (defined once, cached, can be overridden):
+#   THIRD_PARTY_DIR, EIGEN_DIR, QCUSTOMPLOT_ROOT, QCUSTOMPLOT_DIR,
+#   GTSAM_ROOT, TBB_ROOT, KDDW_ROOT, BOOST_ROOT, BOOST_LIBRARYDIR
+#
+# These are defined as CACHE PATH variables at the start of this file.
+# Do not redefine these variables elsewhere - CMake's cache ensures
+# command-line overrides work correctly.
+#
+# Platform-specific modules (cmake/Bundle*, cmake/Deploy*, cmake/Create*)
+# may define their own CACHE variables, but should avoid redefining
+# variables already defined here.
+#
+# When adding new third-party dependencies:
+# 1. Add path variable in the "Third-party root" section below
+# 2. Use the variable where needed without redefinition
+# 3. Document the variable in this conventions block
+#
+# =============================================================================
 
 # Third-party root (editable in Qt Creator / CMake cache)
 set(THIRD_PARTY_DIR "${CMAKE_CURRENT_LIST_DIR}/../third-party"
@@ -28,12 +51,32 @@ set(GTSAM_ROOT     "${THIRD_PARTY_DIR}/GTSAM-install"         CACHE PATH "GTSAM 
 set(TBB_ROOT       "${THIRD_PARTY_DIR}/oneTBB-install"        CACHE PATH "oneTBB install prefix")
 set(KDDW_ROOT      "${THIRD_PARTY_DIR}/KDDockWidgets-install" CACHE PATH "KDDockWidgets install prefix")
 
+# Allow environment variable override for CI/CD
+if(DEFINED ENV{KDDW_ROOT} AND NOT KDDW_ROOT)
+    set(KDDW_ROOT "$ENV{KDDW_ROOT}")
+endif()
+
 # Make KDDW discoverable by find_package() without requiring external -DCMAKE_PREFIX_PATH=...
 list(PREPEND CMAKE_PREFIX_PATH "${KDDW_ROOT}")
 
-# Boost root (editable)
-set(BOOST_ROOT "C:/Program Files/Boost/boost_1_87_0"
-    CACHE PATH "Boost root directory")
+# KDDockWidgets CMake config location varies by platform
+# Add common subdirectories to help find_package locate the config
+set(_KDDW_CMAKE_PATHS
+    "${KDDW_ROOT}/lib/cmake/KDDockWidgets-qt6"
+    "${KDDW_ROOT}/lib64/cmake/KDDockWidgets-qt6"
+    "${KDDW_ROOT}/share/cmake/KDDockWidgets-qt6"
+)
+foreach(_kddw_path ${_KDDW_CMAKE_PATHS})
+    if(EXISTS "${_kddw_path}/KDDockWidgets-qt6Config.cmake")
+        list(PREPEND CMAKE_PREFIX_PATH "${_kddw_path}/..")
+        message(STATUS "Found KDDockWidgets config at: ${_kddw_path}")
+        break()
+    endif()
+endforeach()
+
+# Include cross-platform Boost discovery
+# This sets BOOST_ROOT and BOOST_LIBRARYDIR with platform-appropriate defaults
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/BoostDiscovery.cmake")
 
 # ─────────────────────────────── Qt
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
@@ -50,6 +93,49 @@ endif()
 # ─────────────────────────────── Python / pybind11
 # Full Python install for embedding + extension module build
 find_package(Python 3.8 REQUIRED COMPONENTS Interpreter Development Development.Embed)
+
+# Export Python version info for bundling modules
+# This ensures bundled Python matches build-time Python for pybind11 compatibility
+set(FLYSIGHT_PYTHON_VERSION "${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}" CACHE INTERNAL "Python major.minor version")
+set(FLYSIGHT_PYTHON_FULL_VERSION "${Python_VERSION}" CACHE INTERNAL "Python full version")
+
+# =============================================================================
+# Python Configuration Validation and Diagnostics
+# =============================================================================
+message(STATUS "")
+message(STATUS "========================================")
+message(STATUS "Python Configuration")
+message(STATUS "========================================")
+message(STATUS "  Interpreter: ${Python_EXECUTABLE}")
+message(STATUS "  Version: ${Python_VERSION}")
+message(STATUS "  Include dirs: ${Python_INCLUDE_DIRS}")
+message(STATUS "  Libraries: ${Python_LIBRARIES}")
+if(Python_Development.Embed_FOUND)
+    message(STATUS "  Embed library: Found")
+else()
+    message(WARNING "  Embed library: NOT FOUND - embedding may fail")
+endif()
+message(STATUS "========================================")
+message(STATUS "")
+
+# Validate Python version is suitable for bundling
+if(Python_VERSION_MAJOR LESS 3 OR (Python_VERSION_MAJOR EQUAL 3 AND Python_VERSION_MINOR LESS 8))
+    message(FATAL_ERROR
+        "Python ${Python_VERSION} is too old. Minimum required: 3.8\n"
+        "pybind11 and the bundled Python require Python 3.8+"
+    )
+endif()
+
+# Warn if Python version differs significantly from expected bundle version
+# This can cause ABI incompatibility with pybind11 modules
+set(_expected_bundle_minor "13")  # Update when changing default bundle version
+if(NOT Python_VERSION_MINOR EQUAL ${_expected_bundle_minor})
+    message(WARNING
+        "Build-time Python ${Python_VERSION} differs from expected bundle version 3.${_expected_bundle_minor}.\n"
+        "This may cause issues if python-build-standalone doesn't have version ${Python_VERSION}.\n"
+        "The bundle will use Python ${Python_VERSION} - ensure it's available in python-build-standalone releases."
+    )
+endif()
 
 add_subdirectory("${THIRD_PARTY_DIR}/pybind11"
                  "${CMAKE_BINARY_DIR}/pybind11-build")
@@ -109,10 +195,33 @@ target_include_directories(flysight_gtsam INTERFACE "${GTSAM_ROOT}/include")
 set(_GTSAM_LIB_DIR "${GTSAM_ROOT}/lib")
 
 # Find GTSAM libraries using CMake's find_library for cross-platform support
-find_library(GTSAM_CEPHES_RELEASE cephes-gtsam PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
-find_library(GTSAM_MAIN_RELEASE gtsam PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
-find_library(GTSAM_METIS_RELEASE metis-gtsam PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
-find_library(GTSAM_GEOGRAPHIC_RELEASE Geographic PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
+# Use NAMES to handle potential library naming variations across platforms
+find_library(GTSAM_CEPHES_RELEASE
+    NAMES cephes-gtsam
+    PATHS "${_GTSAM_LIB_DIR}"
+    NO_DEFAULT_PATH REQUIRED)
+
+find_library(GTSAM_MAIN_RELEASE
+    NAMES gtsam
+    PATHS "${_GTSAM_LIB_DIR}"
+    NO_DEFAULT_PATH REQUIRED)
+
+find_library(GTSAM_METIS_RELEASE
+    NAMES metis-gtsam
+    PATHS "${_GTSAM_LIB_DIR}"
+    NO_DEFAULT_PATH REQUIRED)
+
+find_library(GTSAM_GEOGRAPHIC_RELEASE
+    NAMES Geographic
+    PATHS "${_GTSAM_LIB_DIR}"
+    NO_DEFAULT_PATH REQUIRED)
+
+# Diagnostic output for GTSAM library discovery
+message(STATUS "GTSAM library discovery:")
+message(STATUS "  GTSAM_CEPHES_RELEASE:     ${GTSAM_CEPHES_RELEASE}")
+message(STATUS "  GTSAM_MAIN_RELEASE:       ${GTSAM_MAIN_RELEASE}")
+message(STATUS "  GTSAM_METIS_RELEASE:      ${GTSAM_METIS_RELEASE}")
+message(STATUS "  GTSAM_GEOGRAPHIC_RELEASE: ${GTSAM_GEOGRAPHIC_RELEASE}")
 
 find_library(GTSAM_CEPHES_DEBUG cephes-gtsamDebug PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH)
 find_library(GTSAM_MAIN_DEBUG gtsamDebug PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH)
@@ -133,15 +242,18 @@ if(NOT GTSAM_GEOGRAPHIC_DEBUG)
   set(GTSAM_GEOGRAPHIC_DEBUG "${GTSAM_GEOGRAPHIC_RELEASE}")
 endif()
 
+# GTSAM library linking order is important on Unix:
+# - gtsam (main) references metis-gtsam, cephes-gtsam, Geographic
+# - List gtsam first, then dependencies it needs
 target_link_libraries(flysight_gtsam INTERFACE
-  $<$<CONFIG:Debug>:${GTSAM_CEPHES_DEBUG}>
   $<$<CONFIG:Debug>:${GTSAM_MAIN_DEBUG}>
   $<$<CONFIG:Debug>:${GTSAM_METIS_DEBUG}>
+  $<$<CONFIG:Debug>:${GTSAM_CEPHES_DEBUG}>
   $<$<CONFIG:Debug>:${GTSAM_GEOGRAPHIC_DEBUG}>
 
-  $<$<NOT:$<CONFIG:Debug>>:${GTSAM_CEPHES_RELEASE}>
   $<$<NOT:$<CONFIG:Debug>>:${GTSAM_MAIN_RELEASE}>
   $<$<NOT:$<CONFIG:Debug>>:${GTSAM_METIS_RELEASE}>
+  $<$<NOT:$<CONFIG:Debug>>:${GTSAM_CEPHES_RELEASE}>
   $<$<NOT:$<CONFIG:Debug>>:${GTSAM_GEOGRAPHIC_RELEASE}>
 )
 
@@ -155,59 +267,94 @@ target_link_libraries(flysight_gtsam INTERFACE
 )
 
 # Prebuilt oneTBB bundle
-add_library(flysight_tbb INTERFACE)
-target_include_directories(flysight_tbb INTERFACE "${TBB_ROOT}/include")
+# First, try to find TBB via its installed CMake config (preferred method)
+set(TBB_DIR "${TBB_ROOT}/lib/cmake/TBB" CACHE PATH "TBB CMake config directory")
 
-set(_TBB_LIB_DIR "${TBB_ROOT}/lib")
+find_package(TBB CONFIG QUIET HINTS "${TBB_DIR}")
 
-# Find TBB libraries using CMake's find_library for cross-platform support
-find_library(TBB_MAIN_RELEASE tbb PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
-find_library(TBB_MALLOC_RELEASE tbbmalloc PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
+if(TBB_FOUND)
+    message(STATUS "Found TBB via CMake config at: ${TBB_DIR}")
+    # TBB exports TBB::tbb and TBB::tbbmalloc targets
+    add_library(flysight_tbb INTERFACE)
+    target_link_libraries(flysight_tbb INTERFACE TBB::tbb TBB::tbbmalloc)
 
-find_library(TBB_MAIN_DEBUG tbb_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
-find_library(TBB_MALLOC_DEBUG tbbmalloc_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
+    # Store TBB library directory for RPATH configuration
+    if(NOT WIN32)
+        get_target_property(_tbb_lib_location TBB::tbb IMPORTED_LOCATION_RELEASE)
+        if(NOT _tbb_lib_location)
+            get_target_property(_tbb_lib_location TBB::tbb IMPORTED_LOCATION)
+        endif()
+        if(_tbb_lib_location)
+            get_filename_component(_TBB_LIB_DIR "${_tbb_lib_location}" DIRECTORY)
+            set(_TBB_LIB_DIR "${_TBB_LIB_DIR}" CACHE INTERNAL "TBB library directory for RPATH")
+        endif()
+    endif()
+else()
+    # Fallback to manual find_library for Windows or if config not found
+    message(STATUS "TBB CMake config not found, using manual library discovery")
 
-# tbb12 only exists on Windows
-if(WIN32)
-  find_library(TBB_12_RELEASE tbb12 PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
-  find_library(TBB_12_DEBUG tbb12_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
+    add_library(flysight_tbb INTERFACE)
+    target_include_directories(flysight_tbb INTERFACE "${TBB_ROOT}/include")
+
+    set(_TBB_LIB_DIR "${TBB_ROOT}/lib")
+
+    # Platform-specific library search
+    if(WIN32)
+        find_library(TBB_MAIN_RELEASE tbb PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
+        find_library(TBB_MALLOC_RELEASE tbbmalloc PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
+        find_library(TBB_MAIN_DEBUG tbb_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
+        find_library(TBB_MALLOC_DEBUG tbbmalloc_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
+        find_library(TBB_12_RELEASE tbb12 PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
+        find_library(TBB_12_DEBUG tbb12_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
+
+        # Fall back to release libs if debug not found
+        if(NOT TBB_MAIN_DEBUG)
+            set(TBB_MAIN_DEBUG "${TBB_MAIN_RELEASE}")
+        endif()
+        if(NOT TBB_12_DEBUG)
+            set(TBB_12_DEBUG "${TBB_12_RELEASE}")
+        endif()
+        if(NOT TBB_MALLOC_DEBUG)
+            set(TBB_MALLOC_DEBUG "${TBB_MALLOC_RELEASE}")
+        endif()
+
+        target_link_libraries(flysight_tbb INTERFACE
+            $<$<CONFIG:Debug>:${TBB_MAIN_DEBUG}>
+            $<$<CONFIG:Debug>:${TBB_MALLOC_DEBUG}>
+            $<$<CONFIG:Debug>:${TBB_12_DEBUG}>
+            $<$<NOT:$<CONFIG:Debug>>:${TBB_MAIN_RELEASE}>
+            $<$<NOT:$<CONFIG:Debug>>:${TBB_MALLOC_RELEASE}>
+            $<$<NOT:$<CONFIG:Debug>>:${TBB_12_RELEASE}>
+        )
+    else()
+        # macOS and Linux: search for shared libraries with platform naming
+        find_library(TBB_MAIN_RELEASE
+            NAMES tbb libtbb.so.12 libtbb.12.dylib
+            PATHS "${_TBB_LIB_DIR}"
+            NO_DEFAULT_PATH REQUIRED)
+        find_library(TBB_MALLOC_RELEASE
+            NAMES tbbmalloc libtbbmalloc.so.12 libtbbmalloc.12.dylib
+            PATHS "${_TBB_LIB_DIR}"
+            NO_DEFAULT_PATH REQUIRED)
+
+        target_link_libraries(flysight_tbb INTERFACE
+            ${TBB_MAIN_RELEASE}
+            ${TBB_MALLOC_RELEASE}
+        )
+    endif()
 endif()
 
-# Fall back to release libs if debug not found
-if(NOT TBB_MAIN_DEBUG)
-  set(TBB_MAIN_DEBUG "${TBB_MAIN_RELEASE}")
-endif()
-if(WIN32 AND NOT TBB_12_DEBUG)
-  set(TBB_12_DEBUG "${TBB_12_RELEASE}")
-endif()
-if(NOT TBB_MALLOC_DEBUG)
-  set(TBB_MALLOC_DEBUG "${TBB_MALLOC_RELEASE}")
-endif()
-
-target_link_libraries(flysight_tbb INTERFACE
-  $<$<CONFIG:Debug>:${TBB_MAIN_DEBUG}>
-  $<$<CONFIG:Debug>:${TBB_MALLOC_DEBUG}>
-
-  $<$<NOT:$<CONFIG:Debug>>:${TBB_MAIN_RELEASE}>
-  $<$<NOT:$<CONFIG:Debug>>:${TBB_MALLOC_RELEASE}>
-)
-
-# tbb12 only exists on Windows
-if(WIN32)
-  target_link_libraries(flysight_tbb INTERFACE
-    $<$<CONFIG:Debug>:${TBB_12_DEBUG}>
-    $<$<NOT:$<CONFIG:Debug>>:${TBB_12_RELEASE}>
-  )
+# Set build RPATH to include TBB library directory on Unix
+# This allows the executable to find TBB at runtime during development
+if(NOT WIN32 AND DEFINED _TBB_LIB_DIR)
+    list(APPEND CMAKE_BUILD_RPATH "${_TBB_LIB_DIR}")
+    message(STATUS "Added TBB library directory to BUILD_RPATH: ${_TBB_LIB_DIR}")
 endif()
 
 # Boost (need Serialization; use imported targets, no link_directories)
-set(BOOST_ROOT "C:/Program Files/Boost/boost_1_87_0"
-    CACHE PATH "Boost root directory")
-
-# Where the compiled .lib files are (common default for b2 builds).
-# If your libs are elsewhere, change this to that folder.
-set(BOOST_LIBRARYDIR "${BOOST_ROOT}/stage/lib"
-    CACHE PATH "Boost library directory")
+# BOOST_ROOT and BOOST_LIBRARYDIR are set by cmake/BoostDiscovery.cmake with
+# platform-appropriate defaults. BOOST_LIBRARYDIR is only set on Windows;
+# on Unix systems, FindBoost handles multiarch library paths automatically.
 
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
@@ -224,6 +371,18 @@ endif()
 
 # KDDockWidgets (KDDW)
 find_package(KDDockWidgets-qt6 CONFIG REQUIRED)
+
+# Verify KDDockWidgets was found correctly
+if(TARGET KDAB::kddockwidgets)
+    get_target_property(_kddw_location KDAB::kddockwidgets LOCATION)
+    get_target_property(_kddw_include_dirs KDAB::kddockwidgets INTERFACE_INCLUDE_DIRECTORIES)
+    message(STATUS "KDDockWidgets found:")
+    message(STATUS "  Library: ${_kddw_location}")
+    message(STATUS "  Includes: ${_kddw_include_dirs}")
+else()
+    message(FATAL_ERROR "KDDockWidgets target KDAB::kddockwidgets not found after find_package succeeded. "
+                        "Check KDDockWidgets-qt6Config.cmake for proper target export.")
+endif()
 
 # ─────────────────────────────── C++ model library
 add_library(flysight_model STATIC
@@ -362,10 +521,25 @@ install(TARGETS FlySightViewer
   RUNTIME DESTINATION ${FLYSIGHT_INSTALL_BINDIR}
 )
 
-install(TARGETS flysight_cpp_bridge
-  LIBRARY DESTINATION "python/Lib/site-packages"
-  RUNTIME DESTINATION "python/Lib/site-packages"
-)
+# Platform-specific installation for pybind11 bridge module
+# The module must be in site-packages for Python's import system to find it
+if(APPLE)
+    # macOS: Install to the app bundle's bundled Python site-packages
+    # Path: FlySightViewer.app/Contents/Resources/python/lib/python3.XX/site-packages/
+    install(TARGETS flysight_cpp_bridge
+        LIBRARY DESTINATION "FlySightViewer.app/Contents/Resources/python/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages"
+        COMPONENT Runtime
+    )
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # Linux: Installation handled via CreateAppDir.cmake with correct Python version path
+    # See Task 8.8: The CreateAppDir.cmake will be updated to use site-packages
+else()
+    # Windows: Use the bundled Python's site-packages
+    install(TARGETS flysight_cpp_bridge
+        LIBRARY DESTINATION "python/Lib/site-packages"
+        RUNTIME DESTINATION "python/Lib/site-packages"
+    )
+endif()
 
 # Install Python SDK files to plugin directory (where PluginHost looks for it)
 install(FILES "${CMAKE_CURRENT_LIST_DIR}/../python_plugins/flysight_plugin_sdk.py"
@@ -390,85 +564,202 @@ if(QT_VERSION_MAJOR GREATER_EQUAL 6)
   install(SCRIPT ${deploy_script})
 endif()
 
-# ─────────────────────────────── Qt Location geoservices plugins
-# These are not included by qt_generate_deploy_app_script by default
-if(QT_VERSION_MAJOR GREATER_EQUAL 6)
-  # Get Qt's plugin directory from the Qt6::Core target
-  get_target_property(_qt6_core_location Qt6::Core LOCATION)
-  get_filename_component(_qt6_lib_dir "${_qt6_core_location}" DIRECTORY)
-  if(WIN32)
-    # On Windows, Qt6Core.dll is in bin/, plugins are in ../plugins/
-    get_filename_component(_qt6_prefix "${_qt6_lib_dir}" DIRECTORY)
-    set(_qt6_plugins_dir "${_qt6_prefix}/plugins")
-    set(_geoservices_pattern "*.dll")
-    set(_geoservices_dest "plugins")
-  elseif(APPLE)
-    # On macOS, Qt6Core is in lib/, plugins are in ../plugins/ or share/qt6/plugins
-    get_filename_component(_qt6_prefix "${_qt6_lib_dir}" DIRECTORY)
-    set(_qt6_plugins_dir "${_qt6_prefix}/share/qt6/plugins")
-    if(NOT EXISTS "${_qt6_plugins_dir}")
-      set(_qt6_plugins_dir "${_qt6_prefix}/plugins")
-    endif()
-    set(_geoservices_pattern "*.dylib")
-    set(_geoservices_dest "FlySightViewer.app/Contents/PlugIns")
-  else()
-    # On Linux, plugins are typically in lib/qt6/plugins or plugins/
-    get_filename_component(_qt6_prefix "${_qt6_lib_dir}" DIRECTORY)
-    set(_qt6_plugins_dir "${_qt6_prefix}/plugins")
-    if(NOT EXISTS "${_qt6_plugins_dir}")
-      set(_qt6_plugins_dir "${_qt6_prefix}/lib/qt6/plugins")
-    endif()
-    set(_geoservices_pattern "*.so")
-    set(_geoservices_dest "plugins")
-  endif()
+# ─────────────────────────────── Qt Plugin and QML Module Deployment
+# Include unified Qt path discovery module
+include("${FLYSIGHT_CMAKE_DIR}/QtPathDiscovery.cmake")
 
-  if(EXISTS "${_qt6_plugins_dir}/geoservices")
-    install(DIRECTORY "${_qt6_plugins_dir}/geoservices"
-      DESTINATION "${_geoservices_dest}"
+# Discover Qt resource directories (plugins, QML modules)
+if(QT_VERSION_MAJOR GREATER_EQUAL 6)
+  find_qt6_resource_dirs()
+
+  # ─────────────────────────────── Geoservices Plugin Deployment
+  # These are not included by qt_generate_deploy_app_script by default
+  if(QT6_PLUGINS_DIR AND EXISTS "${QT6_PLUGINS_DIR}/geoservices")
+    # Platform-specific destination and file pattern
+    if(WIN32)
+      set(_geoservices_dest "plugins/geoservices")
+      set(_geoservices_pattern "*.dll")
+    elseif(APPLE)
+      set(_geoservices_dest "FlySightViewer.app/Contents/PlugIns/geoservices")
+      set(_geoservices_pattern "*.dylib")
+    else()
+      # Linux: Deploy to AppDir if available, otherwise standard plugins dir
+      if(DEFINED FLYSIGHT_APPDIR_PATH)
+        set(_geoservices_dest "${FLYSIGHT_APPDIR_PATH}/usr/plugins/geoservices")
+      else()
+        set(_geoservices_dest "plugins/geoservices")
+      endif()
+      set(_geoservices_pattern "*.so")
+    endif()
+
+    # Install geoservices plugins
+    install(DIRECTORY "${QT6_PLUGINS_DIR}/geoservices"
+      DESTINATION "${_geoservices_dest}/.."
       FILES_MATCHING PATTERN "${_geoservices_pattern}"
     )
-  else()
-    message(WARNING "Qt geoservices plugins not found at ${_qt6_plugins_dir}/geoservices")
-  endif()
-endif()
 
-# ─────────────────────────────── Qt QML modules deployment
-# QtLocation and QtPositioning QML modules are required for MapDock.qml
-if(QT_VERSION_MAJOR GREATER_EQUAL 6)
-  # Get Qt's QML directory from the Qt6::Core target location
-  get_target_property(_qt6_core_location Qt6::Core LOCATION)
-  get_filename_component(_qt6_lib_dir "${_qt6_core_location}" DIRECTORY)
+    # Count plugins for verification at configure time
+    file(GLOB _geo_plugins "${QT6_PLUGINS_DIR}/geoservices/${_geoservices_pattern}")
+    list(LENGTH _geo_plugins _geo_count)
+    message(STATUS "Geoservices: Found ${_geo_count} plugins to deploy")
 
-  if(WIN32)
-    get_filename_component(_qt6_prefix "${_qt6_lib_dir}" DIRECTORY)
-    set(_qt6_qml_dir "${_qt6_prefix}/qml")
-    set(_qml_dest "qml")
-  elseif(APPLE)
-    get_filename_component(_qt6_prefix "${_qt6_lib_dir}" DIRECTORY)
-    set(_qt6_qml_dir "${_qt6_prefix}/qml")
-    if(NOT EXISTS "${_qt6_qml_dir}")
-      set(_qt6_qml_dir "${_qt6_prefix}/share/qt6/qml")
-    endif()
-    set(_qml_dest "FlySightViewer.app/Contents/Resources/qml")
+    # Install-time verification
+    install(CODE "
+      set(_dest_dir \"\${CMAKE_INSTALL_PREFIX}/${_geoservices_dest}\")
+      if(NOT EXISTS \"\${_dest_dir}\")
+        message(WARNING \"Geoservices plugins not found in deployment at \${_dest_dir}\")
+      else()
+        file(GLOB _deployed_plugins \"\${_dest_dir}/*\")
+        list(LENGTH _deployed_plugins _count)
+        message(STATUS \"Deployed \${_count} geoservices plugins to \${_dest_dir}\")
+      endif()
+    ")
   else()
-    get_filename_component(_qt6_prefix "${_qt6_lib_dir}" DIRECTORY)
-    set(_qt6_qml_dir "${_qt6_prefix}/qml")
-    if(NOT EXISTS "${_qt6_qml_dir}")
-      set(_qt6_qml_dir "${_qt6_prefix}/lib/qt6/qml")
-    endif()
-    set(_qml_dest "qml")
+    message(WARNING "Qt geoservices plugins not found at ${QT6_PLUGINS_DIR}/geoservices")
+    message(STATUS "  Searched from Qt prefix: ${QT6_PREFIX}")
+    message(STATUS "  Maps functionality may not work at runtime")
   endif()
 
-  # Deploy required QML modules for map functionality
-  foreach(_qml_module QtLocation QtPositioning)
-    if(EXISTS "${_qt6_qml_dir}/${_qml_module}")
-      install(DIRECTORY "${_qt6_qml_dir}/${_qml_module}"
-        DESTINATION "${_qml_dest}"
+  # ─────────────────────────────── Additional Qt Plugin Categories
+  # qt_generate_deploy_app_script handles most plugins (platforms, imageformats, etc.)
+  # but some may need manual deployment. This section handles any additional categories.
+  #
+  # Note: Most plugins (platforms, imageformats, iconengines) are already deployed
+  # by qt_generate_deploy_app_script. Only add categories here if they are confirmed
+  # to be missing from the deployment.
+  #
+  # To add a plugin category, add it to the list below:
+  set(ADDITIONAL_QT_PLUGIN_CATEGORIES
+    # imageformats  # Usually handled by Qt deploy
+    # platforms     # Usually handled by Qt deploy
+    # iconengines   # Usually handled by Qt deploy
+    # tls           # May be needed for HTTPS map tiles
+  )
+
+  # Deploy additional plugin categories if specified
+  foreach(_plugin_category ${ADDITIONAL_QT_PLUGIN_CATEGORIES})
+    set(_plugin_src "${QT6_PLUGINS_DIR}/${_plugin_category}")
+
+    if(EXISTS "${_plugin_src}")
+      # Platform-specific destination
+      if(WIN32)
+        set(_plugin_dest "plugins/${_plugin_category}")
+        set(_plugin_pattern "*.dll")
+      elseif(APPLE)
+        set(_plugin_dest "FlySightViewer.app/Contents/PlugIns/${_plugin_category}")
+        set(_plugin_pattern "*.dylib")
+      else()
+        if(DEFINED FLYSIGHT_APPDIR_PATH)
+          set(_plugin_dest "${FLYSIGHT_APPDIR_PATH}/usr/plugins/${_plugin_category}")
+        else()
+          set(_plugin_dest "plugins/${_plugin_category}")
+        endif()
+        set(_plugin_pattern "*.so")
+      endif()
+
+      install(DIRECTORY "${_plugin_src}"
+        DESTINATION "${_plugin_dest}/.."
+        FILES_MATCHING PATTERN "${_plugin_pattern}"
       )
+      message(STATUS "Additional Qt plugin category ${_plugin_category} will be deployed")
     else()
-      message(WARNING "Qt QML module ${_qml_module} not found at ${_qt6_qml_dir}/${_qml_module}")
+      message(STATUS "Qt plugin category ${_plugin_category} not found (may not be needed)")
     endif()
   endforeach()
+
+  # ─────────────────────────────── QML Module Deployment
+  # QtLocation and QtPositioning QML modules are required for MapDock.qml
+  set(REQUIRED_QML_MODULES
+    QtLocation
+    QtPositioning
+  )
+
+  # Platform-specific QML destination
+  if(WIN32)
+    set(_qml_dest "qml")
+  elseif(APPLE)
+    set(_qml_dest "FlySightViewer.app/Contents/Resources/qml")
+  else()
+    # Linux: Deploy to AppDir if available
+    if(DEFINED FLYSIGHT_APPDIR_PATH)
+      set(_qml_dest "${FLYSIGHT_APPDIR_PATH}/usr/qml")
+    else()
+      set(_qml_dest "qml")
+    endif()
+  endif()
+
+  # Deploy each required QML module
+  foreach(_qml_module ${REQUIRED_QML_MODULES})
+    set(_module_src "${QT6_QML_DIR}/${_qml_module}")
+
+    if(QT6_QML_DIR AND EXISTS "${_module_src}")
+      install(DIRECTORY "${_module_src}"
+        DESTINATION "${_qml_dest}"
+      )
+      message(STATUS "QML module ${_qml_module} will be deployed from ${_module_src}")
+    else()
+      message(WARNING "Qt QML module ${_qml_module} not found at ${_module_src}")
+      message(STATUS "  QML directory searched: ${QT6_QML_DIR}")
+      message(STATUS "  Map QML components may not work at runtime")
+    endif()
+  endforeach()
+
+  # Install-time QML verification
+  install(CODE "
+    message(STATUS \"Verifying QML module deployment...\")
+    foreach(_mod QtLocation QtPositioning)
+      set(_dest_path \"\${CMAKE_INSTALL_PREFIX}/${_qml_dest}/\${_mod}\")
+      if(EXISTS \"\${_dest_path}\")
+        message(STATUS \"  \${_mod}: Deployed to \${_dest_path}\")
+      else()
+        message(WARNING \"  \${_mod}: NOT FOUND at \${_dest_path}\")
+      endif()
+    endforeach()
+  ")
+
+  # ─────────────────────────────── Qt Configuration File (qt.conf)
+  # Create qt.conf to help Qt find plugins and QML modules at runtime.
+  # Paths in qt.conf are relative to the executable directory (or Contents/
+  # for macOS bundles with qt.conf in Resources/).
+
+  if(WIN32)
+    # Windows: qt.conf next to executable, plugins/qml in same directory
+    set(_qtconf_plugins_path "plugins")
+    set(_qtconf_qml_path "qml")
+    set(_qtconf_location ".")
+  elseif(APPLE)
+    # macOS: qt.conf in Contents/Resources/, paths relative to Contents/
+    set(_qtconf_plugins_path "PlugIns")
+    set(_qtconf_qml_path "Resources/qml")
+    set(_qtconf_location "FlySightViewer.app/Contents/Resources")
+  else()
+    # Linux AppDir: qt.conf next to executable in usr/bin/
+    set(_qtconf_plugins_path "../plugins")
+    set(_qtconf_qml_path "../qml")
+    if(DEFINED FLYSIGHT_APPDIR_PATH)
+      set(_qtconf_location "${FLYSIGHT_APPDIR_PATH}/usr/bin")
+    else()
+      set(_qtconf_location "bin")
+    endif()
+  endif()
+
+  # Generate qt.conf content with proper line endings
+  set(_qtconf_content "[Paths]
+Plugins = ${_qtconf_plugins_path}
+Qml2Imports = ${_qtconf_qml_path}
+")
+
+  # Write qt.conf to build directory
+  file(WRITE "${CMAKE_BINARY_DIR}/qt.conf" "${_qtconf_content}")
+
+  # Install qt.conf to appropriate location
+  install(FILES "${CMAKE_BINARY_DIR}/qt.conf"
+    DESTINATION "${_qtconf_location}"
+  )
+
+  message(STATUS "qt.conf will be installed to: ${_qtconf_location}")
+  message(STATUS "  Plugins path: ${_qtconf_plugins_path}")
+  message(STATUS "  QML imports path: ${_qtconf_qml_path}")
 endif()
 
 # ─────────────────────────────── Windows Deployment
@@ -482,20 +773,47 @@ endif()
 
 # ─────────────────────────────── macOS App Bundle Deployment
 if(APPLE)
-  # Set RPATH for the executable to find libraries in Frameworks
+  # ==========================================================================
+  # macOS RPATH Configuration (Single Source of Truth)
+  # ==========================================================================
+  # All RPATH settings for macOS are consolidated here. Do NOT set RPATH
+  # properties in DeployThirdPartyMacOS.cmake or other modules.
+  #
+  # Key concepts:
+  # - Library ID: The "name" of a library, should be @rpath/libname.dylib
+  # - RPATH entry: Search paths for @rpath/ references
+  # - @executable_path: Relative to the main executable
+  # - @loader_path: Relative to the binary doing the loading
+  # ==========================================================================
+
+  # Option to control RPATH behavior for CI vs development builds
+  option(FLYSIGHT_USE_INSTALL_RPATH_AT_BUILD "Use install RPATH during build (for CI)" OFF)
+
+  # RPATH configuration for the main executable
+  # @executable_path/../Frameworks allows the executable to find dylibs in the Frameworks directory
   set_target_properties(FlySightViewer PROPERTIES
     BUILD_RPATH "@executable_path/../Frameworks"
     INSTALL_RPATH "@executable_path/../Frameworks"
-    BUILD_WITH_INSTALL_RPATH TRUE
+    BUILD_WITH_INSTALL_RPATH ${FLYSIGHT_USE_INSTALL_RPATH_AT_BUILD}
     MACOSX_RPATH TRUE
   )
 
-  # Set RPATH for the pybind11 module
+  # RPATH configuration for the pybind11 module
+  # The module is installed to:
+  #   FlySightViewer.app/Contents/Resources/python/lib/python3.XX/site-packages/flysight_cpp_bridge.cpython-3XX-darwin.so
+  #
+  # Path from module to Frameworks:
+  #   site-packages/ -> python3.XX/ -> lib/ -> python/ -> Resources/ -> Contents/ -> Frameworks/
+  #   That's 5 levels up: @loader_path/../../../../../Frameworks
+  #
+  # We also include @executable_path/../Frameworks as a fallback for when
+  # the module is loaded from the main executable context.
   set_target_properties(flysight_cpp_bridge PROPERTIES
-    BUILD_RPATH "@loader_path/../Frameworks;@executable_path/../Frameworks"
-    INSTALL_RPATH "@loader_path/../Frameworks;@executable_path/../Frameworks"
-    BUILD_WITH_INSTALL_RPATH TRUE
+    BUILD_RPATH "@loader_path/../../../../../Frameworks;@executable_path/../Frameworks"
+    INSTALL_RPATH "@loader_path/../../../../../Frameworks;@executable_path/../Frameworks"
+    BUILD_WITH_INSTALL_RPATH ${FLYSIGHT_USE_INSTALL_RPATH_AT_BUILD}
     MACOSX_RPATH TRUE
+    INSTALL_NAME_DIR "@rpath"
   )
 
   # Set app bundle properties
@@ -558,11 +876,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     BUILD_WITH_INSTALL_RPATH FALSE
   )
 
-  # AppDir structure creation
-  include("${FLYSIGHT_CMAKE_DIR}/CreateAppDir.cmake" OPTIONAL)
-
-  # Python bundling for Linux
+  # Python bundling for Linux (must be before CreateAppDir to define BUNDLE_PYTHON_VERSION)
   include("${FLYSIGHT_CMAKE_DIR}/BundlePythonLinux.cmake" OPTIONAL)
+
+  # AppDir structure creation (uses BUNDLE_PYTHON_VERSION from BundlePythonLinux)
+  include("${FLYSIGHT_CMAKE_DIR}/CreateAppDir.cmake" OPTIONAL)
 
   # Third-party library deployment
   include("${FLYSIGHT_CMAKE_DIR}/DeployThirdPartyLinux.cmake" OPTIONAL)

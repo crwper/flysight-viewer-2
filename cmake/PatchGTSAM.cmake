@@ -57,9 +57,13 @@ endif()
 
 set(GEOID_HPP_FILE "${GTSAM_SOURCE_DIR}/gtsam/3rdparty/GeographicLib/include/GeographicLib/Geoid.hpp")
 
+# Diagnostic output for debugging
+message(STATUS "Checking Geoid.hpp at: ${GEOID_HPP_FILE}")
+
 if(NOT EXISTS "${GEOID_HPP_FILE}")
     message(WARNING "Geoid.hpp not found at ${GEOID_HPP_FILE} - skipping streamoff patch")
 else()
+    message(STATUS "Geoid.hpp found, checking for std::ios::streamoff...")
     file(READ "${GEOID_HPP_FILE}" GEOID_CONTENT)
 
     # Check for the incorrect form that needs patching

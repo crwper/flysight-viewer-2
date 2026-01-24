@@ -115,6 +115,11 @@ endif()
 # KDDockWidgets DLLs
 # =============================================================================
 
+# Allow CI/CD to override KDDW_ROOT via environment
+if(DEFINED ENV{KDDW_ROOT} AND NOT DEFINED KDDW_ROOT)
+    set(KDDW_ROOT "$ENV{KDDW_ROOT}")
+endif()
+
 set(KDDW_BIN_DIR "${KDDW_ROOT}/bin")
 if(EXISTS "${KDDW_BIN_DIR}")
     message(STATUS "KDDockWidgets bin directory: ${KDDW_BIN_DIR}")
@@ -138,8 +143,30 @@ if(EXISTS "${KDDW_BIN_DIR}")
         )
         message(STATUS "  [Debug] ${KDDW_DEBUG_DLL}")
     endif()
+
+    # Verify at least one DLL was found
+    if(NOT EXISTS "${KDDW_RELEASE_DLL}" AND NOT EXISTS "${KDDW_DEBUG_DLL}")
+        message(WARNING "KDDockWidgets DLL not found in ${KDDW_BIN_DIR}")
+        message(STATUS "Expected: ${KDDW_RELEASE_DLL} or ${KDDW_DEBUG_DLL}")
+        # List what's actually in the bin directory
+        file(GLOB _kddw_files "${KDDW_BIN_DIR}/*")
+        if(_kddw_files)
+            message(STATUS "Available files in ${KDDW_BIN_DIR}:")
+            foreach(_f ${_kddw_files})
+                message(STATUS "  ${_f}")
+            endforeach()
+        endif()
+    endif()
 else()
     message(WARNING "KDDockWidgets bin directory not found: ${KDDW_BIN_DIR}")
+    message(STATUS "KDDW_ROOT is set to: ${KDDW_ROOT}")
+    if(EXISTS "${KDDW_ROOT}")
+        message(STATUS "Contents of KDDW_ROOT:")
+        file(GLOB _kddw_root_contents "${KDDW_ROOT}/*")
+        foreach(_f ${_kddw_root_contents})
+            message(STATUS "  ${_f}")
+        endforeach()
+    endif()
 endif()
 
 # =============================================================================

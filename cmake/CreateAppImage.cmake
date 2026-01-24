@@ -9,6 +9,37 @@
 # 1. Downloads appimagetool if not present
 # 2. Creates a custom target 'appimage' for AppImage generation
 # 3. Handles environments without FUSE using APPIMAGE_EXTRACT_AND_RUN=1
+# 4. Performs pre-flight verification of all critical components
+#
+# =============================================================================
+# Troubleshooting AppImage Creation
+# =============================================================================
+#
+# Common issues:
+#
+# 1. "AppImage fails to run with 'cannot open shared object file'"
+#    - Check that RPATH is set correctly: patchelf --print-rpath path/to/binary
+#    - Expected RPATH for executable: $ORIGIN/../lib
+#    - Expected RPATH for bridge module: $ORIGIN/../../../../lib
+#    - Run with FLYSIGHT_DEBUG=1 to see library paths
+#
+# 2. "FUSE not available" error when running AppImage
+#    - Install fuse2: sudo apt-get install libfuse2
+#    - Or run with: ./FlySightViewer.AppImage --appimage-extract-and-run
+#
+# 3. "Qt platform plugin could not be initialized"
+#    - Verify libqxcb.so exists in usr/plugins/platforms/
+#    - Check qt.conf exists in usr/bin/
+#    - Verify XCB dependencies installed on host system
+#
+# 4. "Python import flysight_cpp_bridge failed"
+#    - Verify bridge module is in usr/share/python/lib/pythonX.X/site-packages/
+#    - Check PYTHONPATH in AppRun matches Python version
+#    - Verify bridge module RPATH points to usr/lib/
+#
+# 5. AppImage size is unexpectedly large
+#    - Check for duplicate libraries
+#    - Verify only required libraries are bundled
 #
 # =============================================================================
 
@@ -130,6 +161,93 @@ if [ ! -x "${APPDIR}/usr/bin/FlySightViewer" ]; then
     exit 1
 fi
 
+# =============================================================================
+# Pre-Flight Verification
+# =============================================================================
+# Check for all critical components before running appimagetool
+
+echo ""
+echo "=== Pre-flight verification ==="
+
+# Verify critical libraries
+echo "--- Verifying library dependencies ---"
+LIB_DIR="${APPDIR}/usr/lib"
+
+# Check third-party libraries
+for lib in libtbb libgtsam libkddockwidgets libGeographic; do
+    found=$(find "${LIB_DIR}" -name "${lib}*.so*" 2>/dev/null | head -1)
+    if [ -n "$found" ]; then
+        echo "  Found: $(basename $found)"
+    else
+        echo "WARNING: ${lib} not found in ${LIB_DIR}"
+    fi
+done
+
+echo ""
+echo "--- Verifying Qt components ---"
+
+# Check Qt XCB plugin (critical for X11 display)
+XCB_PLUGIN="${APPDIR}/usr/plugins/platforms/libqxcb.so"
+if [ -f "${XCB_PLUGIN}" ]; then
+    echo "  Qt XCB plugin: Found"
+else
+    echo "WARNING: Qt XCB platform plugin not found!"
+    echo "  Expected at: ${XCB_PLUGIN}"
+    echo "  The AppImage may not run on most Linux systems."
+fi
+
+# Check qt.conf
+if [ -f "${APPDIR}/usr/bin/qt.conf" ]; then
+    echo "  qt.conf: Found"
+else
+    echo "WARNING: qt.conf not found in usr/bin/"
+fi
+
+# Check QML modules
+for mod in QtLocation QtPositioning; do
+    if [ -d "${APPDIR}/usr/qml/${mod}" ]; then
+        echo "  QML ${mod}: Found"
+    else
+        echo "WARNING: QML module ${mod} not found"
+    fi
+done
+
+echo ""
+echo "--- Verifying Python bundle ---"
+
+# Check Python bundle
+PYTHON_DIR="${APPDIR}/usr/share/python"
+if [ -d "${PYTHON_DIR}" ]; then
+    echo "  Python bundle: Found"
+    PYTHON_BIN="${PYTHON_DIR}/bin/python3"
+    if [ -x "${PYTHON_BIN}" ]; then
+        echo "  Python executable: OK"
+    else
+        echo "WARNING: Python executable not found or not executable"
+    fi
+else
+    echo "WARNING: Python bundle not found at ${PYTHON_DIR}"
+fi
+
+# Check pybind11 bridge module
+BRIDGE_SO=$(find "${PYTHON_DIR}" -name "flysight_cpp_bridge*.so" 2>/dev/null | head -1)
+if [ -n "${BRIDGE_SO}" ]; then
+    echo "  Bridge module: $(basename ${BRIDGE_SO})"
+    # Check bridge RPATH if patchelf is available
+    if command -v patchelf &> /dev/null; then
+        BRIDGE_RPATH=$(patchelf --print-rpath "${BRIDGE_SO}" 2>/dev/null || true)
+        if [ -n "${BRIDGE_RPATH}" ]; then
+            echo "  Bridge RPATH: ${BRIDGE_RPATH}"
+        fi
+    fi
+else
+    echo "WARNING: pybind11 bridge module not found"
+fi
+
+echo ""
+echo "=== Pre-flight verification complete ==="
+echo ""
+
 # Create output directory if needed
 mkdir -p "${OUTPUT_DIR}"
 
@@ -158,6 +276,9 @@ if [ -f "${OUTPUT_PATH}" ]; then
     echo ""
     echo "Or extract and run (if FUSE is unavailable):"
     echo "  ${OUTPUT_PATH} --appimage-extract-and-run"
+    echo ""
+    echo "For debugging, run with:"
+    echo "  FLYSIGHT_DEBUG=1 ${OUTPUT_PATH}"
 else
     echo "ERROR: AppImage was not created"
     exit 1

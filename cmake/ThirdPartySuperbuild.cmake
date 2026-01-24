@@ -39,6 +39,28 @@ get_property(_is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 # project's platform and an explicit -A argument are passed.
 
 # =============================================================================
+# Boost Discovery for GTSAM
+# =============================================================================
+#
+# GTSAM requires Boost for building. Include the cross-platform Boost discovery
+# module to get the correct BOOST_ROOT for the current platform.
+#
+
+# Determine the path to BoostDiscovery.cmake
+if(DEFINED FLYSIGHT_CMAKE_DIR)
+    set(_BOOST_DISCOVERY_PATH "${FLYSIGHT_CMAKE_DIR}/BoostDiscovery.cmake")
+else()
+    set(_BOOST_DISCOVERY_PATH "${CMAKE_CURRENT_LIST_DIR}/BoostDiscovery.cmake")
+endif()
+
+if(EXISTS "${_BOOST_DISCOVERY_PATH}")
+    include("${_BOOST_DISCOVERY_PATH}")
+else()
+    message(WARNING "BoostDiscovery.cmake not found at ${_BOOST_DISCOVERY_PATH}")
+    message(WARNING "GTSAM build may fail to find Boost.")
+endif()
+
+# =============================================================================
 # Source Directory Variables
 # =============================================================================
 #
@@ -110,8 +132,14 @@ ExternalProject_Add(ext_oneTBB
 #   causes build failures on Windows.
 #
 
+# Ensure ONETBB_INSTALL_DIR is defined (fallback for standalone superbuild invocation)
+if(NOT DEFINED ONETBB_INSTALL_DIR)
+    set(ONETBB_INSTALL_DIR "${THIRD_PARTY_DIR}/oneTBB-install")
+endif()
+
 # Path to TBB's CMake configuration directory
 set(TBB_CMAKE_DIR "${ONETBB_INSTALL_DIR}/lib/cmake/TBB")
+message(STATUS "GTSAM will use TBB from: ${TBB_CMAKE_DIR}")
 
 # Configure the patch command for GTSAM
 # The patch script comments out the js subdirectory in GeographicLib
@@ -130,6 +158,15 @@ else()
     set(_GTSAM_PATCH_COMMAND "")
 endif()
 
+# Build Boost hints for GTSAM
+# BOOST_ROOT is set by BoostDiscovery.cmake included above
+set(_GTSAM_BOOST_ARGS "-DBOOST_ROOT=${BOOST_ROOT}")
+if(BOOST_LIBRARYDIR)
+    list(APPEND _GTSAM_BOOST_ARGS "-DBOOST_LIBRARYDIR=${BOOST_LIBRARYDIR}")
+endif()
+# Allow GTSAM to find system Boost if BOOST_ROOT points to a system location
+list(APPEND _GTSAM_BOOST_ARGS "-DBoost_NO_SYSTEM_PATHS=OFF")
+
 ExternalProject_Add(ext_GTSAM
     SOURCE_DIR "${GTSAM_SOURCE_DIR}"
     BINARY_DIR "${THIRD_PARTY_DIR}/gtsam-build"
@@ -143,6 +180,9 @@ ExternalProject_Add(ext_GTSAM
         -DGTSAM_BUILD_TESTS=OFF
         -DGTSAM_WITH_TBB=ON
         -DTBB_DIR=${TBB_CMAKE_DIR}
+        ${_GTSAM_BOOST_ARGS}
+        # Enable PIC for static library components (required on Linux for shared library linking)
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
     PATCH_COMMAND ${_GTSAM_PATCH_COMMAND}

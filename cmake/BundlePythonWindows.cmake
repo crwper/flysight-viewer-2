@@ -29,8 +29,28 @@ endif()
 # Configuration
 # =============================================================================
 
+# Note: PYTHON_EMBED_VERSION is derived from the Python found by find_package(Python).
+# This ensures the embedded Python matches the build-time Python for pybind11 compatibility.
+# Unlike macOS/Linux, Windows downloads an embeddable package matching the detected version.
 set(PYTHON_EMBED_VERSION "${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}.${Python_VERSION_PATCH}")
 set(PYTHON_EMBED_VERSION_NODOT "${Python_VERSION_MAJOR}${Python_VERSION_MINOR}")
+
+# NumPy version (optional pin for reproducibility)
+set(NUMPY_VERSION "" CACHE STRING "Specific NumPy version to install (empty for latest)")
+if(NUMPY_VERSION)
+    set(_numpy_spec "numpy==${NUMPY_VERSION}")
+else()
+    set(_numpy_spec "numpy")
+endif()
+
+# Check for pre-cached NumPy wheel
+set(_numpy_wheel_cache "${CMAKE_BINARY_DIR}/numpy-wheel-cache")
+if(EXISTS "${_numpy_wheel_cache}" AND IS_DIRECTORY "${_numpy_wheel_cache}")
+    message(STATUS "Using cached NumPy wheels from ${_numpy_wheel_cache}")
+    set(_pip_extra_args "--find-links=${_numpy_wheel_cache}" "--no-index")
+else()
+    set(_pip_extra_args "")
+endif()
 
 # Construct the download URL for the Python embeddable package
 # Format: https://www.python.org/ftp/python/3.x.y/python-3.x.y-embed-amd64.zip
@@ -142,17 +162,46 @@ if(NOT EXISTS "${PYTHON_EMBED_DIR}/python.exe")
     endif()
 
     # =============================================================================
+    # Verify pip is available
+    # =============================================================================
+
+    message(STATUS "Verifying pip availability...")
+    execute_process(
+        COMMAND "${PYTHON_EMBED_DIR}/python.exe" -m pip --version
+        RESULT_VARIABLE _pip_check_result
+        OUTPUT_VARIABLE _pip_version
+        ERROR_QUIET
+    )
+    if(_pip_check_result)
+        message(WARNING "pip not available after installation, cannot install NumPy")
+    else()
+        message(STATUS "pip available: ${_pip_version}")
+    endif()
+
+    # =============================================================================
     # Install NumPy
     # =============================================================================
 
-    message(STATUS "Installing NumPy into bundled Python...")
-    execute_process(
-        COMMAND "${PYTHON_EMBED_DIR}/python.exe" -m pip install numpy --target "${PYTHON_EMBED_DIR}/Lib/site-packages"
-        WORKING_DIRECTORY "${PYTHON_EMBED_DIR}"
-        RESULT_VARIABLE numpy_result
-        OUTPUT_VARIABLE numpy_output
-        ERROR_VARIABLE numpy_error
-    )
+    message(STATUS "Installing NumPy (${_numpy_spec}) into bundled Python...")
+    if(_pip_extra_args)
+        execute_process(
+            COMMAND "${PYTHON_EMBED_DIR}/python.exe" -m pip install ${_numpy_spec}
+                    --target "${PYTHON_EMBED_DIR}/Lib/site-packages" ${_pip_extra_args}
+            WORKING_DIRECTORY "${PYTHON_EMBED_DIR}"
+            RESULT_VARIABLE numpy_result
+            OUTPUT_VARIABLE numpy_output
+            ERROR_VARIABLE numpy_error
+        )
+    else()
+        execute_process(
+            COMMAND "${PYTHON_EMBED_DIR}/python.exe" -m pip install ${_numpy_spec}
+                    --target "${PYTHON_EMBED_DIR}/Lib/site-packages"
+            WORKING_DIRECTORY "${PYTHON_EMBED_DIR}"
+            RESULT_VARIABLE numpy_result
+            OUTPUT_VARIABLE numpy_output
+            ERROR_VARIABLE numpy_error
+        )
+    endif()
     if(NOT numpy_result EQUAL 0)
         message(FATAL_ERROR "Failed to install NumPy:\nOutput: ${numpy_output}\nError: ${numpy_error}")
     else()
@@ -176,6 +225,55 @@ install(
     PATTERN "__pycache__" EXCLUDE
     PATTERN "*.pyc" EXCLUDE
 )
+
+# =============================================================================
+# Verify bundled Python installation
+# =============================================================================
+install(CODE "
+    message(STATUS \"Verifying bundled Python installation...\")
+    set(PYTHON_EXE \"\${CMAKE_INSTALL_PREFIX}/python/python.exe\")
+
+    # Test Python interpreter
+    execute_process(
+        COMMAND \"\${PYTHON_EXE}\" -c \"import sys; print(f'Python {sys.version}')\"
+        RESULT_VARIABLE _verify_result
+        OUTPUT_VARIABLE _verify_output
+        ERROR_VARIABLE _verify_error
+    )
+    if(_verify_result)
+        message(WARNING \"Bundled Python verification failed: \${_verify_error}\")
+    else()
+        string(STRIP \"\${_verify_output}\" _verify_output)
+        message(STATUS \"  \${_verify_output}\")
+    endif()
+
+    # Test NumPy import
+    execute_process(
+        COMMAND \"\${PYTHON_EXE}\" -c \"import numpy; print(f'NumPy {numpy.__version__}')\"
+        RESULT_VARIABLE _numpy_result
+        OUTPUT_VARIABLE _numpy_output
+        ERROR_VARIABLE _numpy_error
+    )
+    if(_numpy_result)
+        message(WARNING \"NumPy import failed: \${_numpy_error}\")
+    else()
+        string(STRIP \"\${_numpy_output}\" _numpy_output)
+        message(STATUS \"  \${_numpy_output}\")
+    endif()
+
+    # Test that site-packages is accessible
+    execute_process(
+        COMMAND \"\${PYTHON_EXE}\" -c \"import site; print(f'Site packages: {site.getsitepackages()}')\"
+        RESULT_VARIABLE _site_result
+        OUTPUT_VARIABLE _site_output
+    )
+    if(NOT _site_result)
+        string(STRIP \"\${_site_output}\" _site_output)
+        message(STATUS \"  \${_site_output}\")
+    endif()
+
+    message(STATUS \"Python bundle verification complete\")
+")
 
 # Export the Python embed directory for use by other modules
 set(PYTHON_EMBED_DIR "${PYTHON_EMBED_DIR}" PARENT_SCOPE)

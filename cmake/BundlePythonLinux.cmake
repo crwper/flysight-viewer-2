@@ -19,6 +19,52 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     return()
 endif()
 
+# =============================================================================
+# Helper function for robust file download with retries
+# =============================================================================
+function(_download_with_retry_linux URL OUTPUT_PATH MAX_RETRIES)
+    set(_retry_count 0)
+    set(_download_success FALSE)
+
+    while(NOT _download_success AND _retry_count LESS ${MAX_RETRIES})
+        math(EXPR _retry_count "${_retry_count} + 1")
+        message(STATUS "Download attempt ${_retry_count}/${MAX_RETRIES}: ${URL}")
+
+        file(DOWNLOAD
+            "${URL}"
+            "${OUTPUT_PATH}"
+            SHOW_PROGRESS
+            STATUS _download_status
+            TLS_VERIFY ON
+            TIMEOUT 300  # 5 minute timeout per attempt
+        )
+
+        list(GET _download_status 0 _download_error)
+        if(_download_error EQUAL 0)
+            set(_download_success TRUE)
+        else()
+            list(GET _download_status 1 _download_message)
+            message(WARNING "Download attempt ${_retry_count} failed: ${_download_message}")
+            if(_retry_count LESS ${MAX_RETRIES})
+                # Remove partial download
+                file(REMOVE "${OUTPUT_PATH}")
+                message(STATUS "Retrying in a moment...")
+            endif()
+        endif()
+    endwhile()
+
+    # Return success status via parent scope variable
+    set(DOWNLOAD_FAILED FALSE PARENT_SCOPE)
+    if(NOT _download_success)
+        message(WARNING
+            "Failed to download after ${MAX_RETRIES} attempts.\n"
+            "URL: ${URL}\n"
+            "Python bundling will be skipped."
+        )
+        set(DOWNLOAD_FAILED TRUE PARENT_SCOPE)
+    endif()
+endfunction()
+
 # Ensure APPDIR variables are set
 if(NOT DEFINED FLYSIGHT_APPDIR_PATH)
     set(FLYSIGHT_APPDIR_PATH "${CMAKE_INSTALL_PREFIX}/FlySightViewer.AppDir")
@@ -29,13 +75,36 @@ endif()
 # Configuration
 # =============================================================================
 
-# Python version to bundle - should match the build-time Python version
-set(BUNDLE_PYTHON_VERSION "3.13" CACHE STRING "Python version to bundle")
-set(BUNDLE_PYTHON_FULL_VERSION "3.13.1" CACHE STRING "Full Python version")
+# Python version to bundle - derived from build-time Python for pybind11 compatibility
+if(DEFINED FLYSIGHT_PYTHON_VERSION)
+    set(BUNDLE_PYTHON_VERSION "${FLYSIGHT_PYTHON_VERSION}" CACHE STRING "Python version to bundle")
+else()
+    set(BUNDLE_PYTHON_VERSION "3.13" CACHE STRING "Python version to bundle")
+    message(WARNING "BundlePythonLinux: Using default Python version. Call find_package(Python) first for consistency.")
+endif()
+
+if(DEFINED FLYSIGHT_PYTHON_FULL_VERSION)
+    set(BUNDLE_PYTHON_FULL_VERSION "${FLYSIGHT_PYTHON_FULL_VERSION}" CACHE STRING "Full Python version")
+else()
+    set(BUNDLE_PYTHON_FULL_VERSION "3.13.1" CACHE STRING "Full Python version")
+endif()
 
 # python-build-standalone release tag
 # Check https://github.com/indygreg/python-build-standalone/releases for latest
 set(PBS_RELEASE_TAG "20241206" CACHE STRING "python-build-standalone release tag")
+
+# Note: BUNDLE_PYTHON_VERSION and BUNDLE_PYTHON_FULL_VERSION define the Python to bundle.
+# These should match PYTHON_STANDALONE_PYTHON_VERSION in BundlePythonMacOS.cmake.
+# The version should also match the build-time Python for pybind11 compatibility.
+# PBS_RELEASE_TAG should match PYTHON_STANDALONE_VERSION in BundlePythonMacOS.cmake.
+
+# NumPy version (optional pin for reproducibility)
+set(NUMPY_VERSION "" CACHE STRING "Specific NumPy version to install (empty for latest)")
+if(NUMPY_VERSION)
+    set(_numpy_spec "numpy==${NUMPY_VERSION}")
+else()
+    set(_numpy_spec "numpy")
+endif()
 
 # Detect architecture
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
@@ -44,10 +113,48 @@ else()
     set(PBS_ARCH "x86_64")
 endif()
 
+# Validate and log architecture selection
+message(STATUS "BundlePythonLinux: System processor: ${CMAKE_SYSTEM_PROCESSOR}")
+message(STATUS "BundlePythonLinux: Selected PBS architecture: ${PBS_ARCH}")
+
+# CI environment detection
+if(DEFINED ENV{CI})
+    message(STATUS "BundlePythonLinux: Running in CI environment")
+    if(DEFINED ENV{GITHUB_ACTIONS})
+        message(STATUS "BundlePythonLinux: GitHub Actions runner architecture: $ENV{RUNNER_ARCH}")
+    endif()
+endif()
+
 # Build the download URL
 # Format: cpython-{version}+{tag}-{arch}-unknown-linux-gnu-install_only_stripped.tar.gz
 set(PBS_FILENAME "cpython-${BUNDLE_PYTHON_FULL_VERSION}+${PBS_RELEASE_TAG}-${PBS_ARCH}-unknown-linux-gnu-install_only_stripped.tar.gz")
 set(PBS_URL "https://github.com/indygreg/python-build-standalone/releases/download/${PBS_RELEASE_TAG}/${PBS_FILENAME}")
+
+# =============================================================================
+# Pre-download URL validation
+# =============================================================================
+# Validate Python version is plausibly available in python-build-standalone
+if(NOT BUNDLE_PYTHON_FULL_VERSION MATCHES "^3\\.(1[0-9]|[89])\\.[0-9]+$")
+    message(WARNING
+        "Python version ${BUNDLE_PYTHON_FULL_VERSION} may not be available in python-build-standalone.\n"
+        "Supported versions are typically 3.8.x through 3.13.x.\n"
+        "Check https://github.com/indygreg/python-build-standalone/releases for available versions."
+    )
+endif()
+
+# Validate architecture
+if(NOT PBS_ARCH MATCHES "^(x86_64|aarch64)$")
+    message(FATAL_ERROR
+        "Unsupported architecture '${PBS_ARCH}' for python-build-standalone.\n"
+        "Supported architectures: x86_64, aarch64"
+    )
+endif()
+
+# Note: PBS_RELEASE_TAG must correspond to a release that includes the requested Python version
+# If the download fails with 404, check:
+# 1. The release tag exists: https://github.com/indygreg/python-build-standalone/releases
+# 2. The Python version is included in that release
+# 3. The architecture is supported for that Python version
 
 # Local paths
 set(PBS_DOWNLOAD_DIR "${CMAKE_BINARY_DIR}/python-standalone")
@@ -65,20 +172,11 @@ message(STATUS "  Download URL: ${PBS_URL}")
 # Create download directory
 file(MAKE_DIRECTORY "${PBS_DOWNLOAD_DIR}")
 
-# Download the archive if it doesn't exist
+# Download the archive if it doesn't exist (with retry logic)
 if(NOT EXISTS "${PBS_ARCHIVE_PATH}")
     message(STATUS "Downloading python-build-standalone...")
-    file(DOWNLOAD
-        "${PBS_URL}"
-        "${PBS_ARCHIVE_PATH}"
-        SHOW_PROGRESS
-        STATUS download_status
-        TLS_VERIFY ON
-    )
-    list(GET download_status 0 download_error)
-    if(download_error)
-        list(GET download_status 1 download_message)
-        message(WARNING "Failed to download python-build-standalone: ${download_message}")
+    _download_with_retry_linux("${PBS_URL}" "${PBS_ARCHIVE_PATH}" 3)
+    if(DOWNLOAD_FAILED)
         message(WARNING "Python bundling will be skipped. AppImage may not work correctly.")
         set(FLYSIGHT_PYTHON_BUNDLING_AVAILABLE FALSE CACHE INTERNAL "")
         return()
@@ -175,32 +273,45 @@ install(CODE "
     set(PYTHON_VERSION \"${BUNDLE_PYTHON_VERSION}\")
     set(SITE_PACKAGES \"\${APPDIR_USR}/share/python/lib/python\${PYTHON_VERSION}/site-packages\")
     set(BUNDLED_PYTHON \"\${APPDIR_USR}/share/python/bin/python3\")
+    set(NUMPY_SPEC \"${_numpy_spec}\")
 
     if(EXISTS \"\${BUNDLED_PYTHON}\")
-        # Use pip from the bundled Python to install NumPy
+        # Verify pip is available
         execute_process(
-            COMMAND \"\${BUNDLED_PYTHON}\" -m pip install --target \"\${SITE_PACKAGES}\" numpy
+            COMMAND \"\${BUNDLED_PYTHON}\" -m pip --version
+            RESULT_VARIABLE _pip_check_result
+            OUTPUT_VARIABLE _pip_version
+            ERROR_QUIET
+        )
+        if(_pip_check_result)
+            message(STATUS \"pip not available, attempting to bootstrap...\")
+            # Try ensurepip first (available in python-build-standalone)
+            execute_process(
+                COMMAND \"\${BUNDLED_PYTHON}\" -m ensurepip --upgrade
+                RESULT_VARIABLE _ensurepip_result
+                OUTPUT_VARIABLE _ensurepip_output
+                ERROR_VARIABLE _ensurepip_error
+            )
+            if(_ensurepip_result)
+                message(WARNING \"ensurepip failed: \${_ensurepip_error}\")
+            else()
+                message(STATUS \"pip bootstrapped successfully via ensurepip\")
+            endif()
+        else()
+            string(STRIP \"\${_pip_version}\" _pip_version)
+            message(STATUS \"pip available: \${_pip_version}\")
+        endif()
+
+        # Use pip from the bundled Python to install NumPy
+        message(STATUS \"Installing NumPy spec: \${NUMPY_SPEC}\")
+        execute_process(
+            COMMAND \"\${BUNDLED_PYTHON}\" -m pip install --target \"\${SITE_PACKAGES}\" \${NUMPY_SPEC}
             RESULT_VARIABLE pip_result
             OUTPUT_VARIABLE pip_output
             ERROR_VARIABLE pip_error
         )
         if(pip_result)
             message(WARNING \"Failed to install NumPy: \${pip_error}\")
-            message(STATUS \"Trying alternative method...\")
-            # Try using ensurepip first
-            execute_process(
-                COMMAND \"\${BUNDLED_PYTHON}\" -m ensurepip --default-pip
-                RESULT_VARIABLE ensurepip_result
-            )
-            if(NOT ensurepip_result)
-                execute_process(
-                    COMMAND \"\${BUNDLED_PYTHON}\" -m pip install --target \"\${SITE_PACKAGES}\" numpy
-                    RESULT_VARIABLE pip_result2
-                )
-                if(NOT pip_result2)
-                    message(STATUS \"NumPy installed successfully (after ensurepip)\")
-                endif()
-            endif()
         else()
             message(STATUS \"NumPy installed successfully\")
         endif()
@@ -254,6 +365,55 @@ install(CODE "
             message(STATUS \"Created lib-dynload symlink\")
         endif()
     endif()
+")
+
+# =============================================================================
+# Verify bundled Python installation
+# =============================================================================
+install(CODE "
+    message(STATUS \"Verifying bundled Python installation...\")
+    set(PYTHON_EXE \"${FLYSIGHT_APPDIR_USR}/share/python/bin/python3\")
+
+    # Test Python interpreter
+    execute_process(
+        COMMAND \"\${PYTHON_EXE}\" -c \"import sys; print(f'Python {sys.version}')\"
+        RESULT_VARIABLE _verify_result
+        OUTPUT_VARIABLE _verify_output
+        ERROR_VARIABLE _verify_error
+    )
+    if(_verify_result)
+        message(WARNING \"Bundled Python verification failed: \${_verify_error}\")
+    else()
+        string(STRIP \"\${_verify_output}\" _verify_output)
+        message(STATUS \"  \${_verify_output}\")
+    endif()
+
+    # Test NumPy import
+    execute_process(
+        COMMAND \"\${PYTHON_EXE}\" -c \"import numpy; print(f'NumPy {numpy.__version__}')\"
+        RESULT_VARIABLE _numpy_result
+        OUTPUT_VARIABLE _numpy_output
+        ERROR_VARIABLE _numpy_error
+    )
+    if(_numpy_result)
+        message(WARNING \"NumPy import failed: \${_numpy_error}\")
+    else()
+        string(STRIP \"\${_numpy_output}\" _numpy_output)
+        message(STATUS \"  \${_numpy_output}\")
+    endif()
+
+    # Test that site-packages is accessible
+    execute_process(
+        COMMAND \"\${PYTHON_EXE}\" -c \"import site; print(f'Site packages: {site.getsitepackages()}')\"
+        RESULT_VARIABLE _site_result
+        OUTPUT_VARIABLE _site_output
+    )
+    if(NOT _site_result)
+        string(STRIP \"\${_site_output}\" _site_output)
+        message(STATUS \"  \${_site_output}\")
+    endif()
+
+    message(STATUS \"Python bundle verification complete\")
 ")
 
 message(STATUS "BundlePythonLinux.cmake: Python bundling configured")
