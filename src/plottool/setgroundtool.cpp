@@ -1,5 +1,5 @@
 #include "setgroundtool.h"
-#include "../plotwidget.h"
+#include "ui/docks/plot/PlotWidget.h"
 #include "../crosshairmanager.h"
 #include <QCustomPlot/qcustomplot.h>
 

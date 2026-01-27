@@ -1,10 +1,10 @@
-#include "legendpresenter.h"
+#include "LegendPresenter.h"
 
 #include "sessionmodel.h"
 #include "plotmodel.h"
 #include "cursormodel.h"
 #include "plotviewsettingsmodel.h"
-#include "legendwidget.h"
+#include "LegendWidget.h"
 #include "sessiondata.h"
 #include "units/unitconverter.h"
 

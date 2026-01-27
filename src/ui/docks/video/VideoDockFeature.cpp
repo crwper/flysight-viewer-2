@@ -1,6 +1,6 @@
 #include "VideoDockFeature.h"
 #include "ui/docks/AppContext.h"
-#include "videowidget.h"
+#include "VideoWidget.h"
 #include "sessionmodel.h"
 #include "cursormodel.h"
 

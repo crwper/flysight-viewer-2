@@ -7,7 +7,7 @@
 #include <QTreeView>
 #include "sessionmodel.h"
 #include "plotregistry.h"
-#include "plotwidget.h"
+#include "ui/docks/plot/PlotWidget.h"
 
 QT_BEGIN_NAMESPACE
 class QCloseEvent;

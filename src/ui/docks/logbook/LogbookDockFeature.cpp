@@ -1,6 +1,6 @@
 #include "LogbookDockFeature.h"
 #include "ui/docks/AppContext.h"
-#include "logbookview.h"
+#include "LogbookView.h"
 #include "sessionmodel.h"
 
 namespace FlySight {

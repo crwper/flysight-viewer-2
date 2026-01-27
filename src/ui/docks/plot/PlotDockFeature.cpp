@@ -1,6 +1,6 @@
 #include "PlotDockFeature.h"
 #include "ui/docks/AppContext.h"
-#include "plotwidget.h"
+#include "PlotWidget.h"
 #include "sessionmodel.h"
 #include "plotmodel.h"
 #include "markermodel.h"

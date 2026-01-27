@@ -2,7 +2,7 @@
 #define ZOOMTOOL_H
 
 #include "plottool.h"
-#include "../plotwidget.h"
+#include "ui/docks/plot/PlotWidget.h"
 #include <QCustomPlot/qcustomplot.h>
 
 namespace FlySight {

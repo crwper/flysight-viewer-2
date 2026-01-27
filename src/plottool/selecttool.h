@@ -5,7 +5,7 @@
 #include <QPoint>
 #include <QCustomPlot/qcustomplot.h>
 #include "plottool.h"
-#include "../plotwidget.h"
+#include "ui/docks/plot/PlotWidget.h"
 #include "../graphinfo.h"
 
 namespace FlySight {

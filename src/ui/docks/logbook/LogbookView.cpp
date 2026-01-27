@@ -1,5 +1,5 @@
-// logbookview.cpp
-#include "logbookview.h"
+// LogbookView.cpp
+#include "LogbookView.h"
 #include <QVBoxLayout>
 #include <QMouseEvent>
 #include <QDebug>

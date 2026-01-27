@@ -2,7 +2,7 @@
 #define PANTOOL_H
 
 #include "plottool.h"
-#include "../plotwidget.h"
+#include "ui/docks/plot/PlotWidget.h"
 
 class QCustomPlot;
 

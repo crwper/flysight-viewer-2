@@ -398,10 +398,8 @@ set(PROJECT_SOURCES
   main.cpp
   mainwindow.cpp             mainwindow.h          mainwindow.ui
   sessionmodel.h             sessionmodel.cpp
-  plotwidget.h               plotwidget.cpp
   plotviewsettingsmodel.cpp  plotviewsettingsmodel.h
   dataimporter.cpp           dataimporter.h
-  logbookview.h              logbookview.cpp
   plottool/pantool.h
   plottool/plottool.h
   plottool/selecttool.cpp    plottool/selecttool.h
@@ -426,12 +424,8 @@ set(PROJECT_SOURCES
   plotregistry.cpp           plotregistry.h
   imugnssekf.h               imugnssekf.cpp
   python_output_redirector.h
-  legendwidget.cpp           legendwidget.h
-  legendtablemodel.cpp       legendtablemodel.h
   plotmodel.cpp              plotmodel.h
   cursormodel.cpp            cursormodel.h
-  legendpresenter.cpp        legendpresenter.h
-  videowidget.cpp            videowidget.h
   plotrangemodel.cpp         plotrangemodel.h
   markerregistry.cpp         markerregistry.h
   markermodel.cpp            markermodel.h
@@ -441,8 +435,13 @@ set(PROJECT_SOURCES
   ui/docks/plotselection/PlotSelectionDockFeature.h    ui/docks/plotselection/PlotSelectionDockFeature.cpp
   ui/docks/markerselection/MarkerSelectionDockFeature.h    ui/docks/markerselection/MarkerSelectionDockFeature.cpp
   ui/docks/logbook/LogbookDockFeature.h    ui/docks/logbook/LogbookDockFeature.cpp
+  ui/docks/logbook/LogbookView.h    ui/docks/logbook/LogbookView.cpp
   ui/docks/legend/LegendDockFeature.h    ui/docks/legend/LegendDockFeature.cpp
+  ui/docks/legend/LegendWidget.h    ui/docks/legend/LegendWidget.cpp
+  ui/docks/legend/LegendPresenter.h    ui/docks/legend/LegendPresenter.cpp
+  ui/docks/legend/LegendTableModel.h    ui/docks/legend/LegendTableModel.cpp
   ui/docks/video/VideoDockFeature.h    ui/docks/video/VideoDockFeature.cpp
+  ui/docks/video/VideoWidget.h    ui/docks/video/VideoWidget.cpp
   ui/docks/map/MapDockFeature.h    ui/docks/map/MapDockFeature.cpp
   ui/docks/map/MapWidget.h    ui/docks/map/MapWidget.cpp
   ui/docks/map/TrackMapModel.h    ui/docks/map/TrackMapModel.cpp
@@ -450,6 +449,7 @@ set(PROJECT_SOURCES
   ui/docks/map/MapCursorProxy.h    ui/docks/map/MapCursorProxy.cpp
   ui/docks/map/MapPreferencesBridge.h    ui/docks/map/MapPreferencesBridge.cpp
   ui/docks/plot/PlotDockFeature.h    ui/docks/plot/PlotDockFeature.cpp
+  ui/docks/plot/PlotWidget.h    ui/docks/plot/PlotWidget.cpp
   calculations/calculatedvalueregistry.cpp    calculations/calculatedvalueregistry.h
   calculations/attributecalculations.cpp      calculations/attributecalculations.h
   calculations/gnsscalculations.cpp           calculations/gnsscalculations.h
@@ -465,11 +465,7 @@ set(PROJECT_SOURCES
 )
 
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
-  qt_add_executable(FlySightViewer WIN32 MANUAL_FINALIZATION ${PROJECT_SOURCES}
-    legendwidget.h
-    legendwidget.cpp
-    legendtablemodel.h
-    legendtablemodel.cpp)
+  qt_add_executable(FlySightViewer WIN32 MANUAL_FINALIZATION ${PROJECT_SOURCES})
 else()
   add_executable(FlySightViewer WIN32 ${PROJECT_SOURCES})
 endif()

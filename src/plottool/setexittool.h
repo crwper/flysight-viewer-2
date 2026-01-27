@@ -2,7 +2,7 @@
 #define SETEXITTOOL_H
 
 #include "plottool.h"
-#include "../plotwidget.h"
+#include "ui/docks/plot/PlotWidget.h"
 
 namespace FlySight {
 

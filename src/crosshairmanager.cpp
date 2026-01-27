@@ -1,6 +1,6 @@
 #include "crosshairmanager.h"
 #include "graphinfo.h"
-#include "plotwidget.h"
+#include "ui/docks/plot/PlotWidget.h"
 #include "preferences/preferencesmanager.h"
 #include "preferences/preferencekeys.h"
 

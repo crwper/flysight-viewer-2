@@ -1,4 +1,4 @@
-#include "videowidget.h"
+#include "VideoWidget.h"
 
 #include "cursormodel.h"
 #include "sessionmodel.h"

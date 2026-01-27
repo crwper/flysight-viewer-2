@@ -2,7 +2,7 @@
 #define SETGROUNDTOOL_H
 
 #include "plottool.h"
-#include "../plotwidget.h"
+#include "ui/docks/plot/PlotWidget.h"
 #include "../graphinfo.h"
 
 namespace FlySight {

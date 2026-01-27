@@ -1,4 +1,4 @@
-// logbookview.h
+// LogbookView.h
 #ifndef LOGBOOKVIEW_H
 #define LOGBOOKVIEW_H
 

@@ -1,5 +1,5 @@
-#include "legendwidget.h"
-#include "legendtablemodel.h"
+#include "LegendWidget.h"
+#include "LegendTableModel.h"
 #include "preferences/preferencesmanager.h"
 #include "preferences/preferencekeys.h"
 

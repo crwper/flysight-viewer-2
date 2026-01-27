@@ -1,4 +1,4 @@
-#include "legendtablemodel.h"
+#include "LegendTableModel.h"
 #include <QBrush>
 
 namespace FlySight {

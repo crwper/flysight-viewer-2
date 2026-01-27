@@ -2,7 +2,7 @@
 #define PLOTDOCKFEATURE_H
 
 #include "ui/docks/DockFeature.h"
-#include "plotwidget.h"
+#include "PlotWidget.h"
 
 namespace FlySight {
 

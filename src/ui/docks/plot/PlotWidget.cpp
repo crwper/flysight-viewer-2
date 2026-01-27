@@ -1,4 +1,4 @@
-#include "plotwidget.h"
+#include "PlotWidget.h"
 #include "plotmodel.h"
 #include "markermodel.h"
 #include "plotviewsettingsmodel.h"
