@@ -1,4 +1,4 @@
-#include "trackmapmodel.h"
+#include "TrackMapModel.h"
 
 #include "sessionmodel.h"
 #include "sessiondata.h"

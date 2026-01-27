@@ -1,4 +1,4 @@
-#include "mappreferencesbridge.h"
+#include "MapPreferencesBridge.h"
 #include "preferences/preferencesmanager.h"
 #include "preferences/preferencekeys.h"
 

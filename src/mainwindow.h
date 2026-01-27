@@ -6,9 +6,8 @@
 #include <QSettings>
 #include <QTreeView>
 #include "sessionmodel.h"
-#include "logbookview.h"
-#include "plotwidget.h"
 #include "plotregistry.h"
+#include "plotwidget.h"
 
 QT_BEGIN_NAMESPACE
 class QCloseEvent;
@@ -19,15 +18,12 @@ QT_END_NAMESPACE
 
 namespace FlySight {
 
-class LegendWidget;
-class LegendPresenter;
+class DockFeature;
 class PlotViewSettingsModel;
 class PlotModel;
 class MarkerModel;
 class CursorModel;
 class PlotRangeModel;
-class MapWidget;
-class VideoWidget;
 
 class MainWindow : public KDDockWidgets::QtWidgets::MainWindow
 {
@@ -101,34 +97,12 @@ private:
 
     SessionModel *model;
 
-    // Plot value selection components
-    KDDockWidgets::QtWidgets::DockWidget *plotSelectionDock;
-    QTreeView *plotTreeView;
+    // All dock features
+    QList<DockFeature*> m_features;
+
+    // Models
     PlotModel *plotModel;
-    KDDockWidgets::QtWidgets::DockWidget *logbookDock = nullptr;
-    LogbookView *logbookView;
-    KDDockWidgets::QtWidgets::DockWidget *plotsDock = nullptr;
-    PlotWidget *plotWidget;
-
-    // Marker selection components
-    KDDockWidgets::QtWidgets::DockWidget *markerDock = nullptr;
-    QTreeView *markerTreeView = nullptr;
     MarkerModel *markerModel = nullptr;
-
-    // Legend dock/widget (new)
-    KDDockWidgets::QtWidgets::DockWidget *legendDock = nullptr;
-    LegendWidget *legendWidget = nullptr;
-
-    // Map dock/widget (Qt Location)
-    KDDockWidgets::QtWidgets::DockWidget *mapDock = nullptr;
-    MapWidget *mapWidget = nullptr;
-
-    // Video dock/widget
-    KDDockWidgets::QtWidgets::DockWidget *videoDock = nullptr;
-    VideoWidget *videoWidget = nullptr;
-
-    // Drives LegendWidget content based on models + CursorModel
-    LegendPresenter *m_legendPresenter = nullptr;
 
     // Pointer to QActionGroup for tools
     QActionGroup *toolActionGroup;
@@ -146,19 +120,21 @@ private:
     static void registerBuiltInPlots();
     static void registerBuiltInMarkers();
 
-    // Set up plot and marker selection docks
-    void setupPlotSelectionDock();
-    void setupMarkerSelectionDock();
+    // Find a specific dock feature by type
+    template<typename T>
+    T* findFeature() const {
+        for (auto* f : m_features) {
+            if (auto* t = qobject_cast<T*>(f))
+                return t;
+        }
+        return nullptr;
+    }
 
     // Helper function for importing files
     void importFiles(const QStringList &fileNames, bool showProgress, const QString &baseDir = QString());
 
     // Helper function for preferences
     void initializePreferences();
-
-    // Helper methods for calculated values
-    void initializeCalculatedAttributes();
-    void initializeCalculatedMeasurements();
 
     // Helper methods for menus
     void initializeXAxisMenu();

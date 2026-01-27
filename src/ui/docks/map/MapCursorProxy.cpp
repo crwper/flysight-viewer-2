@@ -1,4 +1,4 @@
-#include "mapcursorproxy.h"
+#include "MapCursorProxy.h"
 
 #include "sessionmodel.h"
 #include "cursormodel.h"

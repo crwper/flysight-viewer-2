@@ -1,4 +1,4 @@
-#include "mapcursordotmodel.h"
+#include "MapCursorDotModel.h"
 
 #include "cursormodel.h"
 #include "sessiondata.h"

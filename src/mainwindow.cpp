@@ -10,27 +10,20 @@
 #include <QStandardPaths>
 #include <QCloseEvent>
 #include <kddockwidgets/LayoutSaver.h>
-#include <vector>
-
-// --- FIX FOR GTSAM LINKING ERROR ---
-// When GTSAM is built with TBB support, it uses tbb::tbb_allocator for its
-// FastVector types (including std::vector<size_t>). To avoid linker errors
-// (LNK2019) when this file uses std::vector<size_t> and indirectly pulls in
-// GTSAM's exported symbols, we must import the TBB-allocated version.
-#ifdef _MSC_VER
-#include <tbb/tbb_allocator.h>
-template class __declspec(dllimport) std::vector<size_t, tbb::tbb_allocator<size_t>>;
-#endif
-// -----------------------------------
 
 #include "dataimporter.h"
 #include "dependencykey.h"
-#include "plotwidget.h"
-#include "legendwidget.h"
-#include "legendpresenter.h"
-#include "mapwidget.h"
-#include "videowidget.h"
 #include "pluginhost.h"
+#include "ui/docks/DockRegistry.h"
+#include "ui/docks/DockFeature.h"
+#include "ui/docks/AppContext.h"
+#include "ui/docks/logbook/LogbookDockFeature.h"
+#include "ui/docks/plot/PlotDockFeature.h"
+#include "ui/docks/plotselection/PlotSelectionDockFeature.h"
+#include "ui/docks/video/VideoDockFeature.h"
+#include "plotwidget.h"
+#include "logbookview.h"
+#include "videowidget.h"
 #include "preferences/preferencesdialog.h"
 #include "preferences/preferencesmanager.h"
 #include "preferences/preferencekeys.h"
@@ -43,11 +36,7 @@ template class __declspec(dllimport) std::vector<size_t, tbb::tbb_allocator<size
 #include "cursormodel.h"
 #include "plotrangemodel.h"
 #include "units/unitconverter.h"
-
-#include <GeographicLib/LocalCartesian.hpp>
-#include <boost/geometry.hpp>
-#include <boost/geometry/geometries/point_xy.hpp>
-#include <boost/geometry/geometries/linestring.hpp>
+#include "calculations/calculatedvalueregistry.h"
 
 namespace FlySight {
 
@@ -83,30 +72,15 @@ MainWindow::MainWindow(QWidget *parent)
     initializePreferences();
 
     // Initialize calculated values
-    initializeCalculatedAttributes();
-    initializeCalculatedMeasurements();
+    CalculatedValueRegistry::instance().registerBuiltInCalculations();
 
     // Populate marker model before PlotWidget construction so markers can render immediately
     if (markerModel) {
         markerModel->setMarkers(MarkerRegistry::instance().allMarkers());
     }
 
-    // Add logbook view
-    logbookDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Logbook"));
-    logbookView = new LogbookView(model, this);
-    logbookDock->setWidget(logbookView);
-    addDockWidget(logbookDock, KDDockWidgets::Location_OnRight);
-
-    connect(logbookView, &LogbookView::showSelectedRequested, this, &MainWindow::on_action_ShowSelected_triggered);
-    connect(logbookView, &LogbookView::hideSelectedRequested, this, &MainWindow::on_action_HideSelected_triggered);
-    connect(logbookView, &LogbookView::hideOthersRequested, this, &MainWindow::on_action_HideOthers_triggered);
-    connect(logbookView, &LogbookView::deleteRequested, this, &MainWindow::on_action_Delete_triggered);
-
-    // Add legend view
-    legendDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Legend"));
-    legendWidget = new LegendWidget(legendDock);
-    legendDock->setWidget(legendWidget);
-    addDockWidget(legendDock, KDDockWidgets::Location_OnRight);
+    // Create range model for synchronizing plot x-axis range with other docks
+    m_rangeModel = new PlotRangeModel(this);
 
     // Initialize cursor entries
     if (m_cursorModel) {
@@ -139,58 +113,58 @@ MainWindow::MainWindow(QWidget *parent)
         m_cursorModel->ensureCursor(video);
     }
 
-    // Create range model for synchronizing plot x-axis range with other docks
-    m_rangeModel = new PlotRangeModel(this);
+    // Create all docks via registry
+    AppContext ctx;
+    ctx.sessionModel = model;
+    ctx.plotModel = plotModel;
+    ctx.markerModel = markerModel;
+    ctx.cursorModel = m_cursorModel;
+    ctx.rangeModel = m_rangeModel;
+    ctx.plotViewSettings = m_plotViewSettingsModel;
+    ctx.settings = m_settings;
 
-    // Add plot view
-    plotsDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Plots"));
-    plotWidget = new PlotWidget(model, plotModel, markerModel, m_plotViewSettingsModel, m_cursorModel, m_rangeModel, this);
-    plotsDock->setWidget(plotWidget);
-    addDockWidget(plotsDock, KDDockWidgets::Location_OnLeft);
+    m_features = DockRegistry::createAll(ctx, this);
 
-    // Add map view (Qt Location)
-    mapDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Map"));
-    mapWidget = new MapWidget(model, m_cursorModel, m_rangeModel, mapDock);
-    mapDock->setWidget(mapWidget);
-    addDockWidget(mapDock, KDDockWidgets::Location_OnBottom);
-
-    // LegendPresenter drives legend updates based on models + CursorModel
-    m_legendPresenter = new LegendPresenter(model,
-                                            plotModel,
-                                            m_cursorModel,
-                                            m_plotViewSettingsModel,
-                                            legendWidget,
-                                            this);
-
-    // Connect the newTimeRange signal to PlotWidget's setXAxisRange slot
-    connect(this, &MainWindow::newTimeRange, plotWidget, &PlotWidget::setXAxisRange);
-
-    // Marker toggles must update without rebuilding graphs
-    if (markerModel && plotWidget) {
-        connect(markerModel, &QAbstractItemModel::modelReset,
-                plotWidget,
-                [this](auto...) {
-                    if (plotWidget)
-                        plotWidget->updateMarkersOnly();
-                });
-
-        connect(markerModel, &QAbstractItemModel::dataChanged,
-                plotWidget,
-                [this](const QModelIndex&, const QModelIndex&, const QVector<int>&) {
-                    if (plotWidget)
-                        plotWidget->updateMarkersOnly();
-                });
+    for (auto* feature : m_features) {
+        addDockWidget(feature->dock(), feature->defaultLocation());
     }
 
-    // Setup plots and marker selection docks
-    setupPlotSelectionDock();
-    setupMarkerSelectionDock();
+    // Find feature instances for signal connections
+    auto* logbookFeature = findFeature<LogbookDockFeature>();
+    auto* plotFeature = findFeature<PlotDockFeature>();
+    auto* videoFeature = findFeature<VideoDockFeature>();
 
-    // Add video view (dock exists even before a video is imported)
-    videoDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Video"));
-    videoWidget = new VideoWidget(model, m_cursorModel, videoDock);
-    videoDock->setWidget(videoWidget);
-    addDockWidget(videoDock, KDDockWidgets::Location_OnBottom);
+    // Connect logbook signals
+    if (logbookFeature) {
+        connect(logbookFeature, &LogbookDockFeature::showSelectedRequested,
+                this, &MainWindow::on_action_ShowSelected_triggered);
+        connect(logbookFeature, &LogbookDockFeature::hideSelectedRequested,
+                this, &MainWindow::on_action_HideSelected_triggered);
+        connect(logbookFeature, &LogbookDockFeature::hideOthersRequested,
+                this, &MainWindow::on_action_HideOthers_triggered);
+        connect(logbookFeature, &LogbookDockFeature::deleteRequested,
+                this, &MainWindow::on_action_Delete_triggered);
+    }
+
+    // Connect plot signals
+    if (plotFeature) {
+        auto* plotWidget = plotFeature->plotWidget();
+        if (plotWidget) {
+            connect(this, &MainWindow::newTimeRange, plotWidget, &PlotWidget::setXAxisRange);
+            connect(plotFeature, &PlotDockFeature::toolChanged, this, &MainWindow::onPlotWidgetToolChanged);
+
+            // Cross-dock connections
+            if (logbookFeature && logbookFeature->logbookView()) {
+                connect(plotFeature, &PlotDockFeature::sessionsSelected,
+                        logbookFeature->logbookView(), &LogbookView::selectSessions);
+            }
+        }
+    }
+
+    // Let PlotModel own the category/plot tree (must be done after plugin initialization)
+    if (plotModel) {
+        plotModel->setPlots(PlotRegistry::instance().allPlots());
+    }
 
     // Restore the previous dock layout (includes visibility/open/closed state).
     restoreDockLayout();
@@ -204,12 +178,6 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Setup plot tools
     setupPlotTools();
-
-    // Plot selection
-    connect(plotWidget, &PlotWidget::sessionsSelected, logbookView, &LogbookView::selectSessions);
-
-    // Handle plot tool changes
-    connect(plotWidget, &PlotWidget::toolChanged, this, &MainWindow::onPlotWidgetToolChanged);
 }
 
 MainWindow::~MainWindow()
@@ -352,13 +320,14 @@ void MainWindow::on_action_ImportVideo_triggered()
     m_settings->setValue("videoFolder", QFileInfo(fileName).absolutePath());
 
     // Ensure the Video dock is visible when a video is imported.
-    if (videoDock && !videoDock->isVisible()) {
-        videoDock->show();
+    auto* videoFeature = findFeature<VideoDockFeature>();
+    if (videoFeature && videoFeature->dock() && !videoFeature->dock()->isVisible()) {
+        videoFeature->dock()->show();
     }
 
     // Load/replace the video in the widget
-    if (videoWidget) {
-        videoWidget->loadVideo(fileName);
+    if (videoFeature && videoFeature->videoWidget()) {
+        videoFeature->videoWidget()->loadVideo(fileName);
     }
 }
 
@@ -525,32 +494,47 @@ void MainWindow::importFiles(
 
 void MainWindow::on_action_Pan_triggered()
 {
-    plotWidget->setCurrentTool(PlotWidget::Tool::Pan);
-    qDebug() << "Switched to Pan tool";
+    auto* plotFeature = findFeature<PlotDockFeature>();
+    if (plotFeature && plotFeature->plotWidget()) {
+        plotFeature->plotWidget()->setCurrentTool(PlotWidget::Tool::Pan);
+        qDebug() << "Switched to Pan tool";
+    }
 }
 
 void MainWindow::on_action_Zoom_triggered()
 {
-    plotWidget->setCurrentTool(PlotWidget::Tool::Zoom);
-    qDebug() << "Switched to Zoom tool";
+    auto* plotFeature = findFeature<PlotDockFeature>();
+    if (plotFeature && plotFeature->plotWidget()) {
+        plotFeature->plotWidget()->setCurrentTool(PlotWidget::Tool::Zoom);
+        qDebug() << "Switched to Zoom tool";
+    }
 }
 
 void MainWindow::on_action_Select_triggered()
 {
-    plotWidget->setCurrentTool(PlotWidget::Tool::Select);
-    qDebug() << "Switched to Select tool";
+    auto* plotFeature = findFeature<PlotDockFeature>();
+    if (plotFeature && plotFeature->plotWidget()) {
+        plotFeature->plotWidget()->setCurrentTool(PlotWidget::Tool::Select);
+        qDebug() << "Switched to Select tool";
+    }
 }
 
 void MainWindow::on_action_SetExit_triggered()
 {
-    plotWidget->setCurrentTool(PlotWidget::Tool::SetExit);
-    qDebug() << "Switched to Set Exit tool";
+    auto* plotFeature = findFeature<PlotDockFeature>();
+    if (plotFeature && plotFeature->plotWidget()) {
+        plotFeature->plotWidget()->setCurrentTool(PlotWidget::Tool::SetExit);
+        qDebug() << "Switched to Set Exit tool";
+    }
 }
 
 void MainWindow::on_action_SetGround_triggered()
 {
-    plotWidget->setCurrentTool(PlotWidget::Tool::SetGround);
-    qDebug() << "Switched to Set Ground tool";
+    auto* plotFeature = findFeature<PlotDockFeature>();
+    if (plotFeature && plotFeature->plotWidget()) {
+        plotFeature->plotWidget()->setCurrentTool(PlotWidget::Tool::SetGround);
+        qDebug() << "Switched to Set Ground tool";
+    }
 }
 
 void MainWindow::on_action_ShowSelected_triggered()
@@ -565,7 +549,11 @@ void MainWindow::on_action_HideSelected_triggered()
 
 void MainWindow::on_action_HideOthers_triggered()
 {
-    QList<QModelIndex> selectedRows = logbookView->selectedRows();
+    auto* logbookFeature = findFeature<LogbookDockFeature>();
+    if (!logbookFeature || !logbookFeature->logbookView())
+        return;
+
+    QList<QModelIndex> selectedRows = logbookFeature->logbookView()->selectedRows();
     if (selectedRows.isEmpty())
         return;
 
@@ -583,8 +571,12 @@ void MainWindow::on_action_HideOthers_triggered()
 
 void MainWindow::on_action_Delete_triggered()
 {
+    auto* logbookFeature = findFeature<LogbookDockFeature>();
+    if (!logbookFeature || !logbookFeature->logbookView())
+        return;
+
     // Get selected rows from the logbook view
-    QList<QModelIndex> selectedRows = logbookView->selectedRows();
+    QList<QModelIndex> selectedRows = logbookFeature->logbookView()->selectedRows();
 
     if (selectedRows.isEmpty()) {
         QMessageBox::information(this, tr("Delete Tracks"), tr("No tracks selected for deletion."));
@@ -756,43 +748,6 @@ void MainWindow::registerBuiltInPlots()
         PlotRegistry::instance().registerPlot(pv);
 }
 
-void MainWindow::setupPlotSelectionDock()
-{
-    // Create the dock widget
-    plotSelectionDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Plot Selection"));
-    plotTreeView = new QTreeView(plotSelectionDock);
-    plotSelectionDock->setWidget(plotTreeView);
-    addDockWidget(plotSelectionDock, KDDockWidgets::Location_OnLeft);
-
-    // Attach the model
-    plotTreeView->setModel(plotModel);
-    plotTreeView->setHeaderHidden(true);
-    plotTreeView->setEditTriggers(QAbstractItemView::NoEditTriggers);
-
-    // Let PlotModel own the category/plot tree
-    if (plotModel) {
-        plotModel->setPlots(PlotRegistry::instance().allPlots());
-    }
-}
-
-void MainWindow::setupMarkerSelectionDock()
-{
-    // Create the marker selection dock widget
-    markerDock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Marker Selection"));
-    markerTreeView = new QTreeView(markerDock);
-    markerDock->setWidget(markerTreeView);
-    addDockWidget(markerDock, KDDockWidgets::Location_OnLeft);
-
-    // Attach the model
-    markerTreeView->setModel(markerModel);
-    markerTreeView->setHeaderHidden(true);
-    markerTreeView->setEditTriggers(QAbstractItemView::NoEditTriggers);
-
-    // Populate marker tree from registry
-    if (markerModel) {
-        markerModel->setMarkers(MarkerRegistry::instance().allMarkers());
-    }
-}
 
 void MainWindow::initializePreferences()
 {
@@ -873,796 +828,7 @@ void MainWindow::initializePreferences()
     prefs.registerPreference(PreferenceKeys::MapTrackOpacity, 0.85);
 }
 
-void MainWindow::initializeCalculatedAttributes()
-{
-    SessionData::registerCalculatedAttribute(
-        SessionKeys::ExitTime,
-        {
-            DependencyKey::measurement("GNSS", "velD"),
-            DependencyKey::measurement("GNSS", "sAcc"),
-            DependencyKey::measurement("GNSS", "accD"),
-            DependencyKey::measurement("GNSS", SessionKeys::Time)
-        },
-        [](SessionData& session) -> std::optional<QVariant> {
-        // Find the first timestamp where vertical speed drops below a threshold
-        QVector<double> velD = session.getMeasurement("GNSS", "velD");
-        QVector<double> sAcc = session.getMeasurement("GNSS", "sAcc");
-        QVector<double> accD = session.getMeasurement("GNSS", "accD");
-        QVector<double> time = session.getMeasurement("GNSS", SessionKeys::Time);
 
-        if (velD.isEmpty() || time.isEmpty() || velD.size() != time.size()) {
-            qWarning() << "Insufficient data to calculate exit time.";
-            return std::nullopt;
-        }
-
-        const double vThreshold = 10.0; // Vertical speed threshold in m/s
-        const double maxAccuracy = 1.0; // Maximum speed acccuracy in m/s
-        const double minAcceleration = 2.5; // Minimum vertical accleration in m/s^2
-
-        for (int i = 1; i < velD.size(); ++i) {
-            // Get interpolation coefficient
-            const double a = (vThreshold - velD[i - 1]) / (velD[i] - velD[i - 1]);
-
-            // Check vertical speed
-            if (a < 0 || 1 < a) continue;
-
-            // Check accuracy
-            const double acc = sAcc[i - 1] + a * (sAcc[i] - sAcc[i - 1]);
-            if (acc > maxAccuracy) continue;
-
-            // Check acceleration
-            const double az = accD[i - 1] + a * (accD[i] - accD[i - 1]);
-            if (az < minAcceleration) continue;
-
-            // Determine exit
-            const double tExit = time[i - 1] + a * (time[i] - time[i - 1]) - vThreshold / az;
-            return QDateTime::fromMSecsSinceEpoch((qint64)(tExit * 1000.0), QTimeZone::utc());
-        }
-
-        qWarning() << "Exit time could not be determined based on current data.";
-        return QDateTime::fromMSecsSinceEpoch((qint64)(time.back() * 1000.0), QTimeZone::utc());
-    });
-
-    // Register for all sensors
-    QStringList all_sensors = {"GNSS", "BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
-    for (const QString &sens : all_sensors) {
-        SessionData::registerCalculatedAttribute(
-            SessionKeys::StartTime,
-            {
-                DependencyKey::measurement(sens, SessionKeys::Time)
-            },
-            [sens](SessionData &session) -> std::optional<QVariant> {
-            // Retrieve GNSS/time measurement
-            QVector<double> times = session.getMeasurement(sens, SessionKeys::Time);
-            if (times.isEmpty()) {
-                qWarning() << "No " << sens << "/time data available to calculate start time.";
-                return std::nullopt;
-            }
-
-            double startTime = *std::min_element(times.begin(), times.end());
-            return QDateTime::fromMSecsSinceEpoch((qint64)(startTime * 1000.0), QTimeZone::utc());
-        });
-
-        SessionData::registerCalculatedAttribute(
-            SessionKeys::Duration,
-            {
-                DependencyKey::measurement(sens, SessionKeys::Time)
-            },
-            [sens](SessionData &session) -> std::optional<QVariant> {
-            QVector<double> times = session.getMeasurement(sens, SessionKeys::Time);
-            if (times.isEmpty()) {
-                qWarning() << "No " << sens << "/time data available to calculate duration.";
-                return std::nullopt;
-            }
-
-            double minTime = *std::min_element(times.begin(), times.end());
-            double maxTime = *std::max_element(times.begin(), times.end());
-            double durationSec = maxTime - minTime;
-            if (durationSec < 0) {
-                qWarning() << "Invalid " << sens << "/time data (max < min).";
-                return std::nullopt;
-            }
-
-            return durationSec;
-        });
-    }
-
-    SessionData::registerCalculatedAttribute(
-        SessionKeys::GroundElev,
-        {
-            DependencyKey::measurement("GNSS", "hMSL")
-        },
-        [](SessionData &session) -> std::optional<QVariant> {
-        PreferencesManager &prefs = PreferencesManager::instance();
-        QString mode = prefs.getValue("import/groundReferenceMode").toString();
-        double fixedElevation = prefs.getValue("import/fixedElevation").toDouble();
-
-        if (mode == "Fixed") {
-            // Always return the fixed elevation from preferences
-            return fixedElevation;
-        } else if (mode == "Automatic") {
-            // Use some GNSS/hMSL measurement from session
-            QVector<double> hMSL = session.getMeasurement("GNSS", "hMSL");
-            if (!hMSL.isEmpty()) {
-                // e.g. use the last hMSL sample
-                double groundElev = hMSL.last();
-                return groundElev;
-            } else {
-                // Not enough data to compute
-                // Return no value => the calculation fails for now
-                return std::nullopt;
-            }
-        } else {
-            // Possibly a fallback or “no ground reference” if mode is unknown
-            return std::nullopt;
-        }
-    });
-}
-
-void MainWindow::initializeCalculatedMeasurements()
-{
-    SessionData::registerCalculatedMeasurement(
-        "GNSS", "z",
-        {
-            DependencyKey::measurement("GNSS", "hMSL"),
-            DependencyKey::attribute(SessionKeys::GroundElev)
-        },
-        [](SessionData& session) -> std::optional<QVector<double>> {
-        QVector<double> hMSL = session.getMeasurement("GNSS", "hMSL");
-
-        bool ok;
-        double groundElev = session.getAttribute(SessionKeys::GroundElev).toDouble(&ok);
-        if (!ok) {
-            qWarning() << "Cannot calculate z due to missing groundElev";
-            return std::nullopt;
-        }
-
-        if (hMSL.isEmpty()) {
-            qWarning() << "Cannot calculate z due to missing hMSL";
-            return std::nullopt;
-        }
-
-        QVector<double> z;
-        z.reserve(hMSL.size());
-        for(int i = 0; i < hMSL.size(); ++i){
-            z.append(hMSL[i] - groundElev);
-        }
-        return z;
-    });
-
-    SessionData::registerCalculatedMeasurement(
-        "GNSS", "velH",
-        {
-            DependencyKey::measurement("GNSS", "velN"),
-            DependencyKey::measurement("GNSS", "velE")
-        },
-        [](SessionData& session) -> std::optional<QVector<double>> {
-        QVector<double> velN = session.getMeasurement("GNSS", "velN");
-        QVector<double> velE = session.getMeasurement("GNSS", "velE");
-
-        if (velN.isEmpty() || velE.isEmpty()) {
-            qWarning() << "Cannot calculate velH due to missing velN or velE";
-            return std::nullopt;
-        }
-
-        if (velN.size() != velE.size()) {
-            qWarning() << "velN and velE size mismatch in session:" << session.getAttribute(SessionKeys::SessionId);
-            return std::nullopt;
-        }
-
-        QVector<double> velH;
-        velH.reserve(velN.size());
-        for(int i = 0; i < velN.size(); ++i){
-            velH.append(std::sqrt(velN[i]*velN[i] + velE[i]*velE[i]));
-        }
-        return velH;
-    });
-
-    SessionData::registerCalculatedMeasurement(
-        "GNSS", "vel",
-        {
-            DependencyKey::measurement("GNSS", "velH"),
-            DependencyKey::measurement("GNSS", "velD")
-        },
-        [](SessionData& session) -> std::optional<QVector<double>> {
-        QVector<double> velH = session.getMeasurement("GNSS", "velH");
-        QVector<double> velD = session.getMeasurement("GNSS", "velD");
-
-        if (velH.isEmpty() || velD.isEmpty()) {
-            qWarning() << "Cannot calculate vel due to missing velH or velD";
-            return std::nullopt;
-        }
-
-        if (velH.size() != velD.size()) {
-            qWarning() << "velH and velD size mismatch in session:" << session.getAttribute(SessionKeys::SessionId);
-            return std::nullopt;
-        }
-
-        QVector<double> vel;
-        vel.reserve(velH.size());
-        for(int i = 0; i < velH.size(); ++i){
-            vel.append(std::sqrt(velH[i]*velH[i] + velD[i]*velD[i]));
-        }
-        return vel;
-    });
-
-    SessionData::registerCalculatedMeasurement(
-        "IMU", "aTotal",
-        {
-            DependencyKey::measurement("IMU", "ax"),
-            DependencyKey::measurement("IMU", "ay"),
-            DependencyKey::measurement("IMU", "az")
-        },
-        [](SessionData& session) -> std::optional<QVector<double>> {
-        QVector<double> ax = session.getMeasurement("IMU", "ax");
-        QVector<double> ay = session.getMeasurement("IMU", "ay");
-        QVector<double> az = session.getMeasurement("IMU", "az");
-
-        if (ax.isEmpty() || ay.isEmpty() || az.isEmpty()) {
-            qWarning() << "Cannot calculate aTotal due to missing ax, ay, or az";
-            return std::nullopt;
-        }
-
-        if ((ax.size() != ay.size()) || (ax.size() != az.size())) {
-            qWarning() << "az, ay, or az size mismatch in session:" << session.getAttribute(SessionKeys::SessionId);
-            return std::nullopt;
-        }
-
-        QVector<double> aTotal;
-        aTotal.reserve(ax.size());
-        for(int i = 0; i < ax.size(); ++i){
-            aTotal.append(std::sqrt(ax[i]*ax[i] + ay[i]*ay[i] + az[i]*az[i]));
-        }
-        return aTotal;
-    });
-
-    SessionData::registerCalculatedMeasurement(
-        "IMU", "wTotal",
-        {
-            DependencyKey::measurement("IMU", "wx"),
-            DependencyKey::measurement("IMU", "wy"),
-            DependencyKey::measurement("IMU", "wz")
-        },
-        [](SessionData& session) -> std::optional<QVector<double>> {
-        QVector<double> wx = session.getMeasurement("IMU", "wx");
-        QVector<double> wy = session.getMeasurement("IMU", "wy");
-        QVector<double> wz = session.getMeasurement("IMU", "wz");
-
-        if (wx.isEmpty() || wy.isEmpty() || wz.isEmpty()) {
-            qWarning() << "Cannot calculate wTotal due to missing wx, wy, or wz";
-            return std::nullopt;
-        }
-
-        if ((wx.size() != wy.size()) || (wx.size() != wz.size())) {
-            qWarning() << "wz, wy, or wz size mismatch in session:" << session.getAttribute(SessionKeys::SessionId);
-            return std::nullopt;
-        }
-
-        QVector<double> wTotal;
-        wTotal.reserve(wx.size());
-        for(int i = 0; i < wx.size(); ++i){
-            wTotal.append(std::sqrt(wx[i]*wx[i] + wy[i]*wy[i] + wz[i]*wz[i]));
-        }
-        return wTotal;
-    });
-
-    SessionData::registerCalculatedMeasurement(
-        "MAG", "total",
-        {
-            DependencyKey::measurement("MAG", "x"),
-            DependencyKey::measurement("MAG", "y"),
-            DependencyKey::measurement("MAG", "z")
-        },
-        [](SessionData& session) -> std::optional<QVector<double>> {
-        QVector<double> x = session.getMeasurement("MAG", "x");
-        QVector<double> y = session.getMeasurement("MAG", "y");
-        QVector<double> z = session.getMeasurement("MAG", "z");
-
-        if (x.isEmpty() || y.isEmpty() || z.isEmpty()) {
-            qWarning() << "Cannot calculate total due to missing x, y, or z";
-            return std::nullopt;
-        }
-
-        if ((x.size() != y.size()) || (x.size() != z.size())) {
-            qWarning() << "x, y, or z size mismatch in session:" << session.getAttribute(SessionKeys::SessionId);
-            return std::nullopt;
-        }
-
-        QVector<double> total;
-        total.reserve(x.size());
-        for(int i = 0; i < x.size(); ++i){
-            total.append(std::sqrt(x[i]*x[i] + y[i]*y[i] + z[i]*z[i]));
-        }
-        return total;
-    });
-
-    // Helper lambda to compute _time for non-GNSS sensors
-    auto compute_time = [](SessionData &session, const QString &sensorKey) -> std::optional<QVector<double>> {
-        // Check that sensor is allowed
-        const QStringList allowedSensors = { "BARO", "HUM", "MAG", "IMU", "TIME", "VBAT" };
-        if (!allowedSensors.contains(sensorKey)) {
-            return std::nullopt;
-        }
-
-        // We need TIME sensor data and a linear fit
-        bool haveFit = session.hasAttribute(SessionKeys::TimeFitA) && session.hasAttribute(SessionKeys::TimeFitB);
-        double a = 0.0, b = 0.0;
-        if (!haveFit) {
-            // Attempt to compute the fit
-            if (!session.hasMeasurement("TIME", "time") ||
-                !session.hasMeasurement("TIME", "tow") ||
-                !session.hasMeasurement("TIME", "week")) {
-                // TIME sensor not available or incomplete data
-                return std::nullopt;
-            }
-
-            QVector<double> systemTime = session.getMeasurement("TIME", "time");
-            QVector<double> tow = session.getMeasurement("TIME", "tow");
-            QVector<double> week = session.getMeasurement("TIME", "week");
-
-            int N = std::min({systemTime.size(), tow.size(), week.size()});
-            if (N < 2) {
-                // Not enough points for a linear fit
-                return std::nullopt;
-            }
-
-            // Compute UTC time
-            QVector<double> utcTime(N);
-            for (int i = 0; i < N; ++i) {
-                utcTime[i] = week[i] * 604800 + tow[i] + 315964800;
-            }
-
-            // Perform a linear fit: utcTime = a*systemTime + b
-            double sumS = 0.0, sumU = 0.0, sumSS = 0.0, sumSU = 0.0;
-            for (int i = 0; i < N; ++i) {
-                double S = systemTime[i];
-                double U = utcTime[i];
-                sumS += S;
-                sumU += U;
-                sumSS += S * S;
-                sumSU += S * U;
-            }
-
-            double denom = (N * sumSS - sumS * sumS);
-            if (denom == 0.0) {
-                // Degenerate fit
-                return std::nullopt;
-            }
-
-            a = (N * sumSU - sumS * sumU) / denom;
-            b = (sumU - a * sumS) / N;
-
-            // Store fit parameters
-            session.setAttribute(SessionKeys::TimeFitA, QString::number(a, 'g', 17));
-            session.setAttribute(SessionKeys::TimeFitB, QString::number(b, 'g', 17));
-        } else {
-            // Already computed fit
-            a = session.getAttribute(SessionKeys::TimeFitA).toDouble();
-            b = session.getAttribute(SessionKeys::TimeFitB).toDouble();
-        }
-
-        // Now convert the sensor's 'time' measurement using the linear fit
-        if (!session.hasMeasurement(sensorKey, "time")) {
-            return std::nullopt;
-        }
-
-        QVector<double> sensorSystemTime = session.getMeasurement(sensorKey, "time");
-        QVector<double> result(sensorSystemTime.size());
-        for (int i = 0; i < sensorSystemTime.size(); ++i) {
-            result[i] = a * sensorSystemTime[i] + b;
-        }
-        return result;
-    };
-
-    // Register for GNSS
-    const QStringList gnss_sensors = {"GNSS"};
-    for (const QString &sens : gnss_sensors) {
-        SessionData::registerCalculatedMeasurement(
-            sens, SessionKeys::Time,
-            {
-                DependencyKey::measurement(sens, "time")
-            },
-            [sens](SessionData& session) -> std::optional<QVector<double>> {
-                QVector<double> sensTime = session.getMeasurement(sens, "time");
-
-                if (sensTime.isEmpty()) {
-                    qWarning() << "Cannot calculate time from epoch";
-                    return std::nullopt;
-                }
-
-                return sensTime;
-            });
-    }
-
-    // Register for other sensors
-    const QStringList sensors = {"BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
-    for (const QString &sens : sensors) {
-        SessionData::registerCalculatedMeasurement(
-            sens, SessionKeys::Time,
-            {
-                DependencyKey::measurement(sens, "time")
-            },
-            [compute_time, sens](SessionData &s) -> std::optional<QVector<double>> {
-            return compute_time(s, sens);
-        });
-    }
-
-    // Helper lambda to compute time from exit
-    auto compute_time_from_exit = [](SessionData &session, const QString &sensorKey) -> std::optional<QVector<double>> {
-        // Get raw time first to force calculation if needed
-        QVector<double> rawTime = session.getMeasurement(sensorKey, SessionKeys::Time);
-
-        // Then get exit time attribute
-        QVariant var = session.getAttribute(SessionKeys::ExitTime);
-        if (!var.canConvert<QDateTime>()) {
-            return std::nullopt;
-        }
-
-        QDateTime dt = var.toDateTime();
-        if (!dt.isValid()) {
-            return std::nullopt;
-        }
-
-        // If you need the exit time as a double (seconds since epoch):
-        double exitTime = dt.toMSecsSinceEpoch() / 1000.0;
-
-        // Now calculate the difference
-        QVector<double> result(rawTime.size());
-        for (int i = 0; i < rawTime.size(); ++i) {
-            result[i] = rawTime[i] - exitTime;
-        }
-        return result;
-    };
-
-    // Register for all sensors
-    QStringList all_sensors = {"GNSS", "BARO", "HUM", "MAG", "IMU", "TIME", "VBAT", SessionKeys::ImuGnssEkf};
-    for (const QString &sens : all_sensors) {
-        SessionData::registerCalculatedMeasurement(
-            sens, SessionKeys::TimeFromExit,
-            {
-                DependencyKey::measurement(sens, SessionKeys::Time),
-                DependencyKey::attribute(SessionKeys::ExitTime)
-            },
-            [compute_time_from_exit, sens](SessionData &s) {
-            return compute_time_from_exit(s, sens);
-        });
-    }
-    SessionData::registerCalculatedMeasurement(
-        "GNSS", "accD",
-        {
-            DependencyKey::measurement("GNSS", "velD"),
-            DependencyKey::measurement("GNSS", "time")
-        },
-        [](SessionData& session) -> std::optional<QVector<double>> {
-        QVector<double> velD = session.getMeasurement("GNSS", "velD");
-        QVector<double> time = session.getMeasurement("GNSS", "time");
-
-        if (velD.isEmpty()) {
-            qWarning() << "Cannot calculate accD due to missing velD";
-            return std::nullopt;
-        }
-
-        if (time.size() != velD.size()) {
-            qWarning() << "Cannot calculate accD because time and velD size mismatch.";
-            return std::nullopt;
-        }
-
-        // If there's fewer than two samples, we cannot compute acceleration.
-        if (velD.size() < 2) {
-            qWarning() << "Not enough data points to calculate accD.";
-            return std::nullopt;
-        }
-
-        QVector<double> accD;
-        accD.reserve(velD.size());
-
-        // For the first sample (i = 0), use forward difference:
-        // a[0] = (velD[1] - velD[0]) / (time[1] - time[0])
-        {
-            double dt = time[1] - time[0];
-            if (dt == 0.0) {
-                qWarning() << "Zero time difference encountered between indices 0 and 1.";
-                return std::nullopt;
-            }
-            double a = (velD[1] - velD[0]) / dt;
-            accD.append(a);
-        }
-
-        // For the interior points (1 <= i <= velD.size()-2), use centered difference:
-        // a[i] = (velD[i+1] - velD[i-1]) / (time[i+1] - time[i-1])
-        for (int i = 1; i < velD.size() - 1; ++i) {
-            double dt = time[i+1] - time[i-1];
-            if (dt == 0.0) {
-                qWarning() << "Zero time difference encountered for indices" << i-1 << "and" << i+1;
-                return std::nullopt;
-            }
-            double a = (velD[i+1] - velD[i-1]) / dt;
-            accD.append(a);
-        }
-
-        // For the last sample (i = velD.size()-1), use backward difference:
-        // a[last] = (velD[last] - velD[last-1]) / (time[last] - time[last-1])
-        {
-            int last = velD.size() - 1;
-            double dt = time[last] - time[last-1];
-            if (dt == 0.0) {
-                qWarning() << "Zero time difference encountered at the end indices:" << last-1 << "and" << last;
-                return std::nullopt;
-            }
-            double a = (velD[last] - velD[last-1]) / dt;
-            accD.append(a);
-        }
-
-        return accD;
-    });
-
-    // Define output mappings
-    struct FusionOutputMapping {
-        QString key;
-        QVector<double> FusionOutput::*member;
-    };
-
-    static const std::vector<FusionOutputMapping> fusion_outputs = {
-        {SessionKeys::Time, &FusionOutput::time},
-        {"posN", &FusionOutput::posN},
-        {"posE", &FusionOutput::posE},
-        {"posD", &FusionOutput::posD},
-        {"velN", &FusionOutput::velN},
-        {"velE", &FusionOutput::velE},
-        {"velD", &FusionOutput::velD},
-        {"accN", &FusionOutput::accN},
-        {"accE", &FusionOutput::accE},
-        {"accD", &FusionOutput::accD},
-        {"roll", &FusionOutput::roll},
-        {"pitch", &FusionOutput::pitch},
-        {"yaw", &FusionOutput::yaw}
-    };
-
-    auto compute_imu_gnss_ekf = [](SessionData &session, const QString &outputKey) -> std::optional<QVector<double>> {
-        QVector<double> gnssTime = session.getMeasurement("GNSS", SessionKeys::Time);
-        QVector<double> lat = session.getMeasurement("GNSS", "lat");
-        QVector<double> lon = session.getMeasurement("GNSS", "lon");
-        QVector<double> hMSL = session.getMeasurement("GNSS", "hMSL");
-        QVector<double> velN = session.getMeasurement("GNSS", "velN");
-        QVector<double> velE = session.getMeasurement("GNSS", "velE");
-        QVector<double> velD = session.getMeasurement("GNSS", "velD");
-        QVector<double> hAcc = session.getMeasurement("GNSS", "hAcc");
-        QVector<double> vAcc = session.getMeasurement("GNSS", "vAcc");
-        QVector<double> sAcc = session.getMeasurement("GNSS", "sAcc");
-
-        QVector<double> imuTime = session.getMeasurement("IMU", SessionKeys::Time);
-        QVector<double> ax = session.getMeasurement("IMU", "ax");
-        QVector<double> ay = session.getMeasurement("IMU", "ay");
-        QVector<double> az = session.getMeasurement("IMU", "az");
-        QVector<double> wx = session.getMeasurement("IMU", "wx");
-        QVector<double> wy = session.getMeasurement("IMU", "wy");
-        QVector<double> wz = session.getMeasurement("IMU", "wz");
-
-        if (gnssTime.isEmpty() || lat.isEmpty() || lon.isEmpty() || hMSL.isEmpty() ||
-            velN.isEmpty() || velE.isEmpty() || velD.isEmpty() || hAcc.isEmpty() ||
-            vAcc.isEmpty() || sAcc.isEmpty() || imuTime.isEmpty() || ax.isEmpty() ||
-            ay.isEmpty() || az.isEmpty() || wx.isEmpty() || wy.isEmpty() || wz.isEmpty()) {
-            qWarning() << "Cannot calculate EKF due to missing data";
-            return std::nullopt;
-        }
-
-        // Run the fusion
-        FusionOutput out = runFusion(
-            gnssTime, lat, lon, hMSL, velN, velE, velD, hAcc, vAcc, sAcc,
-            imuTime, ax, ay, az, wx, wy, wz);
-
-        std::optional<QVector<double>> result;
-
-        // Iterate over all outputs and either store or return the requested one
-        for (const auto &entry : fusion_outputs) {
-            if (entry.key == outputKey) {
-                result = out.*(entry.member);  // This is the requested key, return it
-            } else {
-                session.setCalculatedMeasurement(SessionKeys::ImuGnssEkf, entry.key, out.*(entry.member));
-            }
-        }
-
-        return result;
-    };
-
-    // Register for all outputs dynamically using `fusion_outputs`
-    for (const auto &entry : fusion_outputs) {
-        SessionData::registerCalculatedMeasurement(
-            SessionKeys::ImuGnssEkf, entry.key,
-            {
-                DependencyKey::measurement("GNSS", SessionKeys::Time),
-                DependencyKey::measurement("GNSS", "lat"),
-                DependencyKey::measurement("GNSS", "lon"),
-                DependencyKey::measurement("GNSS", "hMSL"),
-                DependencyKey::measurement("GNSS", "velN"),
-                DependencyKey::measurement("GNSS", "velE"),
-                DependencyKey::measurement("GNSS", "velD"),
-                DependencyKey::measurement("GNSS", "hAcc"),
-                DependencyKey::measurement("GNSS", "vAcc"),
-                DependencyKey::measurement("GNSS", "sAcc"),
-                DependencyKey::measurement("IMU", SessionKeys::Time),
-                DependencyKey::measurement("IMU", "ax"),
-                DependencyKey::measurement("IMU", "ay"),
-                DependencyKey::measurement("IMU", "az"),
-                DependencyKey::measurement("IMU", "wx"),
-                DependencyKey::measurement("IMU", "wy"),
-                DependencyKey::measurement("IMU", "wz")
-            },
-            [compute_imu_gnss_ekf, key = entry.key](SessionData &s) {
-                return compute_imu_gnss_ekf(s, key);
-            });
-    }
-
-    SessionData::registerCalculatedMeasurement(
-        SessionKeys::ImuGnssEkf, "accH",
-        {
-            DependencyKey::measurement(SessionKeys::ImuGnssEkf, "accN"),
-            DependencyKey::measurement(SessionKeys::ImuGnssEkf, "accE")
-        },
-        [](SessionData& session) -> std::optional<QVector<double>> {
-            QVector<double> accN = session.getMeasurement(SessionKeys::ImuGnssEkf, "accN");
-            QVector<double> accE = session.getMeasurement(SessionKeys::ImuGnssEkf, "accE");
-
-            if (accN.isEmpty() || accE.isEmpty()) {
-                qWarning() << "Cannot calculate accH due to missing accN or accE";
-                return std::nullopt;
-            }
-
-            if (accN.size() != accE.size()) {
-                qWarning() << "accN and accE size mismatch in session:" << session.getAttribute(SessionKeys::SessionId);
-                return std::nullopt;
-            }
-
-            QVector<double> accH;
-            accH.reserve(accN.size());
-            for(int i = 0; i < accN.size(); ++i){
-                accH.append(std::sqrt(accN[i]*accN[i] + accE[i]*accE[i]));
-            }
-            return accH;
-        });
-
-    // Define the keys we want to expose
-    struct SimpOutputMapping {
-        QString key;
-        int vectorIndex; // 0=lat, 1=lon, 2=alt, 3=time
-    };
-
-    // We will generate 4 vectors. 
-    // We register the calculation trigger on "lat", but it populates all 4.
-    static const std::vector<SimpOutputMapping> simp_outputs = {
-        {"lat", 0}, {"lon", 1}, {"hMSL", 2}, {SessionKeys::Time, 3}
-    };
-
-    auto compute_simplified_track = [](SessionData &session, const QString &outputKey) -> std::optional<QVector<double>> {
-        // 1. Gather Dependencies
-        QVector<double> rawLat = session.getMeasurement("GNSS", "lat");
-        QVector<double> rawLon = session.getMeasurement("GNSS", "lon");
-        QVector<double> rawAlt = session.getMeasurement("GNSS", "hMSL");
-        QVector<double> rawTime = session.getMeasurement("GNSS", SessionKeys::Time);
-
-        if (rawLat.isEmpty() || rawLat.size() != rawLon.size() || 
-            rawLat.size() != rawAlt.size() || rawLat.size() != rawTime.size()) {
-            return std::nullopt;
-        }
-
-        // 2. Setup Geometry Types
-        namespace bg = boost::geometry;
-        using PointXY = bg::model::d2::point_xy<double>;
-        using LineString = bg::model::linestring<PointXY>;
-
-        // 3. Project to Local Cartesian (Meters)
-        // Center projection on the first point
-        GeographicLib::LocalCartesian proj(rawLat[0], rawLon[0], rawAlt[0]);
-        
-        LineString pathInMeters;
-        pathInMeters.reserve(rawLat.size());
-
-        // We store the original index to retrieve the correct timestamp/altitude later
-        // Map: PointIndex -> OriginalIndex
-        std::vector<size_t> indexMap; 
-        indexMap.reserve(rawLat.size());
-
-        for (int i = 0; i < rawLat.size(); ++i) {
-            double x, y, z;
-            proj.Forward(rawLat[i], rawLon[i], rawAlt[i], x, y, z);
-            
-            // Note: RDP is 2D simplification. If vertical simplifcation is critical, 
-            // you need a 3D point type, but usually 2D (ground track) is sufficient for maps.
-            bg::append(pathInMeters, PointXY(x, y)); 
-        }
-
-        // 4. Run RDP Simplification
-        // Epsilon: 0.5 meters (Sensor noise floor)
-        LineString simplifiedPath;
-        bg::simplify(pathInMeters, simplifiedPath, 0.5); 
-
-        // 5. Unproject & Reconstruct
-        // WARNING: RDP destroys indices. However, Boost's simplified points 
-        // are a subset of original points (usually). 
-        // BUT: Floating point errors during projection/unprojection might make 
-        // strict equality checks on lat/lon risky for finding the original timestamp.
-        
-        // ROBUST APPROACH: 
-        // Since we need Time and Alt synced, we should ideally simplify the 3D structure 
-        // or map back to the nearest original point. 
-        // For strict RDP, the points in `simplifiedPath` correspond exactly to specific 
-        // indices in `pathInMeters`. 
-        
-        // To keep this snippet simple, let's reverse project the X/Y to get Lat/Lon,
-        // and linearly interpolate Time/Alt based on the cumulative distance or 
-        // simply perform a nearest-neighbor search on the original raw data 
-        // to recover the timestamp. 
-        
-        // Let's use a simplified strategy: 
-        // Re-project the simplified XY back to Lat/Lon.
-        // For Time/Alt, we must rely on the fact that RDP preserves vertices.
-        // We can iterate the original list to find the matching points.
-
-        QVector<double> outLat, outLon, outAlt, outTime;
-        outLat.reserve(simplifiedPath.size());
-        outLon.reserve(simplifiedPath.size());
-        outAlt.reserve(simplifiedPath.size());
-        outTime.reserve(simplifiedPath.size());
-
-        size_t rawIdx = 0;
-        for (const auto& pt : simplifiedPath) {
-            // Find this point in the original path (it must exist, in order)
-            // We search forward from the last found index.
-            // We compare in Projected Meter Space to avoid float fuzziness.
-            
-            double targetX = pt.x();
-            double targetY = pt.y();
-            
-            // Simple tolerance search
-            for (; rawIdx < rawLat.size(); ++rawIdx) {
-                double x, y, z;
-                proj.Forward(rawLat[rawIdx], rawLon[rawIdx], rawAlt[rawIdx], x, y, z);
-                
-                if (std::abs(x - targetX) < 1e-3 && std::abs(y - targetY) < 1e-3) {
-                    // Match found
-                    outLat.append(rawLat[rawIdx]);
-                    outLon.append(rawLon[rawIdx]);
-                    outAlt.append(rawAlt[rawIdx]);
-                    outTime.append(rawTime[rawIdx]);
-                    break;
-                }
-            }
-        }
-        
-        // 6. Store outputs in SessionData (Cache)
-        // Store everything *except* the one we are about to return 
-        // (to avoid double-setting logic if you want, though setCalculatedMeasurement is safe)
-        
-        session.setCalculatedMeasurement("Simplified", "lat", outLat);
-        session.setCalculatedMeasurement("Simplified", "lon", outLon);
-        session.setCalculatedMeasurement("Simplified", "hMSL", outAlt);
-        session.setCalculatedMeasurement("Simplified", SessionKeys::Time, outTime);
-
-        // 7. Return the specific requested vector
-        if (outputKey == "lat") return outLat;
-        if (outputKey == "lon") return outLon;
-        if (outputKey == "hMSL") return outAlt;
-        if (outputKey == SessionKeys::Time) return outTime;
-
-        return std::nullopt;
-    };
-
-    // Register the dependency
-    for (const auto &entry : simp_outputs) {
-        SessionData::registerCalculatedMeasurement(
-            "Simplified", entry.key,
-            {
-                // Dependency on RAW GNSS data
-                DependencyKey::measurement("GNSS", "lat"),
-                DependencyKey::measurement("GNSS", "lon"),
-                DependencyKey::measurement("GNSS", "hMSL"),
-                DependencyKey::measurement("GNSS", SessionKeys::Time)
-            },
-            [compute_simplified_track, key = entry.key](SessionData &s) {
-                return compute_simplified_track(s, key);
-            });
-    }
-}
 
 void MainWindow::initializeXAxisMenu()
 {
@@ -1781,7 +947,12 @@ void MainWindow::initializePlotsMenu()
     // Add Zoom to Extent action at the top of Tools menu
     QAction *zoomToExtentAction = new QAction(tr("Zoom to Extent"), this);
     zoomToExtentAction->setShortcut(QKeySequence(Qt::SHIFT | Qt::Key_Z));
-    connect(zoomToExtentAction, &QAction::triggered, plotWidget, &PlotWidget::zoomToExtent);
+    connect(zoomToExtentAction, &QAction::triggered, this, [this]() {
+        auto* plotFeature = findFeature<PlotDockFeature>();
+        if (plotFeature && plotFeature->plotWidget()) {
+            plotFeature->plotWidget()->zoomToExtent();
+        }
+    });
     ui->menu_Tools->insertAction(ui->action_Pan, zoomToExtentAction);
     ui->menu_Tools->insertSeparator(ui->action_Pan);
 
@@ -1799,22 +970,13 @@ void MainWindow::initializeWindowMenu()
     QMenu *windowMenu = ui->menuWindow;
     Q_ASSERT(windowMenu);
 
-    auto addDockAction = [windowMenu](KDDockWidgets::QtWidgets::DockWidget *dock, const QString &text) {
-        if (!dock)
-            return;
-
-        QAction *a = dock->toggleAction();
-        a->setText(text);
-        windowMenu->addAction(a);
-    };
-
-    addDockAction(logbookDock, tr("Logbook"));
-    addDockAction(plotsDock, tr("Plots"));
-    addDockAction(legendDock, tr("Legend"));
-    addDockAction(mapDock, tr("Map"));
-    addDockAction(plotSelectionDock, tr("Plot Selection"));
-    addDockAction(markerDock, tr("Marker Selection"));
-    addDockAction(videoDock, tr("Video"));
+    for (auto* feature : m_features) {
+        QAction* a = feature->toggleAction();
+        if (a) {
+            a->setText(feature->title());
+            windowMenu->addAction(a);
+        }
+    }
 }
 
 void MainWindow::togglePlot(const QString &sensorID, const QString &measurementID)
@@ -1826,15 +988,22 @@ void MainWindow::togglePlot(const QString &sensorID, const QString &measurementI
     plotModel->togglePlot(sensorID, measurementID);
 
     // Ensure the plot selection view is visible
-    if (!plotSelectionDock->isVisible()) {
-        plotSelectionDock->show();
+    auto* plotSelectionFeature = findFeature<PlotSelectionDockFeature>();
+    if (plotSelectionFeature && plotSelectionFeature->dock()) {
+        if (!plotSelectionFeature->dock()->isVisible()) {
+            plotSelectionFeature->dock()->show();
+        }
     }
 }
 
 void MainWindow::setSelectedTrackCheckState(Qt::CheckState state)
 {
+    auto* logbookFeature = findFeature<LogbookDockFeature>();
+    if (!logbookFeature || !logbookFeature->logbookView())
+        return;
+
     // Get all selected rows from the logbook view
-    QList<QModelIndex> selectedRows = logbookView->selectedRows();
+    QList<QModelIndex> selectedRows = logbookFeature->logbookView()->selectedRows();
     if (selectedRows.isEmpty())
         return;
 

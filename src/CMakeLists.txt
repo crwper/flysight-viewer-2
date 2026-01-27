@@ -431,15 +431,36 @@ set(PROJECT_SOURCES
   plotmodel.cpp              plotmodel.h
   cursormodel.cpp            cursormodel.h
   legendpresenter.cpp        legendpresenter.h
-  mapwidget.cpp              mapwidget.h
-  mappreferencesbridge.cpp   mappreferencesbridge.h
   videowidget.cpp            videowidget.h
-  trackmapmodel.cpp          trackmapmodel.h
-  mapcursordotmodel.cpp      mapcursordotmodel.h
-  mapcursorproxy.cpp         mapcursorproxy.h
   plotrangemodel.cpp         plotrangemodel.h
   markerregistry.cpp         markerregistry.h
   markermodel.cpp            markermodel.h
+  ui/docks/AppContext.h
+  ui/docks/DockFeature.h
+  ui/docks/DockRegistry.h    ui/docks/DockRegistry.cpp
+  ui/docks/plotselection/PlotSelectionDockFeature.h    ui/docks/plotselection/PlotSelectionDockFeature.cpp
+  ui/docks/markerselection/MarkerSelectionDockFeature.h    ui/docks/markerselection/MarkerSelectionDockFeature.cpp
+  ui/docks/logbook/LogbookDockFeature.h    ui/docks/logbook/LogbookDockFeature.cpp
+  ui/docks/legend/LegendDockFeature.h    ui/docks/legend/LegendDockFeature.cpp
+  ui/docks/video/VideoDockFeature.h    ui/docks/video/VideoDockFeature.cpp
+  ui/docks/map/MapDockFeature.h    ui/docks/map/MapDockFeature.cpp
+  ui/docks/map/MapWidget.h    ui/docks/map/MapWidget.cpp
+  ui/docks/map/TrackMapModel.h    ui/docks/map/TrackMapModel.cpp
+  ui/docks/map/MapCursorDotModel.h    ui/docks/map/MapCursorDotModel.cpp
+  ui/docks/map/MapCursorProxy.h    ui/docks/map/MapCursorProxy.cpp
+  ui/docks/map/MapPreferencesBridge.h    ui/docks/map/MapPreferencesBridge.cpp
+  ui/docks/plot/PlotDockFeature.h    ui/docks/plot/PlotDockFeature.cpp
+  calculations/calculatedvalueregistry.cpp    calculations/calculatedvalueregistry.h
+  calculations/attributecalculations.cpp      calculations/attributecalculations.h
+  calculations/gnsscalculations.cpp           calculations/gnsscalculations.h
+  calculations/imucalculations.cpp            calculations/imucalculations.h
+  calculations/magcalculations.cpp            calculations/magcalculations.h
+  calculations/barocalculations.cpp           calculations/barocalculations.h
+  calculations/humcalculations.cpp            calculations/humcalculations.h
+  calculations/vbatcalculations.cpp           calculations/vbatcalculations.h
+  calculations/timecalculations.cpp           calculations/timecalculations.h
+  calculations/sensorfusioncalculations.cpp   calculations/sensorfusioncalculations.h
+  calculations/simplificationcalculations.cpp calculations/simplificationcalculations.h
   resources.qrc
 )
 

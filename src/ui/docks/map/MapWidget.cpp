@@ -1,9 +1,9 @@
-#include "mapwidget.h"
+#include "MapWidget.h"
 
-#include "trackmapmodel.h"
-#include "mapcursordotmodel.h"
-#include "mapcursorproxy.h"
-#include "mappreferencesbridge.h"
+#include "TrackMapModel.h"
+#include "MapCursorDotModel.h"
+#include "MapCursorProxy.h"
+#include "MapPreferencesBridge.h"
 #include "sessionmodel.h"
 #include "plotrangemodel.h"
 
