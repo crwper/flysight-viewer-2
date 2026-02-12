@@ -92,7 +92,7 @@ endif()
 
 # ─────────────────────────────── Python / pybind11
 # Full Python install for embedding + extension module build
-find_package(Python 3.8 REQUIRED COMPONENTS Interpreter Development Development.Embed)
+find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development Development.Embed)
 
 # Export Python version info for bundling modules
 # This ensures bundled Python matches build-time Python for pybind11 compatibility

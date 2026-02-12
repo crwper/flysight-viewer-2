@@ -155,6 +155,12 @@ if(FLYSIGHT_BUILD_APP)
     if(CMAKE_PREFIX_PATH)
         list(APPEND _APP_CMAKE_ARGS "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}")
     endif()
+    if(Python_ROOT_DIR)
+        list(APPEND _APP_CMAKE_ARGS "-DPython_ROOT_DIR=${Python_ROOT_DIR}")
+    endif()
+    if(Python_EXECUTABLE)
+        list(APPEND _APP_CMAKE_ARGS "-DPython_EXECUTABLE=${Python_EXECUTABLE}")
+    endif()
 
     ExternalProject_Add(FlySightViewer
         SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src"

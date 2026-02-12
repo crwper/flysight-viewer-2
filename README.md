@@ -37,7 +37,18 @@ cmake --build build --config Release
 cmake --install build --config Release --prefix dist
 ```
 
-**macOS / Linux:**
+**macOS (MacPorts):**
+
+```bash
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH=/opt/local/libexec/qt6 \
+  -DPython_ROOT_DIR=/opt/local \
+  -DPython_EXECUTABLE=/opt/local/bin/python3.13
+cmake --build build
+cmake --install build --prefix dist
+```
+
+**Linux:**
 
 ```bash
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
@@ -58,7 +69,7 @@ The install step produces a self-contained deployment (ZIP-ready directory on Wi
 | Ninja | (optional) | [ninja-build.org](https://ninja-build.org/) | `brew install ninja` | `apt install ninja-build` |
 | Qt | 6.x | [Qt Online Installer](https://www.qt.io/download-qt-installer) | Qt Online Installer | Qt Online Installer |
 | Boost | 1.65+ | [Prebuilt binaries](https://sourceforge.net/projects/boost/files/boost-binaries/) | `brew install boost` | `apt install libboost-all-dev` |
-| Python | 3.8+ | [python.org](https://www.python.org/downloads/) | System or `brew install python` | `apt install python3-dev` |
+| Python | 3.10+ | [python.org](https://www.python.org/downloads/) | `port install python313` or `brew install python` | `apt install python3-dev` |
 | patchelf | (Linux only) | N/A | N/A | `apt install patchelf` |
 
 On Windows, Visual Studio is required even when using Ninja as the generator, since MSVC provides the compiler toolchain. You can also use the Visual Studio generator directly (`-G "Visual Studio 17 2022" -A x64`) instead of Ninja.
@@ -102,10 +113,19 @@ cmake ... -DBOOST_ROOT=/usr
 
 ### Python
 
-Python 3.8+ with development headers is required for pybind11 embedding.
+Python 3.10+ with development headers is required for pybind11 embedding. The build downloads a matching [python-build-standalone](https://github.com/indygreg/python-build-standalone) release to bundle with the application, so the build-time Python version must be available in that project's releases.
 
 - **Windows:** Install from [python.org](https://www.python.org/downloads/). Check "Download debug binaries" during installation if you plan to build Debug configurations.
-- **macOS / Linux:** System Python is usually sufficient. Ensure development headers are available (`Python.h`).
+- **macOS:** The system Python (`/usr/bin/python3`, typically 3.9.6) is too old — python-build-standalone no longer publishes 3.9.x builds. Install a modern Python via MacPorts (`port install python313`) or Homebrew (`brew install python`), then point CMake at it (see below).
+- **Linux:** System Python is usually sufficient. Ensure development headers are available (`Python.h`).
+
+**MacPorts (macOS):** MacPorts Python is not on CMake's default search path. You must tell CMake where to find it:
+
+```bash
+cmake ... -DPython_ROOT_DIR=/opt/local -DPython_EXECUTABLE=/opt/local/bin/python3.13
+```
+
+These flags are forwarded automatically to sub-builds.
 
 ## Build Instructions
 
@@ -120,7 +140,17 @@ cmake -G "Visual Studio 17 2022" -A x64 -B build -S .
 cmake --build build --config Release
 ```
 
-**macOS / Linux:**
+**macOS (MacPorts):**
+
+```bash
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH=/opt/local/libexec/qt6 \
+  -DPython_ROOT_DIR=/opt/local \
+  -DPython_EXECUTABLE=/opt/local/bin/python3.13
+cmake --build build
+```
+
+**Linux:**
 
 ```bash
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
@@ -323,8 +353,11 @@ The install step produces a flat directory with the executable, all DLLs, Qt plu
 ### macOS Deployment
 
 ```bash
-# 1. Build
-cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+# 1. Build (MacPorts example — adjust Python path for Homebrew)
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH=/opt/local/libexec/qt6 \
+  -DPython_ROOT_DIR=/opt/local \
+  -DPython_EXECUTABLE=/opt/local/bin/python3.13
 cmake --build build
 
 # 2. Install (creates .app bundle with Frameworks, Python, etc.)
@@ -518,13 +551,23 @@ cmake -DGTSAM_SOURCE_DIR=third-party/gtsam -P cmake/PatchGTSAM.cmake
 **Symptom:** CMake error: `Could not find a package configuration file provided by "Python"` or missing `Python.h`.
 
 **Solution:**
-- Install Python 3.8+ with development headers
+- Install Python 3.10+ with development headers
 - On Windows, ensure "Download debug binaries" was checked during installation for Debug builds
 - Verify Python is in your PATH: `python --version`
 - If multiple Python versions are installed, set `Python_ROOT_DIR`:
   ```bash
   cmake ... -DPython_ROOT_DIR="/path/to/python"
   ```
+
+### 4a. Python bundling download fails
+
+**Symptom:** CMake error: `Failed to download after 3 attempts` when downloading from `python-build-standalone`.
+
+**Cause:** The build-time Python version doesn't exist in the python-build-standalone release. This commonly happens on macOS when CMake finds the system Python 3.9.6, which is too old to have a matching standalone build.
+
+**Solution:**
+- Install a modern Python (3.10+) via MacPorts or Homebrew
+- Point CMake at it with `-DPython_ROOT_DIR` and `-DPython_EXECUTABLE` (see [Prerequisites > Python](#python))
 
 ### 5. TBB configuration fails for GTSAM
 
