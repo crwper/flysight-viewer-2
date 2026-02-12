@@ -177,6 +177,23 @@ else()
 endif()
 
 # =============================================================================
+# Top-Level Install Rules
+# =============================================================================
+#
+# The application is built and installed by ExternalProject into
+# ${CMAKE_BINARY_DIR}/install/ during the build step. These rules forward
+# that installation to the user-specified --prefix so that
+# `cmake --install build --prefix dist` works as expected.
+#
+
+if(FLYSIGHT_BUILD_APP)
+    install(DIRECTORY "${CMAKE_BINARY_DIR}/install/"
+        DESTINATION "."
+        USE_SOURCE_PERMISSIONS
+    )
+endif()
+
+# =============================================================================
 # Build Configuration Summary
 # =============================================================================
 

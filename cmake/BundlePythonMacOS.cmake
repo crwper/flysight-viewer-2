@@ -114,6 +114,9 @@ function(bundle_python_macos)
         message(FATAL_ERROR "bundle_python_macos: TARGET argument is required")
     endif()
 
+    # Bundle name for install destinations (relative to CMAKE_INSTALL_PREFIX)
+    set(_bundle_name "${ARG_TARGET}.app")
+
     if(NOT ARG_PYTHON_VERSION)
         set(ARG_PYTHON_VERSION "3.13")
     endif()
@@ -243,7 +246,7 @@ function(bundle_python_macos)
     # Install Python standard library and runtime to Contents/Resources/python/
     install(
         DIRECTORY "${_extract_dir}/"
-        DESTINATION "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Resources/python"
+        DESTINATION "${_bundle_name}/Contents/Resources/python"
         COMPONENT ${ARG_INSTALL_COMPONENT}
         USE_SOURCE_PERMISSIONS
         PATTERN "*.pyc" EXCLUDE
@@ -259,7 +262,7 @@ function(bundle_python_macos)
     # The dylib is typically at lib/libpython3.XX.dylib
     install(
         FILES "${_extract_dir}/lib/libpython${CMAKE_MATCH_1}.${CMAKE_MATCH_2}.dylib"
-        DESTINATION "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Frameworks"
+        DESTINATION "${_bundle_name}/Contents/Frameworks"
         COMPONENT ${ARG_INSTALL_COMPONENT}
     )
 
@@ -267,7 +270,7 @@ function(bundle_python_macos)
     if(EXISTS "${_extract_dir}/lib/libpython3.dylib")
         install(
             FILES "${_extract_dir}/lib/libpython3.dylib"
-            DESTINATION "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Frameworks"
+            DESTINATION "${_bundle_name}/Contents/Frameworks"
             COMPONENT ${ARG_INSTALL_COMPONENT}
         )
     endif()
@@ -281,7 +284,7 @@ function(bundle_python_macos)
     set(_fix_libpython_script "${CMAKE_BINARY_DIR}/fix_libpython_macos.cmake")
     file(WRITE "${_fix_libpython_script}" "
 # Fix libpython library ID for app bundle
-set(BUNDLE_DIR \"\${CMAKE_INSTALL_PREFIX}/$<TARGET_BUNDLE_DIR:${ARG_TARGET}>\")
+set(BUNDLE_DIR \"\${CMAKE_INSTALL_PREFIX}/${_bundle_name}\")
 set(FRAMEWORKS_DIR \"\${BUNDLE_DIR}/Contents/Frameworks\")
 
 message(STATUS \"Fixing libpython dylib paths...\")
@@ -370,7 +373,7 @@ message(STATUS \"libpython fixing complete\")
     set(_install_numpy_script "${CMAKE_BINARY_DIR}/install_numpy_macos.cmake")
     file(WRITE "${_install_numpy_script}" "
 # Install NumPy into bundled Python site-packages
-set(BUNDLE_PYTHON_DIR \"\${CMAKE_INSTALL_PREFIX}/$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Resources/python\")
+set(BUNDLE_PYTHON_DIR \"\${CMAKE_INSTALL_PREFIX}/${_bundle_name}/Contents/Resources/python\")
 set(PYTHON_EXE \"\${BUNDLE_PYTHON_DIR}/bin/python3\")
 set(SITE_PACKAGES \"\${BUNDLE_PYTHON_DIR}/lib/python${CMAKE_MATCH_1}.${CMAKE_MATCH_2}/site-packages\")
 set(NUMPY_SPEC \"${_numpy_spec}\")
@@ -431,7 +434,7 @@ endif()
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/flysight_plugin_sdk.py")
         install(
             FILES "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/flysight_plugin_sdk.py"
-            DESTINATION "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Resources/python/lib/python${CMAKE_MATCH_1}.${CMAKE_MATCH_2}/site-packages"
+            DESTINATION "${_bundle_name}/Contents/Resources/python/lib/python${CMAKE_MATCH_1}.${CMAKE_MATCH_2}/site-packages"
             COMPONENT ${ARG_INSTALL_COMPONENT}
         )
     endif()
@@ -440,7 +443,7 @@ endif()
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../python_src")
         install(
             DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../python_src/"
-            DESTINATION "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Resources/python/lib/python${CMAKE_MATCH_1}.${CMAKE_MATCH_2}/site-packages"
+            DESTINATION "${_bundle_name}/Contents/Resources/python/lib/python${CMAKE_MATCH_1}.${CMAKE_MATCH_2}/site-packages"
             COMPONENT ${ARG_INSTALL_COMPONENT}
             PATTERN "*.pyc" EXCLUDE
             PATTERN "__pycache__" EXCLUDE
@@ -453,7 +456,7 @@ endif()
     set(_verify_python_script "${CMAKE_BINARY_DIR}/verify_python_macos.cmake")
     file(WRITE "${_verify_python_script}" "
 message(STATUS \"Verifying bundled Python installation...\")
-set(PYTHON_EXE \"\${CMAKE_INSTALL_PREFIX}/$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Resources/python/bin/python3\")
+set(PYTHON_EXE \"\${CMAKE_INSTALL_PREFIX}/${_bundle_name}/Contents/Resources/python/bin/python3\")
 
 # Test Python interpreter
 execute_process(
@@ -503,11 +506,11 @@ message(STATUS \"Python bundle verification complete\")
     # =======================================================================
 
     set(BUNDLED_PYTHON_HOME
-        "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Resources/python"
+        "${_bundle_name}/Contents/Resources/python"
         CACHE INTERNAL "Path to bundled Python home in app bundle"
     )
     set(BUNDLED_PYTHON_LIBDIR
-        "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Frameworks"
+        "${_bundle_name}/Contents/Frameworks"
         CACHE INTERNAL "Path to bundled Python library in app bundle"
     )
     set(BUNDLED_PYTHON_VERSION "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}"

@@ -365,7 +365,7 @@ cmake --install build --prefix dist
 
 # 3. Code sign (must happen AFTER install, which modifies binaries)
 codesign --deep --force --verify --verbose \
-  --sign "Developer ID Application: Your Name" \
+  --sign "Developer ID Application" \
   dist/FlySightViewer.app
 
 # 4. Create DMG from signed bundle
@@ -374,6 +374,9 @@ hdiutil create -volname "FlySightViewer" \
   -ov -format UDZO FlySightViewer.dmg
 
 # 5. Notarize (required for Gatekeeper on other machines)
+# Tip: Run `security find-identity -v -p codesigning` to list your
+# installed certificates. The 10-character code in parentheses after
+# "Developer ID Application: Name (XXXXXXXXXX)" is your team-id.
 xcrun notarytool submit FlySightViewer.dmg \
   --apple-id your@email.com \
   --team-id XXXXXXXXXX \
@@ -442,7 +445,8 @@ FlySightViewer.app/
     ├── MacOS/FlySightViewer
     ├── Frameworks/
     │   ├── QtCore.framework, ...
-    │   ├── libtbb.12.dylib, libgtsam.dylib, ...
+    │   ├── libtbb.12.dylib, libgtsam.4.dylib, ...
+    │   ├── libkddockwidgets-qt6.3.dylib
     │   └── libpython3.XX.dylib
     ├── PlugIns/
     │   ├── platforms/
@@ -452,8 +456,9 @@ FlySightViewer.app/
         ├── qml/
         │   ├── QtLocation/
         │   └── QtPositioning/
-        └── python/
-            └── lib/python3.XX/site-packages/
+        ├── python/
+        │   └── lib/python3.XX/site-packages/
+        └── python_plugins/
 ```
 
 **Linux (AppImage contents):**

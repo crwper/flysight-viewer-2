@@ -505,6 +505,13 @@ include(GNUInstallDirs)
 # Define cmake module directory for deployment scripts
 set(FLYSIGHT_CMAKE_DIR "${CMAKE_CURRENT_LIST_DIR}/../cmake")
 
+# On macOS, MACOSX_BUNDLE must be set BEFORE install(TARGETS) so that CMake
+# uses the BUNDLE destination instead of RUNTIME. qt_add_executable with
+# MANUAL_FINALIZATION does not set this automatically.
+if(APPLE)
+  set_target_properties(FlySightViewer PROPERTIES MACOSX_BUNDLE TRUE)
+endif()
+
 # On Windows, use a flat directory structure (all files in root)
 # On other platforms, use standard GNU directory layout
 if(WIN32)
@@ -542,15 +549,22 @@ else()
 endif()
 
 # Install Python SDK files to plugin directory (where PluginHost looks for it)
+# On macOS, plugins go inside the app bundle so they're included in the DMG.
+if(APPLE)
+  set(_plugins_dest "FlySightViewer.app/Contents/Resources/python_plugins")
+else()
+  set(_plugins_dest "python_plugins")
+endif()
+
 install(FILES "${CMAKE_CURRENT_LIST_DIR}/../python_plugins/flysight_plugin_sdk.py"
-  DESTINATION "python_plugins"
+  DESTINATION "${_plugins_dest}"
 )
 
 # Install bundled Python plugins
 install(FILES
   "${CMAKE_CURRENT_LIST_DIR}/../python_plugins/pitot_tube.py"
   "${CMAKE_CURRENT_LIST_DIR}/../python_plugins/allan_variance.py"
-  DESTINATION "python_plugins"
+  DESTINATION "${_plugins_dest}"
 )
 
 # ─────────────────────────────── Qt deployment (Qt 6.3+)
@@ -816,9 +830,9 @@ if(APPLE)
     INSTALL_NAME_DIR "@rpath"
   )
 
-  # Set app bundle properties
+  # Set app bundle properties (MACOSX_BUNDLE itself is set earlier,
+  # before install rules, so that CMake uses BUNDLE DESTINATION)
   set_target_properties(FlySightViewer PROPERTIES
-    MACOSX_BUNDLE TRUE
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.flysight.viewer"
     MACOSX_BUNDLE_BUNDLE_NAME "FlySight Viewer"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
