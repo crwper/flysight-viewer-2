@@ -75,6 +75,32 @@ get_lib_name() {
     basename "$1"
 }
 
+# Resolve a Python framework reference to the actual bundled dylib name.
+# e.g. ".../Python.framework/Versions/3.13/Python" -> "libpython3.13.dylib"
+# Returns the resolved name on stdout, or empty string if not a Python framework.
+resolve_python_framework() {
+    local dep="$1"
+    local frameworks_dir="$2"
+
+    # Match: .../Python.framework/Versions/<ver>/Python
+    if [[ "$dep" =~ Python\.framework/Versions/([0-9]+\.[0-9]+)/Python$ ]]; then
+        local version="${BASH_REMATCH[1]}"
+        local candidate="libpython${version}.dylib"
+        if [[ -f "$frameworks_dir/$candidate" ]]; then
+            echo "$candidate"
+            return
+        fi
+        # Fallback: search for any libpython dylib matching this version
+        local found
+        found=$(find "$frameworks_dir" -maxdepth 1 -name "libpython${version}*.dylib" ! -type l 2>/dev/null | head -1)
+        if [[ -n "$found" ]]; then
+            basename "$found"
+            return
+        fi
+    fi
+    echo ""
+}
+
 # Strip code signature before modifying (required on macOS 12+)
 strip_signature() {
     local binary="$1"
@@ -146,6 +172,15 @@ fix_dylib() {
             install_name_tool -change "$dep" "@rpath/$dep_name" "$dylib" 2>/dev/null || true
             log_info "  Fixed: $dep -> @rpath/$dep_name"
             ((FIXED_COUNT++)) || true
+        else
+            # Handle Python framework -> bundled dylib mapping
+            local resolved
+            resolved=$(resolve_python_framework "$dep" "$frameworks_dir")
+            if [[ -n "$resolved" ]]; then
+                install_name_tool -change "$dep" "@rpath/$resolved" "$dylib" 2>/dev/null || true
+                log_info "  Fixed (framework): $dep -> @rpath/$resolved"
+                ((FIXED_COUNT++)) || true
+            fi
         fi
     done <<< "$deps"
 }
@@ -187,6 +222,15 @@ fix_executable() {
             install_name_tool -change "$dep" "@rpath/$dep_name" "$exe" 2>/dev/null || true
             log_info "  Fixed: $dep -> @rpath/$dep_name"
             ((FIXED_COUNT++)) || true
+        else
+            # Handle Python framework -> bundled dylib mapping
+            local resolved
+            resolved=$(resolve_python_framework "$dep" "$frameworks_dir")
+            if [[ -n "$resolved" ]]; then
+                install_name_tool -change "$dep" "@rpath/$resolved" "$exe" 2>/dev/null || true
+                log_info "  Fixed (framework): $dep -> @rpath/$resolved"
+                ((FIXED_COUNT++)) || true
+            fi
         fi
     done <<< "$deps"
 }
@@ -233,6 +277,15 @@ fix_python_modules() {
                 install_name_tool -change "$dep" "@rpath/$dep_name" "$so_file" 2>/dev/null || true
                 log_info "  Fixed: $dep -> @rpath/$dep_name"
                 ((FIXED_COUNT++)) || true
+            else
+                # Handle Python framework -> bundled dylib mapping
+                local resolved
+                resolved=$(resolve_python_framework "$dep" "$frameworks_dir")
+                if [[ -n "$resolved" ]]; then
+                    install_name_tool -change "$dep" "@rpath/$resolved" "$so_file" 2>/dev/null || true
+                    log_info "  Fixed (framework): $dep -> @rpath/$resolved"
+                    ((FIXED_COUNT++)) || true
+                fi
             fi
         done <<< "$deps"
     done < <(find "$bundle_dir" -name "*.so" -print0 2>/dev/null)
@@ -289,6 +342,15 @@ fix_qt_plugins() {
                 if [[ -f "$frameworks_dir/$dep_name" ]]; then
                     install_name_tool -change "$dep" "@rpath/$dep_name" "$plugin" 2>/dev/null || true
                     ((FIXED_COUNT++)) || true
+                else
+                    # Handle Python framework -> bundled dylib mapping
+                    local resolved
+                    resolved=$(resolve_python_framework "$dep" "$frameworks_dir")
+                    if [[ -n "$resolved" ]]; then
+                        install_name_tool -change "$dep" "@rpath/$resolved" "$plugin" 2>/dev/null || true
+                        log_info "  Fixed (framework): $dep -> @rpath/$resolved"
+                        ((FIXED_COUNT++)) || true
+                    fi
                 fi
             done <<< "$deps"
         done < <(find "$plugins_dir" -name "*.dylib" -print0 2>/dev/null)
@@ -338,6 +400,15 @@ fix_qt_plugins() {
                 if [[ -f "$frameworks_dir/$dep_name" ]]; then
                     install_name_tool -change "$dep" "@rpath/$dep_name" "$qml_lib" 2>/dev/null || true
                     ((FIXED_COUNT++)) || true
+                else
+                    # Handle Python framework -> bundled dylib mapping
+                    local resolved
+                    resolved=$(resolve_python_framework "$dep" "$frameworks_dir")
+                    if [[ -n "$resolved" ]]; then
+                        install_name_tool -change "$dep" "@rpath/$resolved" "$qml_lib" 2>/dev/null || true
+                        log_info "  Fixed (framework): $dep -> @rpath/$resolved"
+                        ((FIXED_COUNT++)) || true
+                    fi
                 fi
             done <<< "$deps"
         done < <(find "$qml_dir" -name "*.dylib" -print0 2>/dev/null)
