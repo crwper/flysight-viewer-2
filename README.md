@@ -363,24 +363,17 @@ cmake --build build
 # 2. Install (creates .app bundle with Frameworks, Python, etc.)
 cmake --install build --prefix dist
 
-# 3. Package (DMG)
-cd build && cpack -G DragNDrop -C Release
-```
-
-After packaging, code sign and notarize for distribution:
-
-```bash
-# Code sign (must be the LAST step before DMG creation / notarization)
+# 3. Code sign (must happen AFTER install, which modifies binaries)
 codesign --deep --force --verify --verbose \
   --sign "Developer ID Application: Your Name" \
   dist/FlySightViewer.app
 
-# Create DMG from signed bundle
+# 4. Create DMG from signed bundle
 hdiutil create -volname "FlySightViewer" \
   -srcfolder dist/FlySightViewer.app \
   -ov -format UDZO FlySightViewer.dmg
 
-# Notarize (required for Gatekeeper on other machines)
+# 5. Notarize (required for Gatekeeper on other machines)
 xcrun notarytool submit FlySightViewer.dmg \
   --apple-id your@email.com \
   --team-id XXXXXXXXXX \
@@ -389,7 +382,7 @@ xcrun notarytool submit FlySightViewer.dmg \
 xcrun stapler staple FlySightViewer.dmg
 ```
 
-**Important:** Do not modify the `.app` bundle after code signing. The install step fixes all rpaths and library paths before signing occurs.
+**Important:** Do not modify the `.app` bundle after code signing (step 3). The install step (step 2) fixes all rpaths and library paths, so signing must come after install but before DMG creation.
 
 ### Linux Deployment
 
