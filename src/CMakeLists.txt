@@ -568,12 +568,19 @@ install(FILES
 )
 
 # ─────────────────────────────── Qt deployment (Qt 6.3+)
-# On all platforms with Qt 6, use the built-in deployment API to bundle Qt libraries
+# On all platforms with Qt 6, use the built-in deployment API to bundle Qt libraries.
+# We use the QML-aware variant (qt_generate_deploy_qml_app_script) because the app
+# includes QML components (MapDock). This is a strict superset of
+# qt_generate_deploy_app_script — it deploys all C++ runtime dependencies AND
+# automatically discovers and deploys QML modules (QtLocation, QtPositioning, etc.)
+# by scanning QML source files for import statements.
+# This is the same approach used by QGroundControl and other major Qt mapping apps.
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
-  qt_generate_deploy_app_script(
+  qt_generate_deploy_qml_app_script(
     TARGET FlySightViewer
     OUTPUT_SCRIPT deploy_script
     NO_UNSUPPORTED_PLATFORM_ERROR
+    DEPLOY_USER_QML_MODULES_ON_UNSUPPORTED_PLATFORM
   )
   install(SCRIPT ${deploy_script})
 endif()
@@ -681,99 +688,11 @@ if(QT_VERSION_MAJOR GREATER_EQUAL 6)
     endif()
   endforeach()
 
-  # ─────────────────────────────── QML Module Deployment
-  # QtLocation and QtPositioning QML modules are required for MapDock.qml
-  set(REQUIRED_QML_MODULES
-    QtLocation
-    QtPositioning
-  )
-
-  # Platform-specific QML destination
-  if(WIN32)
-    set(_qml_dest "qml")
-  elseif(APPLE)
-    set(_qml_dest "FlySightViewer.app/Contents/Resources/qml")
-  else()
-    # Linux: Deploy to AppDir if available
-    if(DEFINED FLYSIGHT_APPDIR_PATH)
-      set(_qml_dest "${FLYSIGHT_APPDIR_PATH}/usr/qml")
-    else()
-      set(_qml_dest "qml")
-    endif()
-  endif()
-
-  # Deploy each required QML module
-  foreach(_qml_module ${REQUIRED_QML_MODULES})
-    set(_module_src "${QT6_QML_DIR}/${_qml_module}")
-
-    if(QT6_QML_DIR AND EXISTS "${_module_src}")
-      install(DIRECTORY "${_module_src}"
-        DESTINATION "${_qml_dest}"
-      )
-      message(STATUS "QML module ${_qml_module} will be deployed from ${_module_src}")
-    else()
-      message(WARNING "Qt QML module ${_qml_module} not found at ${_module_src}")
-      message(STATUS "  QML directory searched: ${QT6_QML_DIR}")
-      message(STATUS "  Map QML components may not work at runtime")
-    endif()
-  endforeach()
-
-  # Install-time QML verification
-  install(CODE "
-    message(STATUS \"Verifying QML module deployment...\")
-    foreach(_mod QtLocation QtPositioning)
-      set(_dest_path \"\${CMAKE_INSTALL_PREFIX}/${_qml_dest}/\${_mod}\")
-      if(EXISTS \"\${_dest_path}\")
-        message(STATUS \"  \${_mod}: Deployed to \${_dest_path}\")
-      else()
-        message(WARNING \"  \${_mod}: NOT FOUND at \${_dest_path}\")
-      endif()
-    endforeach()
-  ")
-
-  # ─────────────────────────────── Qt Configuration File (qt.conf)
-  # Create qt.conf to help Qt find plugins and QML modules at runtime.
-  # Paths in qt.conf are relative to the executable directory (or Contents/
-  # for macOS bundles with qt.conf in Resources/).
-
-  if(WIN32)
-    # Windows: qt.conf next to executable, plugins/qml in same directory
-    set(_qtconf_plugins_path "plugins")
-    set(_qtconf_qml_path "qml")
-    set(_qtconf_location ".")
-  elseif(APPLE)
-    # macOS: qt.conf in Contents/Resources/, paths relative to Contents/
-    set(_qtconf_plugins_path "PlugIns")
-    set(_qtconf_qml_path "Resources/qml")
-    set(_qtconf_location "FlySightViewer.app/Contents/Resources")
-  else()
-    # Linux AppDir: qt.conf next to executable in usr/bin/
-    set(_qtconf_plugins_path "../plugins")
-    set(_qtconf_qml_path "../qml")
-    if(DEFINED FLYSIGHT_APPDIR_PATH)
-      set(_qtconf_location "${FLYSIGHT_APPDIR_PATH}/usr/bin")
-    else()
-      set(_qtconf_location "bin")
-    endif()
-  endif()
-
-  # Generate qt.conf content with proper line endings
-  set(_qtconf_content "[Paths]
-Plugins = ${_qtconf_plugins_path}
-Qml2Imports = ${_qtconf_qml_path}
-")
-
-  # Write qt.conf to build directory
-  file(WRITE "${CMAKE_BINARY_DIR}/qt.conf" "${_qtconf_content}")
-
-  # Install qt.conf to appropriate location
-  install(FILES "${CMAKE_BINARY_DIR}/qt.conf"
-    DESTINATION "${_qtconf_location}"
-  )
-
-  message(STATUS "qt.conf will be installed to: ${_qtconf_location}")
-  message(STATUS "  Plugins path: ${_qtconf_plugins_path}")
-  message(STATUS "  QML imports path: ${_qtconf_qml_path}")
+  # ─────────────────────────────── QML Module & qt.conf Deployment
+  # QtLocation, QtPositioning, and other QML modules are deployed automatically
+  # by qt_generate_deploy_qml_app_script() above. It scans QML source files for
+  # import statements and deploys the required modules. It also generates qt.conf.
+  # No manual QML deployment or qt.conf generation is needed here.
 endif()
 
 # ─────────────────────────────── Windows Deployment
@@ -873,6 +792,89 @@ if(APPLE)
     else()
       message(STATUS \"Skipping rpath fix (script not found)\")
     endif()
+  " COMPONENT Runtime)
+
+  # ─────────────────────────────── Code signing
+  # After all path-fixing scripts have run, sign every Mach-O binary in the
+  # bundle. This is required on modern macOS — binaries with invalidated or
+  # missing signatures cannot be loaded.
+  #
+  # Uses Mach-O content detection (not file extension) so nothing is missed:
+  #   - .so files (Python pybind11 modules in Resources/python/)
+  #   - .dylib files (QML plugins in Resources/qml/)
+  #   - extensionless framework binaries (QtCore.framework/Versions/A/QtCore)
+  #
+  # Signing identity is controlled by FLYSIGHT_CODESIGN_IDENTITY:
+  #   - Default ("-"): ad-hoc signing for development
+  #   - "Developer ID Application: ...": distribution signing with timestamp
+  #     and hardened runtime (required for notarization)
+  #
+  # For distribution builds, set at configure time:
+  #   cmake -B build ... -DFLYSIGHT_CODESIGN_IDENTITY="Developer ID Application: Name (XXXXXXXXXX)"
+
+  set(FLYSIGHT_CODESIGN_IDENTITY "-" CACHE STRING
+    "macOS code signing identity. Use '-' for ad-hoc (development) or 'Developer ID Application: ...' for distribution."
+  )
+
+  # Determine signing flags at configure time
+  if(FLYSIGHT_CODESIGN_IDENTITY STREQUAL "-")
+    set(_codesign_flags "--force --sign -")
+    set(_codesign_mode "ad-hoc (development)")
+  else()
+    set(_codesign_flags "--force --sign \"${FLYSIGHT_CODESIGN_IDENTITY}\" --timestamp --options runtime")
+    set(_codesign_mode "distribution (${FLYSIGHT_CODESIGN_IDENTITY})")
+  endif()
+
+  message(STATUS "macOS code signing: ${_codesign_mode}")
+
+  install(CODE "
+    set(_identity \"${FLYSIGHT_CODESIGN_IDENTITY}\")
+    set(_bundle \"\${CMAKE_INSTALL_PREFIX}/FlySightViewer.app\")
+
+    if(_identity STREQUAL \"-\")
+      message(STATUS \"Code signing bundle (ad-hoc for development)...\")
+      set(_sign_cmd codesign --force --sign -)
+    else()
+      message(STATUS \"Code signing bundle (distribution: \${_identity})...\")
+      set(_sign_cmd codesign --force --sign \"\${_identity}\" --timestamp --options runtime)
+    endif()
+
+    # Find all regular files in the bundle
+    execute_process(
+      COMMAND find \"\${_bundle}/Contents\" -type f
+      OUTPUT_VARIABLE _all_files
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    string(REPLACE \"\\n\" \";\" _all_files \"\${_all_files}\")
+
+    # Step 1: Sign each Mach-O binary (detected by content, not extension)
+    set(_signed_count 0)
+    foreach(_file \${_all_files})
+      execute_process(
+        COMMAND file \"\${_file}\"
+        OUTPUT_VARIABLE _file_type
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+      )
+      if(_file_type MATCHES \"Mach-O\")
+        execute_process(
+          COMMAND \${_sign_cmd} \"\${_file}\"
+          ERROR_QUIET
+        )
+        math(EXPR _signed_count \"\${_signed_count} + 1\")
+      endif()
+    endforeach()
+
+    # Step 2: Sign .framework bundles (Apple requires frameworks signed as bundles)
+    file(GLOB _frameworks \"\${_bundle}/Contents/Frameworks/*.framework\")
+    list(LENGTH _frameworks _fw_count)
+    foreach(_fw \${_frameworks})
+      execute_process(COMMAND \${_sign_cmd} \"\${_fw}\" ERROR_QUIET)
+    endforeach()
+
+    # Step 3: Sign the top-level app bundle last (inside-out order)
+    execute_process(COMMAND \${_sign_cmd} \"\${_bundle}\" ERROR_QUIET)
+
+    message(STATUS \"Signed \${_signed_count} Mach-O binaries, \${_fw_count} frameworks, and the app bundle\")
   " COMPONENT Runtime)
 endif()
 

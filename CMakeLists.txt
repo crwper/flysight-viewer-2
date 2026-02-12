@@ -161,6 +161,9 @@ if(FLYSIGHT_BUILD_APP)
     if(Python_EXECUTABLE)
         list(APPEND _APP_CMAKE_ARGS "-DPython_EXECUTABLE=${Python_EXECUTABLE}")
     endif()
+    if(FLYSIGHT_CODESIGN_IDENTITY)
+        list(APPEND _APP_CMAKE_ARGS "-DFLYSIGHT_CODESIGN_IDENTITY=${FLYSIGHT_CODESIGN_IDENTITY}")
+    endif()
 
     ExternalProject_Add(FlySightViewer
         SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src"

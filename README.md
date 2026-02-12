@@ -361,22 +361,35 @@ cmake -B build -S . -DCMAKE_BUILD_TYPE=Release \
 cmake --build build
 
 # 2. Install (creates .app bundle with Frameworks, Python, etc.)
+#    The install step automatically ad-hoc signs all binaries, so the
+#    app is immediately runnable for development and testing.
+cmake --install build --prefix dist
+```
+
+**Distribution builds** require a Developer ID certificate. Pass your signing identity at configure time — the install step will sign everything with your certificate instead of ad-hoc, including `--timestamp` and `--options runtime` (required for notarization):
+
+```bash
+# Tip: Run `security find-identity -v -p codesigning` to list your
+# installed certificates. The 10-character code in parentheses after
+# "Developer ID Application: Name (XXXXXXXXXX)" is your team-id.
+
+# 1. Configure with signing identity
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH=/opt/local/libexec/qt6 \
+  -DPython_ROOT_DIR=/opt/local \
+  -DPython_EXECUTABLE=/opt/local/bin/python3.13 \
+  -DFLYSIGHT_CODESIGN_IDENTITY="Developer ID Application: Your Name (XXXXXXXXXX)"
+cmake --build build
+
+# 2. Install (creates signed .app bundle)
 cmake --install build --prefix dist
 
-# 3. Code sign (must happen AFTER install, which modifies binaries)
-codesign --deep --force --verify --verbose \
-  --sign "Developer ID Application" \
-  dist/FlySightViewer.app
-
-# 4. Create DMG from signed bundle
+# 3. Create DMG
 hdiutil create -volname "FlySightViewer" \
   -srcfolder dist/FlySightViewer.app \
   -ov -format UDZO FlySightViewer.dmg
 
-# 5. Notarize (required for Gatekeeper on other machines)
-# Tip: Run `security find-identity -v -p codesigning` to list your
-# installed certificates. The 10-character code in parentheses after
-# "Developer ID Application: Name (XXXXXXXXXX)" is your team-id.
+# 4. Notarize
 xcrun notarytool submit FlySightViewer.dmg \
   --apple-id your@email.com \
   --team-id XXXXXXXXXX \
@@ -384,8 +397,6 @@ xcrun notarytool submit FlySightViewer.dmg \
   --wait
 xcrun stapler staple FlySightViewer.dmg
 ```
-
-**Important:** Do not modify the `.app` bundle after code signing (step 3). The install step (step 2) fixes all rpaths and library paths, so signing must come after install but before DMG creation.
 
 ### Linux Deployment
 
@@ -495,7 +506,7 @@ FlySightViewer.AppDir/
 
 3. **Testing**: Always test the deployed package on a clean machine without development tools installed.
 
-4. **macOS Signing Order**: Code signing must happen after `cmake --install` completes. The install step modifies binaries (rpath fixing), which invalidates any existing signatures.
+4. **macOS Signing**: The install step handles code signing automatically — ad-hoc by default, or with your Developer ID certificate if `FLYSIGHT_CODESIGN_IDENTITY` is set at configure time. No manual signing step is needed.
 
 ## Troubleshooting
 

@@ -458,6 +458,8 @@ main() {
     # =======================================================================
     # Step 6: Verify the bundle
     # =======================================================================
+    # Note: Ad-hoc signing is handled by the CMake install pipeline
+    # (final signing pass in src/CMakeLists.txt) — not by this script.
 
     log_section "Verifying Bundle"
 

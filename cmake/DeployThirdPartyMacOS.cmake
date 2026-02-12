@@ -331,6 +331,12 @@ foreach(DYLIB \${ALL_DYLIBS})
             endif()
         endif()
     endforeach()
+
+    # Ad-hoc re-sign after all path modifications (required on macOS 12+)
+    execute_process(
+        COMMAND codesign --force --sign - \"\${DYLIB}\"
+        ERROR_QUIET
+    )
 endforeach()
 
 # Fix the main executable
@@ -462,6 +468,12 @@ if(EXISTS \"\${EXECUTABLE}\")
             endif()
         endif()
     endif()
+
+    # Ad-hoc re-sign executable after all path modifications
+    execute_process(
+        COMMAND codesign --force --sign - \"\${EXECUTABLE}\"
+        ERROR_QUIET
+    )
 endif()
 
 # Fix KDDockWidgets framework binary if present
@@ -483,6 +495,12 @@ if(EXISTS \"\${KDDW_FRAMEWORK}\")
         if(_result EQUAL 0)
             message(STATUS \"  Set framework id: @rpath/\${KDDW_REL_PATH}\")
         endif()
+
+        # Ad-hoc re-sign framework binary after modification
+        execute_process(
+            COMMAND codesign --force --sign - \"\${KDDW_BIN}\"
+            ERROR_QUIET
+        )
     endforeach()
 endif()
 

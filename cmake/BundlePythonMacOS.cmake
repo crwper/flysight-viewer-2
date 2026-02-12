@@ -352,6 +352,12 @@ foreach(DYLIB \${PYTHON_DYLIBS})
             message(STATUS \"    Fixed dep: \${DEP_NAME}\")
         endif()
     endforeach()
+
+    # Ad-hoc re-sign after all path modifications (required on macOS 12+)
+    execute_process(
+        COMMAND codesign --force --sign - \"\${DYLIB}\"
+        ERROR_QUIET
+    )
 endforeach()
 
 message(STATUS \"libpython fixing complete\")
