@@ -74,6 +74,14 @@ The following Qt 6 components are required:
 
 Qt is typically installed via the Qt Online Installer. Ensure the Qt installation is discoverable by CMake (either in your PATH or via `CMAKE_PREFIX_PATH`).
 
+**MacPorts (macOS):** MacPorts installs Qt6 to `/opt/local/libexec/qt6`, which is not on CMake's default search path. You must pass the prefix explicitly:
+
+```bash
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/opt/local/libexec/qt6
+```
+
+This is forwarded automatically to third-party and application sub-builds.
+
 ### Boost Components
 
 Required Boost components: serialization, timer, chrono, system.
@@ -477,10 +485,10 @@ cmake -DGTSAM_SOURCE_DIR=third-party/gtsam -P cmake/PatchGTSAM.cmake
 
 ### 2. Qt not found
 
-**Symptom:** CMake error: `Could not find a package configuration file provided by "Qt6"`.
+**Symptom:** CMake error: `Could not find a package configuration file provided by "Qt6"` or a Qt6 sub-module like `Qt6QuickControls2`.
 
 **Solution:**
-- Ensure Qt 6 is installed with all required components
+- Ensure Qt 6 is installed with all required components (see [Qt Components](#qt-components))
 - Set `CMAKE_PREFIX_PATH` to your Qt installation:
   ```bash
   # Windows
@@ -488,6 +496,9 @@ cmake -DGTSAM_SOURCE_DIR=third-party/gtsam -P cmake/PatchGTSAM.cmake
 
   # macOS (Homebrew Qt or Qt Online Installer)
   cmake ... -DCMAKE_PREFIX_PATH="$HOME/Qt/6.7.3/macos"
+
+  # macOS (MacPorts) — required, see Prerequisites
+  cmake ... -DCMAKE_PREFIX_PATH=/opt/local/libexec/qt6
 
   # Linux
   cmake ... -DCMAKE_PREFIX_PATH="$HOME/Qt/6.7.3/gcc_64"
