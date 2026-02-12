@@ -37,18 +37,10 @@ cmake --build build --config Release
 cmake --install build --config Release --prefix dist
 ```
 
-**macOS:**
+**macOS / Linux:**
 
 ```bash
-cmake -G Ninja -B build -S . -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-cmake --install build --prefix dist
-```
-
-**Linux:**
-
-```bash
-cmake -G Ninja -B build -S . -DCMAKE_BUILD_TYPE=Release
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 cmake --install build --prefix dist
 ```
@@ -63,7 +55,7 @@ The install step produces a self-contained deployment (ZIP-ready directory on Wi
 |----------|---------|---------|-------|-------|
 | CMake | 3.18+ | [cmake.org](https://cmake.org/download/) | `brew install cmake` | `apt install cmake` |
 | C++ Compiler | C++17 | Visual Studio 2022 | Xcode Command Line Tools | GCC 9+ or Clang 10+ |
-| Ninja | (recommended) | [ninja-build.org](https://ninja-build.org/) | `brew install ninja` | `apt install ninja-build` |
+| Ninja | (optional) | [ninja-build.org](https://ninja-build.org/) | `brew install ninja` | `apt install ninja-build` |
 | Qt | 6.x | [Qt Online Installer](https://www.qt.io/download-qt-installer) | Qt Online Installer | Qt Online Installer |
 | Boost | 1.65+ | [Prebuilt binaries](https://sourceforge.net/projects/boost/files/boost-binaries/) | `brew install boost` | `apt install libboost-all-dev` |
 | Python | 3.8+ | [python.org](https://www.python.org/downloads/) | System or `brew install python` | `apt install python3-dev` |
@@ -76,7 +68,7 @@ On Windows, Visual Studio is required even when using Ninja as the generator, si
 The following Qt 6 components are required:
 
 - Core, Widgets, PrintSupport
-- QuickWidgets, Quick, Qml
+- QuickWidgets, Quick, Qml, QuickControls2
 - Location, Positioning
 - Multimedia, MultimediaWidgets
 
@@ -123,7 +115,7 @@ cmake --build build --config Release
 **macOS / Linux:**
 
 ```bash
-cmake -G Ninja -B build -S . -DCMAKE_BUILD_TYPE=Release
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
@@ -141,7 +133,7 @@ cmake --build build --config Release
 **macOS / Linux:**
 
 ```bash
-cmake -G Ninja -B build -S . -DCMAKE_BUILD_TYPE=Release -DFLYSIGHT_THIRD_PARTY_ONLY=ON
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DFLYSIGHT_THIRD_PARTY_ONLY=ON
 cmake --build build
 ```
 
@@ -149,7 +141,7 @@ Alternatively, build from the `third-party/` directory directly:
 
 ```bash
 cd third-party
-cmake -G Ninja -B build -S . -DCMAKE_BUILD_TYPE=Release
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
@@ -167,7 +159,7 @@ cmake --build build --config Release
 **macOS / Linux:**
 
 ```bash
-cmake -G Ninja -B build -S . -DCMAKE_BUILD_TYPE=Release -DFLYSIGHT_BUILD_THIRD_PARTY=OFF
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DFLYSIGHT_BUILD_THIRD_PARTY=OFF
 cmake --build build
 ```
 
@@ -324,7 +316,7 @@ The install step produces a flat directory with the executable, all DLLs, Qt plu
 
 ```bash
 # 1. Build
-cmake -G Ninja -B build -S . -DCMAKE_BUILD_TYPE=Release
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 
 # 2. Install (creates .app bundle with Frameworks, Python, etc.)
@@ -362,7 +354,7 @@ xcrun stapler staple FlySightViewer.dmg
 
 ```bash
 # 1. Build
-cmake -G Ninja -B build -S . -DCMAKE_BUILD_TYPE=Release
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 
 # 2. Install (creates AppDir with AppRun, libraries, Python, etc.)
