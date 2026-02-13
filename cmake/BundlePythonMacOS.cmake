@@ -301,11 +301,9 @@ foreach(DYLIB \${PYTHON_DYLIBS})
     get_filename_component(DYLIB_NAME \"\${DYLIB}\" NAME)
     message(STATUS \"  Processing: \${DYLIB_NAME}\")
 
-    # Strip code signature before modifying (required on macOS 12+)
-    execute_process(
-        COMMAND codesign --remove-signature \"\${DYLIB}\"
-        ERROR_QUIET
-    )
+    # Note: Do NOT strip the code signature before install_name_tool.
+    # On arm64, codesign --remove-signature can corrupt __LINKEDIT.
+    # install_name_tool works on signed binaries (warns but succeeds).
 
     # Set library ID to @rpath/libpython3.XX.dylib
     execute_process(

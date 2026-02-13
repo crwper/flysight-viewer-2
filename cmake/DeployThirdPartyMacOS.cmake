@@ -237,11 +237,9 @@ foreach(DYLIB \${ALL_DYLIBS})
     # Determine if this is in Frameworks (set ID) or elsewhere (plugin/QML)
     string(FIND \"\${DYLIB}\" \"/Frameworks/\" _is_framework)
 
-    # Strip code signature before modifying (required on macOS 12+)
-    execute_process(
-        COMMAND codesign --remove-signature \"\${DYLIB}\"
-        ERROR_QUIET
-    )
+    # Note: Do NOT strip the code signature before install_name_tool.
+    # On arm64, codesign --remove-signature can corrupt __LINKEDIT.
+    # install_name_tool works on signed binaries (warns but succeeds).
 
     if(NOT _is_framework EQUAL -1)
         # Library in Frameworks - set its ID to @rpath/libname
@@ -344,11 +342,9 @@ set(EXECUTABLE \"\${MACOS_DIR}/${ARG_TARGET}\")
 if(EXISTS \"\${EXECUTABLE}\")
     message(STATUS \"Fixing executable: \${EXECUTABLE}\")
 
-    # Strip code signature before modifying
-    execute_process(
-        COMMAND codesign --remove-signature \"\${EXECUTABLE}\"
-        ERROR_QUIET
-    )
+    # Note: Do NOT strip the code signature before install_name_tool.
+    # On arm64, codesign --remove-signature can corrupt __LINKEDIT.
+    # install_name_tool works on signed binaries (warns but succeeds).
 
     # Add rpath if not present
     execute_process(

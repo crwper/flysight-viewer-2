@@ -738,6 +738,16 @@ if(APPLE)
     MACOSX_RPATH TRUE
   )
 
+  # Ensure sufficient Mach-O header padding for install_name_tool rewrites.
+  # Without this, install_name_tool can fail if the new path is longer than
+  # the original and there isn't enough room in the header to grow.
+  target_link_options(FlySightViewer PRIVATE
+    "$<$<PLATFORM_ID:Darwin>:-Wl,-headerpad_max_install_names>"
+  )
+  target_link_options(flysight_cpp_bridge PRIVATE
+    "$<$<PLATFORM_ID:Darwin>:-Wl,-headerpad_max_install_names>"
+  )
+
   # RPATH configuration for the pybind11 module
   # The module is installed to:
   #   FlySightViewer.app/Contents/Resources/python/lib/python3.XX/site-packages/flysight_cpp_bridge.cpython-3XX-darwin.so
@@ -790,6 +800,12 @@ if(APPLE)
     if(EXISTS \"\${FIX_SCRIPT}\")
       execute_process(
         COMMAND chmod +x \"\${FIX_SCRIPT}\"
+        RESULT_VARIABLE _chmod_result
+      )
+      if(NOT _chmod_result EQUAL 0)
+        message(WARNING \"chmod failed on rpath fixing script: \${_chmod_result}\")
+      endif()
+      execute_process(
         COMMAND bash \"\${FIX_SCRIPT}\" \"\${CMAKE_INSTALL_PREFIX}/FlySightViewer.app\"
         RESULT_VARIABLE _fix_result
       )
