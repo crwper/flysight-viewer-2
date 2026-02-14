@@ -49,6 +49,9 @@ function(deploy_third_party_macos)
         message(FATAL_ERROR "deploy_third_party_macos: TARGET argument is required")
     endif()
 
+    # Bundle name for install destinations (relative to CMAKE_INSTALL_PREFIX)
+    set(_bundle_name "${ARG_TARGET}.app")
+
     message(STATUS "")
     message(STATUS "----------------------------------------")
     message(STATUS "Third-Party Deployment Configuration (macOS)")
@@ -128,61 +131,48 @@ function(deploy_third_party_macos)
 
         install(
             FILES "${_dylib}"
-            DESTINATION "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Frameworks"
+            DESTINATION "${_bundle_name}/Contents/Frameworks"
             COMPONENT Runtime
         )
     endforeach()
 
     # =======================================================================
-    # Create TBB symlinks in Frameworks directory
+    # Recreate dylib symlinks in Frameworks directory
     # =======================================================================
-    # TBB installs versioned libraries (libtbb.12.dylib) with symlinks (libtbb.dylib)
-    # We need to recreate the symlinks in the Frameworks directory for compatibility
+    # Libraries install versioned files (e.g., libfoo.1.2.3.dylib) with symlinks
+    # (libfoo.1.dylib -> libfoo.1.2.3.dylib, libfoo.dylib -> libfoo.1.dylib).
+    # The install loop above copies only real files, so we read the symlink
+    # targets from the source directories at configure time and generate an
+    # install script that recreates them.
 
-    set(_create_tbb_symlinks_script "${CMAKE_BINARY_DIR}/create_tbb_symlinks_macos.cmake")
-    file(WRITE "${_create_tbb_symlinks_script}" "
-# Create symlinks for TBB libraries in macOS Frameworks directory
-set(FRAMEWORKS_DIR \"\${CMAKE_INSTALL_PREFIX}/$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Frameworks\")
-
-message(STATUS \"Creating TBB library symlinks in \${FRAMEWORKS_DIR}\")
-
-# TBB versioned library symlinks
-if(EXISTS \"\${FRAMEWORKS_DIR}/libtbb.12.dylib\" AND NOT EXISTS \"\${FRAMEWORKS_DIR}/libtbb.dylib\")
+    set(_symlink_commands "")
+    foreach(_dylib ${_all_dylibs})
+        if(IS_SYMLINK "${_dylib}")
+            get_filename_component(_link_name "${_dylib}" NAME)
+            file(READ_SYMLINK "${_dylib}" _link_target)
+            string(APPEND _symlink_commands "
+if(NOT EXISTS \"\${FRAMEWORKS_DIR}/${_link_name}\")
     execute_process(
-        COMMAND ln -sf libtbb.12.dylib libtbb.dylib
+        COMMAND ln -sf \"${_link_target}\" \"${_link_name}\"
         WORKING_DIRECTORY \"\${FRAMEWORKS_DIR}\"
-        RESULT_VARIABLE _result
     )
-    if(_result EQUAL 0)
-        message(STATUS \"  Created symlink: libtbb.dylib -> libtbb.12.dylib\")
-    endif()
+    message(STATUS \"  Created symlink: ${_link_name} -> ${_link_target}\")
 endif()
-
-if(EXISTS \"\${FRAMEWORKS_DIR}/libtbbmalloc.12.dylib\" AND NOT EXISTS \"\${FRAMEWORKS_DIR}/libtbbmalloc.dylib\")
-    execute_process(
-        COMMAND ln -sf libtbbmalloc.12.dylib libtbbmalloc.dylib
-        WORKING_DIRECTORY \"\${FRAMEWORKS_DIR}\"
-        RESULT_VARIABLE _result
-    )
-    if(_result EQUAL 0)
-        message(STATUS \"  Created symlink: libtbbmalloc.dylib -> libtbbmalloc.12.dylib\")
-    endif()
-endif()
-
-if(EXISTS \"\${FRAMEWORKS_DIR}/libtbbmalloc_proxy.12.dylib\" AND NOT EXISTS \"\${FRAMEWORKS_DIR}/libtbbmalloc_proxy.dylib\")
-    execute_process(
-        COMMAND ln -sf libtbbmalloc_proxy.12.dylib libtbbmalloc_proxy.dylib
-        WORKING_DIRECTORY \"\${FRAMEWORKS_DIR}\"
-        RESULT_VARIABLE _result
-    )
-    if(_result EQUAL 0)
-        message(STATUS \"  Created symlink: libtbbmalloc_proxy.dylib -> libtbbmalloc_proxy.12.dylib\")
-    endif()
-endif()
-
-message(STATUS \"TBB symlink creation complete\")
 ")
-    install(SCRIPT "${_create_tbb_symlinks_script}" COMPONENT Runtime)
+        endif()
+    endforeach()
+
+    if(_symlink_commands)
+        set(_create_symlinks_script "${CMAKE_BINARY_DIR}/create_dylib_symlinks_macos.cmake")
+        file(WRITE "${_create_symlinks_script}" "
+# Recreate versioned dylib symlinks in Frameworks directory
+set(FRAMEWORKS_DIR \"\${CMAKE_INSTALL_PREFIX}/${_bundle_name}/Contents/Frameworks\")
+message(STATUS \"Creating library symlinks in \${FRAMEWORKS_DIR}\")
+${_symlink_commands}
+message(STATUS \"Symlink creation complete\")
+")
+        install(SCRIPT "${_create_symlinks_script}" COMPONENT Runtime)
+    endif()
 
     # =======================================================================
     # Install KDDockWidgets framework (if present)
@@ -194,7 +184,7 @@ message(STATUS \"TBB symlink creation complete\")
         message(STATUS "Installing KDDockWidgets framework to app bundle")
         install(
             DIRECTORY "${_kddw_framework_dir}"
-            DESTINATION "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Frameworks"
+            DESTINATION "${_bundle_name}/Contents/Frameworks"
             COMPONENT Runtime
             USE_SOURCE_PERMISSIONS
         )
@@ -212,7 +202,7 @@ message(STATUS \"TBB symlink creation complete\")
 # - Contents/PlugIns/**/*.dylib (Qt plugins like geoservices)
 # - Contents/Resources/qml/**/*.dylib (QML module libraries)
 
-set(BUNDLE_DIR \"\${CMAKE_INSTALL_PREFIX}/$<TARGET_BUNDLE_DIR:${ARG_TARGET}>\")
+set(BUNDLE_DIR \"\${CMAKE_INSTALL_PREFIX}/${_bundle_name}\")
 set(FRAMEWORKS_DIR \"\${BUNDLE_DIR}/Contents/Frameworks\")
 set(MACOS_DIR \"\${BUNDLE_DIR}/Contents/MacOS\")
 set(PLUGINS_DIR \"\${BUNDLE_DIR}/Contents/PlugIns\")
@@ -247,11 +237,9 @@ foreach(DYLIB \${ALL_DYLIBS})
     # Determine if this is in Frameworks (set ID) or elsewhere (plugin/QML)
     string(FIND \"\${DYLIB}\" \"/Frameworks/\" _is_framework)
 
-    # Strip code signature before modifying (required on macOS 12+)
-    execute_process(
-        COMMAND codesign --remove-signature \"\${DYLIB}\"
-        ERROR_QUIET
-    )
+    # Note: Do NOT strip the code signature before install_name_tool.
+    # On arm64, codesign --remove-signature can corrupt __LINKEDIT.
+    # install_name_tool works on signed binaries (warns but succeeds).
 
     if(NOT _is_framework EQUAL -1)
         # Library in Frameworks - set its ID to @rpath/libname
@@ -319,6 +307,34 @@ foreach(DYLIB \${ALL_DYLIBS})
             endif()
         endif()
     endforeach()
+
+    # Fix framework references (Qt, KDDockWidgets, etc.) in this dylib
+    # Framework deps look like: /absolute/path/to/QtFoo.framework/Versions/A/QtFoo
+    string(REGEX MATCHALL \"[^\\n\\t ]+[A-Za-z0-9_-]+\\\\.framework/[^\\n\\t ]*\" _fw_deps \"\${_deps}\")
+    foreach(DEP \${_fw_deps})
+        if(DEP MATCHES \"^@\" OR DEP MATCHES \"^/System/Library\" OR DEP MATCHES \"^/usr/lib\")
+            continue()
+        endif()
+        string(REGEX MATCH \"([A-Za-z0-9_-]+)\\\\.framework\" _fw_match \"\${DEP}\")
+        set(_fw_name \"\${CMAKE_MATCH_1}\")
+        if(EXISTS \"\${FRAMEWORKS_DIR}/\${_fw_name}.framework\")
+            string(REGEX REPLACE \"^.*(\${_fw_name}\\\\.framework.*)$\" \"\\\\1\" _fw_rel \"\${DEP}\")
+            execute_process(
+                COMMAND install_name_tool -change \"\${DEP}\" \"@rpath/\${_fw_rel}\" \"\${DYLIB}\"
+                RESULT_VARIABLE _result
+                ERROR_QUIET
+            )
+            if(_result EQUAL 0)
+                message(STATUS \"  Fixed: \${DYLIB_NAME} -> \${_fw_rel}\")
+            endif()
+        endif()
+    endforeach()
+
+    # Ad-hoc re-sign after all path modifications (required on macOS 12+)
+    execute_process(
+        COMMAND codesign --force --sign - \"\${DYLIB}\"
+        ERROR_QUIET
+    )
 endforeach()
 
 # Fix the main executable
@@ -326,11 +342,9 @@ set(EXECUTABLE \"\${MACOS_DIR}/${ARG_TARGET}\")
 if(EXISTS \"\${EXECUTABLE}\")
     message(STATUS \"Fixing executable: \${EXECUTABLE}\")
 
-    # Strip code signature before modifying
-    execute_process(
-        COMMAND codesign --remove-signature \"\${EXECUTABLE}\"
-        ERROR_QUIET
-    )
+    # Note: Do NOT strip the code signature before install_name_tool.
+    # On arm64, codesign --remove-signature can corrupt __LINKEDIT.
+    # install_name_tool works on signed binaries (warns but succeeds).
 
     # Add rpath if not present
     execute_process(
@@ -432,6 +446,30 @@ if(EXISTS \"\${EXECUTABLE}\")
             message(WARNING \"  Qt framework not deployed: \${_qt_name} (referenced from executable)\")
         endif()
     endforeach()
+
+    # Handle Python framework reference
+    # Python may be referenced as a framework (e.g., MacPorts) but bundled as libpython.dylib
+    string(REGEX MATCH \"[^\\n\\t ]*/Python\\\\.framework/Versions/([0-9]+\\\\.[0-9]+)/Python\" _python_dep \"\${_exe_deps}\")
+    if(_python_dep AND NOT _python_dep MATCHES \"^@\")
+        set(_py_ver \"\${CMAKE_MATCH_1}\")
+        set(_py_dylib_name \"libpython\${_py_ver}.dylib\")
+        if(EXISTS \"\${FRAMEWORKS_DIR}/\${_py_dylib_name}\")
+            execute_process(
+                COMMAND install_name_tool -change \"\${_python_dep}\" \"@rpath/\${_py_dylib_name}\" \"\${EXECUTABLE}\"
+                RESULT_VARIABLE _result
+                ERROR_QUIET
+            )
+            if(_result EQUAL 0)
+                message(STATUS \"  Fixed Python: -> @rpath/\${_py_dylib_name}\")
+            endif()
+        endif()
+    endif()
+
+    # Ad-hoc re-sign executable after all path modifications
+    execute_process(
+        COMMAND codesign --force --sign - \"\${EXECUTABLE}\"
+        ERROR_QUIET
+    )
 endif()
 
 # Fix KDDockWidgets framework binary if present
@@ -453,6 +491,12 @@ if(EXISTS \"\${KDDW_FRAMEWORK}\")
         if(_result EQUAL 0)
             message(STATUS \"  Set framework id: @rpath/\${KDDW_REL_PATH}\")
         endif()
+
+        # Ad-hoc re-sign framework binary after modification
+        execute_process(
+            COMMAND codesign --force --sign - \"\${KDDW_BIN}\"
+            ERROR_QUIET
+        )
     endforeach()
 endif()
 
@@ -495,7 +539,7 @@ function(copy_dylib_to_bundle target dylib_path)
 
     install(
         FILES "${dylib_path}"
-        DESTINATION "$<TARGET_BUNDLE_DIR:${target}>/Contents/Frameworks"
+        DESTINATION "${target}.app/Contents/Frameworks"
         COMPONENT Runtime
     )
 endfunction()

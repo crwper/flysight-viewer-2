@@ -71,14 +71,14 @@ endfunction()
 
 # Python-build-standalone release information
 # PBS_RELEASE_TAG corresponds to the release date from python-build-standalone
-set(PYTHON_STANDALONE_VERSION "20241206" CACHE STRING "python-build-standalone release date")
+set(PYTHON_STANDALONE_VERSION "20260211" CACHE STRING "python-build-standalone release date")
 
 # Use build-time Python version for consistency with pybind11
 # Fall back to default if called before find_package(Python)
 if(DEFINED FLYSIGHT_PYTHON_FULL_VERSION)
     set(PYTHON_STANDALONE_PYTHON_VERSION "${FLYSIGHT_PYTHON_FULL_VERSION}" CACHE STRING "Python version in the standalone build")
 else()
-    set(PYTHON_STANDALONE_PYTHON_VERSION "3.13.1" CACHE STRING "Python version in the standalone build")
+    set(PYTHON_STANDALONE_PYTHON_VERSION "3.13.12" CACHE STRING "Python version in the standalone build")
     message(WARNING "BundlePythonMacOS: Using default Python version. Call find_package(Python) first for consistency.")
 endif()
 
@@ -113,6 +113,9 @@ function(bundle_python_macos)
     if(NOT ARG_TARGET)
         message(FATAL_ERROR "bundle_python_macos: TARGET argument is required")
     endif()
+
+    # Bundle name for install destinations (relative to CMAKE_INSTALL_PREFIX)
+    set(_bundle_name "${ARG_TARGET}.app")
 
     if(NOT ARG_PYTHON_VERSION)
         set(ARG_PYTHON_VERSION "3.13")
@@ -165,10 +168,10 @@ function(bundle_python_macos)
     # Pre-download URL validation
     # =======================================================================
     # Validate Python version is plausibly available in python-build-standalone
-    if(NOT PYTHON_STANDALONE_PYTHON_VERSION MATCHES "^3\\.(1[0-9]|[89])\\.[0-9]+$")
+    if(NOT PYTHON_STANDALONE_PYTHON_VERSION MATCHES "^3\\.(1[0-9])\\.[0-9]+$")
         message(WARNING
             "Python version ${PYTHON_STANDALONE_PYTHON_VERSION} may not be available in python-build-standalone.\n"
-            "Supported versions are typically 3.8.x through 3.13.x.\n"
+            "Supported versions are typically 3.10.x through 3.14.x.\n"
             "Check https://github.com/indygreg/python-build-standalone/releases for available versions."
         )
     endif()
@@ -243,7 +246,7 @@ function(bundle_python_macos)
     # Install Python standard library and runtime to Contents/Resources/python/
     install(
         DIRECTORY "${_extract_dir}/"
-        DESTINATION "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Resources/python"
+        DESTINATION "${_bundle_name}/Contents/Resources/python"
         COMPONENT ${ARG_INSTALL_COMPONENT}
         USE_SOURCE_PERMISSIONS
         PATTERN "*.pyc" EXCLUDE
@@ -259,7 +262,7 @@ function(bundle_python_macos)
     # The dylib is typically at lib/libpython3.XX.dylib
     install(
         FILES "${_extract_dir}/lib/libpython${CMAKE_MATCH_1}.${CMAKE_MATCH_2}.dylib"
-        DESTINATION "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Frameworks"
+        DESTINATION "${_bundle_name}/Contents/Frameworks"
         COMPONENT ${ARG_INSTALL_COMPONENT}
     )
 
@@ -267,7 +270,7 @@ function(bundle_python_macos)
     if(EXISTS "${_extract_dir}/lib/libpython3.dylib")
         install(
             FILES "${_extract_dir}/lib/libpython3.dylib"
-            DESTINATION "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Frameworks"
+            DESTINATION "${_bundle_name}/Contents/Frameworks"
             COMPONENT ${ARG_INSTALL_COMPONENT}
         )
     endif()
@@ -281,7 +284,7 @@ function(bundle_python_macos)
     set(_fix_libpython_script "${CMAKE_BINARY_DIR}/fix_libpython_macos.cmake")
     file(WRITE "${_fix_libpython_script}" "
 # Fix libpython library ID for app bundle
-set(BUNDLE_DIR \"\${CMAKE_INSTALL_PREFIX}/$<TARGET_BUNDLE_DIR:${ARG_TARGET}>\")
+set(BUNDLE_DIR \"\${CMAKE_INSTALL_PREFIX}/${_bundle_name}\")
 set(FRAMEWORKS_DIR \"\${BUNDLE_DIR}/Contents/Frameworks\")
 
 message(STATUS \"Fixing libpython dylib paths...\")
@@ -298,11 +301,9 @@ foreach(DYLIB \${PYTHON_DYLIBS})
     get_filename_component(DYLIB_NAME \"\${DYLIB}\" NAME)
     message(STATUS \"  Processing: \${DYLIB_NAME}\")
 
-    # Strip code signature before modifying (required on macOS 12+)
-    execute_process(
-        COMMAND codesign --remove-signature \"\${DYLIB}\"
-        ERROR_QUIET
-    )
+    # Note: Do NOT strip the code signature before install_name_tool.
+    # On arm64, codesign --remove-signature can corrupt __LINKEDIT.
+    # install_name_tool works on signed binaries (warns but succeeds).
 
     # Set library ID to @rpath/libpython3.XX.dylib
     execute_process(
@@ -349,6 +350,12 @@ foreach(DYLIB \${PYTHON_DYLIBS})
             message(STATUS \"    Fixed dep: \${DEP_NAME}\")
         endif()
     endforeach()
+
+    # Ad-hoc re-sign after all path modifications (required on macOS 12+)
+    execute_process(
+        COMMAND codesign --force --sign - \"\${DYLIB}\"
+        ERROR_QUIET
+    )
 endforeach()
 
 message(STATUS \"libpython fixing complete\")
@@ -370,7 +377,7 @@ message(STATUS \"libpython fixing complete\")
     set(_install_numpy_script "${CMAKE_BINARY_DIR}/install_numpy_macos.cmake")
     file(WRITE "${_install_numpy_script}" "
 # Install NumPy into bundled Python site-packages
-set(BUNDLE_PYTHON_DIR \"\${CMAKE_INSTALL_PREFIX}/$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Resources/python\")
+set(BUNDLE_PYTHON_DIR \"\${CMAKE_INSTALL_PREFIX}/${_bundle_name}/Contents/Resources/python\")
 set(PYTHON_EXE \"\${BUNDLE_PYTHON_DIR}/bin/python3\")
 set(SITE_PACKAGES \"\${BUNDLE_PYTHON_DIR}/lib/python${CMAKE_MATCH_1}.${CMAKE_MATCH_2}/site-packages\")
 set(NUMPY_SPEC \"${_numpy_spec}\")
@@ -431,7 +438,7 @@ endif()
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/flysight_plugin_sdk.py")
         install(
             FILES "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/flysight_plugin_sdk.py"
-            DESTINATION "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Resources/python/lib/python${CMAKE_MATCH_1}.${CMAKE_MATCH_2}/site-packages"
+            DESTINATION "${_bundle_name}/Contents/Resources/python/lib/python${CMAKE_MATCH_1}.${CMAKE_MATCH_2}/site-packages"
             COMPONENT ${ARG_INSTALL_COMPONENT}
         )
     endif()
@@ -440,7 +447,7 @@ endif()
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../python_src")
         install(
             DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../python_src/"
-            DESTINATION "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Resources/python/lib/python${CMAKE_MATCH_1}.${CMAKE_MATCH_2}/site-packages"
+            DESTINATION "${_bundle_name}/Contents/Resources/python/lib/python${CMAKE_MATCH_1}.${CMAKE_MATCH_2}/site-packages"
             COMPONENT ${ARG_INSTALL_COMPONENT}
             PATTERN "*.pyc" EXCLUDE
             PATTERN "__pycache__" EXCLUDE
@@ -453,7 +460,7 @@ endif()
     set(_verify_python_script "${CMAKE_BINARY_DIR}/verify_python_macos.cmake")
     file(WRITE "${_verify_python_script}" "
 message(STATUS \"Verifying bundled Python installation...\")
-set(PYTHON_EXE \"\${CMAKE_INSTALL_PREFIX}/$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Resources/python/bin/python3\")
+set(PYTHON_EXE \"\${CMAKE_INSTALL_PREFIX}/${_bundle_name}/Contents/Resources/python/bin/python3\")
 
 # Test Python interpreter
 execute_process(
@@ -503,11 +510,11 @@ message(STATUS \"Python bundle verification complete\")
     # =======================================================================
 
     set(BUNDLED_PYTHON_HOME
-        "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Resources/python"
+        "${_bundle_name}/Contents/Resources/python"
         CACHE INTERNAL "Path to bundled Python home in app bundle"
     )
     set(BUNDLED_PYTHON_LIBDIR
-        "$<TARGET_BUNDLE_DIR:${ARG_TARGET}>/Contents/Frameworks"
+        "${_bundle_name}/Contents/Frameworks"
         CACHE INTERNAL "Path to bundled Python library in app bundle"
     )
     set(BUNDLED_PYTHON_VERSION "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}"

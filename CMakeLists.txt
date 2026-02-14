@@ -141,24 +141,59 @@ if(FLYSIGHT_BUILD_APP)
     endif()
 
     # Build the main FlySight Viewer application
+    # Forward CMAKE_PREFIX_PATH so the inner build can find Qt and other
+    # packages (e.g., MacPorts installs Qt6 modules to /opt/local/libexec/qt6
+    # which is not on the default search path).
+    set(_APP_CMAKE_ARGS
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+        -DTHIRD_PARTY_DIR=${THIRD_PARTY_DIR}
+        -DGTSAM_ROOT=${GTSAM_INSTALL_DIR}
+        -DTBB_ROOT=${ONETBB_INSTALL_DIR}
+        -DKDDW_ROOT=${KDDW_INSTALL_DIR}
+    )
+    if(CMAKE_PREFIX_PATH)
+        list(APPEND _APP_CMAKE_ARGS "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}")
+    endif()
+    if(Python_ROOT_DIR)
+        list(APPEND _APP_CMAKE_ARGS "-DPython_ROOT_DIR=${Python_ROOT_DIR}")
+    endif()
+    if(Python_EXECUTABLE)
+        list(APPEND _APP_CMAKE_ARGS "-DPython_EXECUTABLE=${Python_EXECUTABLE}")
+    endif()
+    if(FLYSIGHT_CODESIGN_IDENTITY)
+        list(APPEND _APP_CMAKE_ARGS "-DFLYSIGHT_CODESIGN_IDENTITY=${FLYSIGHT_CODESIGN_IDENTITY}")
+    endif()
+
     ExternalProject_Add(FlySightViewer
         SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src"
         BINARY_DIR "${CMAKE_BINARY_DIR}/FlySightViewer-build"
         INSTALL_DIR "${CMAKE_BINARY_DIR}/install"
         CMAKE_GENERATOR "${CMAKE_GENERATOR}"
         CMAKE_GENERATOR_PLATFORM "${CMAKE_GENERATOR_PLATFORM}"
-        CMAKE_ARGS
-            -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-            -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
-            -DTHIRD_PARTY_DIR=${THIRD_PARTY_DIR}
-            -DGTSAM_ROOT=${GTSAM_INSTALL_DIR}
-            -DTBB_ROOT=${ONETBB_INSTALL_DIR}
-            -DKDDW_ROOT=${KDDW_INSTALL_DIR}
+        CMAKE_ARGS ${_APP_CMAKE_ARGS}
         BUILD_ALWAYS TRUE
         DEPENDS ${THIRD_PARTY_TARGETS}
     )
 else()
     message(STATUS "Application build disabled")
+endif()
+
+# =============================================================================
+# Top-Level Install Rules
+# =============================================================================
+#
+# The application is built and installed by ExternalProject into
+# ${CMAKE_BINARY_DIR}/install/ during the build step. These rules forward
+# that installation to the user-specified --prefix so that
+# `cmake --install build --prefix dist` works as expected.
+#
+
+if(FLYSIGHT_BUILD_APP)
+    install(DIRECTORY "${CMAKE_BINARY_DIR}/install/"
+        DESTINATION "."
+        USE_SOURCE_PERMISSIONS
+    )
 endif()
 
 # =============================================================================

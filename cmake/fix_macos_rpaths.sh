@@ -75,10 +75,52 @@ get_lib_name() {
     basename "$1"
 }
 
-# Strip code signature before modifying (required on macOS 12+)
+# Resolve a Python framework reference to the actual bundled dylib name.
+# e.g. ".../Python.framework/Versions/3.13/Python" -> "libpython3.13.dylib"
+# Returns the resolved name on stdout, or empty string if not a Python framework.
+resolve_python_framework() {
+    local dep="$1"
+    local frameworks_dir="$2"
+
+    # Match: .../Python.framework/Versions/<ver>/Python
+    if [[ "$dep" =~ Python\.framework/Versions/([0-9]+\.[0-9]+)/Python$ ]]; then
+        local version="${BASH_REMATCH[1]}"
+        local candidate="libpython${version}.dylib"
+        if [[ -f "$frameworks_dir/$candidate" ]]; then
+            echo "$candidate"
+            return
+        fi
+        # Fallback: search for any libpython dylib matching this version
+        local found
+        found=$(find "$frameworks_dir" -maxdepth 1 -name "libpython${version}*.dylib" ! -type l 2>/dev/null | head -1)
+        if [[ -n "$found" ]]; then
+            basename "$found"
+            return
+        fi
+    fi
+    echo ""
+}
+
+# No-op: Do NOT remove signatures before install_name_tool.
+# On arm64, codesign --remove-signature can corrupt __LINKEDIT, causing
+# install_name_tool to fail. Apple recommends running install_name_tool
+# directly on signed binaries (it warns about invalidating the signature
+# but succeeds), then re-signing afterward. The final signing pass in
+# src/CMakeLists.txt handles re-signing all binaries.
 strip_signature() {
-    local binary="$1"
-    codesign --remove-signature "$binary" 2>/dev/null || true
+    :
+}
+
+# Run install_name_tool, logging real failures while filtering the expected
+# "will invalidate the code signature" warning that occurs when modifying
+# a signed binary (this is harmless — the final signing pass re-signs).
+run_install_name_tool() {
+    local output
+    if ! output=$(install_name_tool "$@" 2>&1); then
+        if [[ "$output" != *"will invalidate the code signature"* ]]; then
+            log_warn "install_name_tool $1 failed: $output"
+        fi
+    fi
 }
 
 # Handle versioned libraries and their symlinks
@@ -126,7 +168,7 @@ fix_dylib() {
     strip_signature "$dylib"
 
     # Set the library's own ID to @rpath/libname.dylib
-    install_name_tool -id "@rpath/$dylib_name" "$dylib" 2>/dev/null || true
+    run_install_name_tool -id "@rpath/$dylib_name" "$dylib"
 
     # Get list of dependencies
     local deps
@@ -143,9 +185,18 @@ fix_dylib() {
 
         # Check if this dependency exists in our Frameworks
         if [[ -f "$frameworks_dir/$dep_name" ]]; then
-            install_name_tool -change "$dep" "@rpath/$dep_name" "$dylib" 2>/dev/null || true
+            run_install_name_tool -change "$dep" "@rpath/$dep_name" "$dylib"
             log_info "  Fixed: $dep -> @rpath/$dep_name"
             ((FIXED_COUNT++)) || true
+        else
+            # Handle Python framework -> bundled dylib mapping
+            local resolved
+            resolved=$(resolve_python_framework "$dep" "$frameworks_dir")
+            if [[ -n "$resolved" ]]; then
+                run_install_name_tool -change "$dep" "@rpath/$resolved" "$dylib"
+                log_info "  Fixed (framework): $dep -> @rpath/$resolved"
+                ((FIXED_COUNT++)) || true
+            fi
         fi
     done <<< "$deps"
 }
@@ -166,7 +217,7 @@ fix_executable() {
     rpaths=$(otool -l "$exe" | grep -A2 "LC_RPATH" | grep "path" | awk '{print $2}' || true)
 
     if ! echo "$rpaths" | grep -q "@executable_path/../Frameworks"; then
-        install_name_tool -add_rpath "@executable_path/../Frameworks" "$exe" 2>/dev/null || true
+        run_install_name_tool -add_rpath "@executable_path/../Frameworks" "$exe"
         log_info "  Added rpath: @executable_path/../Frameworks"
     fi
 
@@ -184,9 +235,18 @@ fix_executable() {
 
         # Check if this dependency exists in our Frameworks
         if [[ -f "$frameworks_dir/$dep_name" ]]; then
-            install_name_tool -change "$dep" "@rpath/$dep_name" "$exe" 2>/dev/null || true
+            run_install_name_tool -change "$dep" "@rpath/$dep_name" "$exe"
             log_info "  Fixed: $dep -> @rpath/$dep_name"
             ((FIXED_COUNT++)) || true
+        else
+            # Handle Python framework -> bundled dylib mapping
+            local resolved
+            resolved=$(resolve_python_framework "$dep" "$frameworks_dir")
+            if [[ -n "$resolved" ]]; then
+                run_install_name_tool -change "$dep" "@rpath/$resolved" "$exe"
+                log_info "  Fixed (framework): $dep -> @rpath/$resolved"
+                ((FIXED_COUNT++)) || true
+            fi
         fi
     done <<< "$deps"
 }
@@ -214,7 +274,7 @@ fix_python_modules() {
             so_dir=$(dirname "$so_file")
             local rel_path
             rel_path=$(python3 -c "import os.path; print(os.path.relpath('$frameworks_dir', '$so_dir'))" 2>/dev/null || echo "../Frameworks")
-            install_name_tool -add_rpath "@loader_path/$rel_path" "$so_file" 2>/dev/null || true
+            run_install_name_tool -add_rpath "@loader_path/$rel_path" "$so_file"
             log_info "  Added rpath: @loader_path/$rel_path"
         fi
 
@@ -230,9 +290,18 @@ fix_python_modules() {
             dep_name=$(get_lib_name "$dep")
 
             if [[ -f "$frameworks_dir/$dep_name" ]]; then
-                install_name_tool -change "$dep" "@rpath/$dep_name" "$so_file" 2>/dev/null || true
+                run_install_name_tool -change "$dep" "@rpath/$dep_name" "$so_file"
                 log_info "  Fixed: $dep -> @rpath/$dep_name"
                 ((FIXED_COUNT++)) || true
+            else
+                # Handle Python framework -> bundled dylib mapping
+                local resolved
+                resolved=$(resolve_python_framework "$dep" "$frameworks_dir")
+                if [[ -n "$resolved" ]]; then
+                    run_install_name_tool -change "$dep" "@rpath/$resolved" "$so_file"
+                    log_info "  Fixed (framework): $dep -> @rpath/$resolved"
+                    ((FIXED_COUNT++)) || true
+                fi
             fi
         done <<< "$deps"
     done < <(find "$bundle_dir" -name "*.so" -print0 2>/dev/null)
@@ -272,7 +341,7 @@ fix_qt_plugins() {
             rpaths=$(otool -l "$plugin" | grep -A2 "LC_RPATH" | grep "path" | awk '{print $2}' || true)
 
             if ! echo "$rpaths" | grep -q "@loader_path/$rel_path"; then
-                install_name_tool -add_rpath "@loader_path/$rel_path" "$plugin" 2>/dev/null || true
+                run_install_name_tool -add_rpath "@loader_path/$rel_path" "$plugin"
             fi
 
             # Fix dependencies
@@ -287,8 +356,17 @@ fix_qt_plugins() {
                 dep_name=$(get_lib_name "$dep")
 
                 if [[ -f "$frameworks_dir/$dep_name" ]]; then
-                    install_name_tool -change "$dep" "@rpath/$dep_name" "$plugin" 2>/dev/null || true
+                    run_install_name_tool -change "$dep" "@rpath/$dep_name" "$plugin"
                     ((FIXED_COUNT++)) || true
+                else
+                    # Handle Python framework -> bundled dylib mapping
+                    local resolved
+                    resolved=$(resolve_python_framework "$dep" "$frameworks_dir")
+                    if [[ -n "$resolved" ]]; then
+                        run_install_name_tool -change "$dep" "@rpath/$resolved" "$plugin"
+                        log_info "  Fixed (framework): $dep -> @rpath/$resolved"
+                        ((FIXED_COUNT++)) || true
+                    fi
                 fi
             done <<< "$deps"
         done < <(find "$plugins_dir" -name "*.dylib" -print0 2>/dev/null)
@@ -321,7 +399,7 @@ fix_qt_plugins() {
             rpaths=$(otool -l "$qml_lib" | grep -A2 "LC_RPATH" | grep "path" | awk '{print $2}' || true)
 
             if ! echo "$rpaths" | grep -q "@loader_path"; then
-                install_name_tool -add_rpath "@loader_path/$rel_path" "$qml_lib" 2>/dev/null || true
+                run_install_name_tool -add_rpath "@loader_path/$rel_path" "$qml_lib"
             fi
 
             # Fix dependencies
@@ -336,8 +414,17 @@ fix_qt_plugins() {
                 dep_name=$(get_lib_name "$dep")
 
                 if [[ -f "$frameworks_dir/$dep_name" ]]; then
-                    install_name_tool -change "$dep" "@rpath/$dep_name" "$qml_lib" 2>/dev/null || true
+                    run_install_name_tool -change "$dep" "@rpath/$dep_name" "$qml_lib"
                     ((FIXED_COUNT++)) || true
+                else
+                    # Handle Python framework -> bundled dylib mapping
+                    local resolved
+                    resolved=$(resolve_python_framework "$dep" "$frameworks_dir")
+                    if [[ -n "$resolved" ]]; then
+                        run_install_name_tool -change "$dep" "@rpath/$resolved" "$qml_lib"
+                        log_info "  Fixed (framework): $dep -> @rpath/$resolved"
+                        ((FIXED_COUNT++)) || true
+                    fi
                 fi
             done <<< "$deps"
         done < <(find "$qml_dir" -name "*.dylib" -print0 2>/dev/null)
@@ -458,6 +545,8 @@ main() {
     # =======================================================================
     # Step 6: Verify the bundle
     # =======================================================================
+    # Note: Ad-hoc signing is handled by the CMake install pipeline
+    # (final signing pass in src/CMakeLists.txt) — not by this script.
 
     log_section "Verifying Bundle"
 
