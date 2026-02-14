@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/">
         <file>qml/MapDock.qml</file>
+        <file>qml/VideoSurface.qml</file>
     </qresource>
 </RCC>

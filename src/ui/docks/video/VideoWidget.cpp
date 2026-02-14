@@ -3,7 +3,8 @@
 #include "cursormodel.h"
 #include "sessionmodel.h"
 
-#include <QVideoWidget>
+#include <QQuickWidget>
+#include <QQuickItem>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSlider>
@@ -16,6 +17,7 @@
 #include <QUrl>
 #include <QDir>
 #include <QDateTime>
+#include <QTimeZone>
 #include <QWheelEvent>
 
 #if QT_VERSION_MAJOR >= 6
@@ -48,17 +50,52 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
 {
 #if QT_VERSION_MAJOR >= 6
     m_audioOutput = new QAudioOutput(this);
+    m_audioOutput->setMuted(false);
+    m_audioOutput->setVolume(1.0);
     m_player->setAudioOutput(m_audioOutput);
 #endif
 
-    m_videoWidget = new QVideoWidget(this);
-    m_player->setVideoOutput(m_videoWidget);
+    // Video surface via QQuickWidget (avoids macOS QVideoWidget stutter)
+    m_quickWidget = new QQuickWidget(this);
+    m_quickWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
+    m_quickWidget->setClearColor(Qt::black);
+    m_quickWidget->setSource(QUrl(QStringLiteral("qrc:/qml/VideoSurface.qml")));
+
+    // Wire VideoOutput to player when QML is ready
+    auto wireOutput = [this]() {
+        auto *root = m_quickWidget->rootObject();
+        if (!root) {
+            qWarning() << "VideoSurface: rootObject is null";
+            return;
+        }
+        auto *voObj = root->findChild<QObject*>(QStringLiteral("videoOutput"));
+        if (!voObj) {
+            qWarning() << "VideoSurface: could not find 'videoOutput' object";
+            return;
+        }
+        m_player->setVideoOutput(voObj);
+        qDebug() << "VideoSurface: setVideoOutput succeeded";
+    };
+
+    if (m_quickWidget->status() == QQuickWidget::Ready) {
+        wireOutput();
+    } else {
+        connect(m_quickWidget, &QQuickWidget::statusChanged,
+                this, [this, wireOutput](QQuickWidget::Status s) {
+            if (s == QQuickWidget::Ready)
+                wireOutput();
+            else if (s == QQuickWidget::Error) {
+                for (const auto &e : m_quickWidget->errors())
+                    qWarning().noquote() << "Video QML error:" << e.toString();
+            }
+        });
+    }
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(6);
 
-    layout->addWidget(m_videoWidget, 1);
+    layout->addWidget(m_quickWidget, 1);
 
     m_statusLabel = new QLabel(this);
     m_statusLabel->setWordWrap(true);
@@ -598,7 +635,7 @@ void VideoWidget::updateSyncLabels()
     const QString utcText = m_anchorUtcSeconds.has_value()
         ? QDateTime::fromMSecsSinceEpoch(
               qint64((*m_anchorUtcSeconds) * 1000.0),
-              Qt::UTC
+              QTimeZone::UTC
           ).toString(QStringLiteral("yy-MM-dd HH:mm:ss.zzz"))
         : tr("—");
 

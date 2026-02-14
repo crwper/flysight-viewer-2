@@ -712,6 +712,31 @@ if(QT_VERSION_MAJOR GREATER_EQUAL 6)
     endif()
   endforeach()
 
+  # ─────────────────────────────── QtMultimedia QML Module Deployment
+  # qt_generate_deploy_qml_app_script scans QML source files for import statements,
+  # but VideoSurface.qml is embedded in a .qrc resource and not discovered at deploy
+  # time. Manually deploy the QtMultimedia QML module so `import QtMultimedia` works.
+  if(QT6_QML_DIR AND EXISTS "${QT6_QML_DIR}/QtMultimedia")
+    if(APPLE)
+      set(_qtmm_qml_dest "FlySightViewer.app/Contents/Resources/qml")
+    elseif(WIN32)
+      set(_qtmm_qml_dest "qml")
+    else()
+      if(DEFINED FLYSIGHT_APPDIR_PATH)
+        set(_qtmm_qml_dest "${FLYSIGHT_APPDIR_PATH}/usr/qml")
+      else()
+        set(_qtmm_qml_dest "qml")
+      endif()
+    endif()
+
+    install(DIRECTORY "${QT6_QML_DIR}/QtMultimedia"
+      DESTINATION "${_qtmm_qml_dest}"
+    )
+    message(STATUS "QtMultimedia QML module will be deployed from ${QT6_QML_DIR}/QtMultimedia")
+  else()
+    message(WARNING "QtMultimedia QML module not found at ${QT6_QML_DIR}/QtMultimedia - video output may not work")
+  endif()
+
   # ─────────────────────────────── QML Module & qt.conf Deployment
   # QtLocation, QtPositioning, and other QML modules are deployed automatically
   # by qt_generate_deploy_qml_app_script() above. It scans QML source files for

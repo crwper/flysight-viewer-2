@@ -9,7 +9,7 @@
 #include <QMediaPlayer>
 
 QT_BEGIN_NAMESPACE
-class QVideoWidget;
+class QQuickWidget;
 class QSlider;
 class QToolButton;
 class QPushButton;
@@ -85,7 +85,7 @@ private:
 #if QT_VERSION_MAJOR >= 6
     QAudioOutput *m_audioOutput = nullptr;
 #endif
-    QVideoWidget *m_videoWidget = nullptr;
+    QQuickWidget *m_quickWidget = nullptr;
 
     QLabel *m_statusLabel = nullptr;
 
