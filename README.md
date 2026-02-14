@@ -610,7 +610,15 @@ cmake -DGTSAM_SOURCE_DIR=third-party/gtsam -P cmake/PatchGTSAM.cmake
 - Use parallel builds: `cmake --build build --parallel`
 - After initial build, use `-DFLYSIGHT_BUILD_THIRD_PARTY=OFF` to skip rebuilding dependencies
 
-### 8. Visual Studio shows many projects
+### 8. Resetting Application Preferences (macOS)
+
+To reset all stored preferences for FlySight Viewer on macOS:
+
+```bash
+defaults delete com.flysight.Viewer
+```
+
+### 9. Visual Studio shows many projects
 
 **Symptom:** The Visual Studio solution contains many projects (oneTBB, GTSAM, KDDockWidgets targets).
 
