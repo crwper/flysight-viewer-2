@@ -249,20 +249,20 @@ install(CODE "
         # Create a minimal valid PNG placeholder
         # This is the binary content of a 1x1 blue PNG
         # Header: PNG signature (8 bytes) + IHDR chunk + IDAT chunk + IEND chunk
-        # In production, replace with a proper 256x256 icon
+        # In production, replace with a proper 1024x1024 icon
 
         # For now, create an empty file and warn the user
         file(WRITE \"\${APPDIR}/FlySightViewer.png\" \"\")
         message(WARNING \"Created empty placeholder icon.\")
-        message(STATUS \"Please provide a proper 256x256 PNG icon at:\")
+        message(STATUS \"Please provide a proper 1024x1024 PNG icon at:\")
         message(STATUS \"  ${CMAKE_CURRENT_SOURCE_DIR}/resources/FlySightViewer.png\")
     endif()
 
     # Also install to usr/share/icons for XDG compliance
-    file(MAKE_DIRECTORY \"\${APPDIR}/usr/share/icons/hicolor/256x256/apps\")
+    file(MAKE_DIRECTORY \"\${APPDIR}/usr/share/icons/hicolor/1024x1024/apps\")
     if(EXISTS \"\${APPDIR}/FlySightViewer.png\")
         file(COPY \"\${APPDIR}/FlySightViewer.png\"
-             DESTINATION \"\${APPDIR}/usr/share/icons/hicolor/256x256/apps\")
+             DESTINATION \"\${APPDIR}/usr/share/icons/hicolor/1024x1024/apps\")
     endif()
 ")
 
