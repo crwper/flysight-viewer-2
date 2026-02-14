@@ -345,7 +345,7 @@ cmake --build build --config Release
 cmake --install build --config Release --prefix dist
 
 # 3. Package (ZIP)
-cd build && cpack -G ZIP -C Release
+cpack --config build/FlySightViewer-build/CPackConfig.cmake -G ZIP -C Release
 ```
 
 The install step produces a flat directory with the executable, all DLLs, Qt plugins, QML modules, and the bundled Python runtime.
