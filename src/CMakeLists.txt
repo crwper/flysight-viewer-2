@@ -464,6 +464,16 @@ set(PROJECT_SOURCES
   resources.qrc
 )
 
+if(WIN32)
+  list(APPEND PROJECT_SOURCES FlySightViewer.rc)
+endif()
+
+if(APPLE)
+  set(MACOSX_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/FlySightViewer.icns")
+  set_source_files_properties(${MACOSX_ICON} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+  list(APPEND PROJECT_SOURCES ${MACOSX_ICON})
+endif()
+
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
   qt_add_executable(FlySightViewer WIN32 MANUAL_FINALIZATION ${PROJECT_SOURCES})
 else()
@@ -815,6 +825,7 @@ if(APPLE)
     MACOSX_BUNDLE_BUNDLE_NAME "FlySight Viewer"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_ICON_FILE "FlySightViewer.icns"
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in"
   )
 
