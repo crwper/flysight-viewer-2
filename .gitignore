@@ -27,6 +27,7 @@ CMakeLists.txt.user*
 
 # QtCreator build folders
 build*/
+dist/
 
 # Mac files
 .DS_Store
