@@ -2,6 +2,6 @@
     <qresource prefix="/">
         <file>qml/MapDock.qml</file>
         <file>qml/VideoSurface.qml</file>
-        <file>icons/FlySightViewer.png</file>
+        <file>resources/icons/FlySightViewer.png</file>
     </qresource>
 </RCC>

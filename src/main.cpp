@@ -6,7 +6,9 @@
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
-    app.setWindowIcon(QIcon(":/icons/FlySightViewer.png"));
+#ifndef Q_OS_MACOS
+    app.setWindowIcon(QIcon(":/resources/icons/FlySightViewer.png"));
+#endif
 
     // Initiallize KDDockWidgets front end
     KDDockWidgets::initFrontend(KDDockWidgets::FrontendType::QtWidgets);
