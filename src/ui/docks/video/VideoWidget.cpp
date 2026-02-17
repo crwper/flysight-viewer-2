@@ -18,6 +18,7 @@
 #include <QDir>
 #include <QDateTime>
 #include <QTimeZone>
+#include <QTimer>
 #include <QWheelEvent>
 
 #if QT_VERSION_MAJOR >= 6
@@ -30,6 +31,10 @@
 namespace FlySight {
 
 static constexpr qint64 kStepMs = 40;
+
+// Slider scrubbing throttle: max seeks per second while dragging.
+static constexpr int kSliderSeeksPerSecond = 4;
+static constexpr int kSliderSeekIntervalMs = 1000 / kSliderSeeksPerSecond;  // 100 ms
 
 // Wheel scrubbing configuration
 static constexpr qint64 kWheelBaseStepMs = 40;       // Base step (one frame at ~25fps)
@@ -209,6 +214,11 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
     connect(m_positionSlider, &QSlider::sliderMoved,
             this, &VideoWidget::onSliderMoved);
 
+    m_scrubTimer = new QTimer(this);
+    m_scrubTimer->setSingleShot(true);
+    connect(m_scrubTimer, &QTimer::timeout,
+            this, &VideoWidget::onScrubTimerFired);
+
     connect(m_markExitButton, &QPushButton::clicked,
             this, &VideoWidget::onMarkExitClicked);
 
@@ -343,12 +353,18 @@ void VideoWidget::onSliderPressed()
     if (m_resumeAfterScrub) {
         m_player->pause();
     }
+
+    m_scrubElapsed.restart();
 }
 
 void VideoWidget::onSliderReleased()
 {
     if (!m_player || !m_positionSlider)
         return;
+
+    m_scrubTimer->stop();
+    m_pendingScrubPos = -1;
+    m_scrubElapsed.invalidate();
 
     m_sliderIsDown = false;
 
@@ -369,12 +385,40 @@ void VideoWidget::onSliderMoved(int value)
         return;
 
     const qint64 newPos = static_cast<qint64>(value);
-    m_player->setPosition(newPos);
 
-    // Keep time label responsive while dragging.
+    // Always keep time label responsive while dragging.
     updateTimeLabel(newPos, m_player->duration());
 
-    updateVideoCursorFromPositionMs(newPos);
+    // Throttle actual seek calls to avoid flooding the backend.
+    if (!m_scrubElapsed.isValid() ||
+        m_scrubElapsed.elapsed() >= kSliderSeekIntervalMs) {
+        // Enough time has passed — seek immediately.
+        m_player->setPosition(newPos);
+        updateVideoCursorFromPositionMs(newPos);
+        m_pendingScrubPos = -1;
+        m_scrubElapsed.restart();
+    } else {
+        // Too soon — buffer the position and schedule a deferred seek.
+        m_pendingScrubPos = newPos;
+        if (!m_scrubTimer->isActive()) {
+            const int remaining = kSliderSeekIntervalMs
+                                  - static_cast<int>(m_scrubElapsed.elapsed());
+            m_scrubTimer->start(qMax(0, remaining));
+        }
+    }
+}
+
+void VideoWidget::onScrubTimerFired()
+{
+    if (!m_player || m_pendingScrubPos < 0)
+        return;
+
+    m_player->setPosition(m_pendingScrubPos);
+    updateTimeLabel(m_pendingScrubPos, m_player->duration());
+    updateVideoCursorFromPositionMs(m_pendingScrubPos);
+
+    m_pendingScrubPos = -1;
+    m_scrubElapsed.restart();
 }
 
 void VideoWidget::onDurationChanged(qint64 durationMs)
