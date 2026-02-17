@@ -95,7 +95,9 @@ Feature specification:
 1. Coordinator analyzes codebase for patterns
 2. Creates `docs/implementation-plan/00-overview.md` with phase structure
 3. Spawns sub-agents to document each phase in detail
-4. Produces complete implementation plan
+4. **Waits for all sub-agents to return results** (does not yield its turn)
+5. Performs integration check on completed documents
+6. Produces completion report
 
 **Output:** `docs/implementation-plan/` folder with overview + one file per phase
 
@@ -112,10 +114,11 @@ The implementation plan is in docs/implementation-plan/
 **What happens:**
 1. Orchestrator reads plan, identifies parallel tracks
 2. Spawns implementation agents for each track
-3. Spawns review agents to verify each implementation
-4. Routes feedback until all phases pass review (max 3 iterations)
-5. Spawns final review agents (architecture, quality, requirements)
-6. Produces completion report
+3. **Waits for each agent to complete** before spawning review agents
+4. Spawns review agents to verify each implementation
+5. **Waits for review verdicts** and routes feedback until all phases pass (max 3 iterations)
+6. Spawns final review agents (architecture, quality, requirements)
+7. **Waits for all reviews** and produces completion report
 
 **Output:** Working code + final review summary
 
@@ -128,6 +131,7 @@ The implementation plan is in docs/implementation-plan/
 | **Parallel where possible** | Independent phases/tracks run simultaneously |
 | **Bounded iteration** | Max 3 review cycles prevents infinite loops |
 | **Explicit handoffs** | Each agent receives complete, unabridged instructions |
+| **Continuous execution** | Coordinators never yield their turn until all work is done |
 
 ### The Context Rule
 
@@ -137,6 +141,16 @@ Sub-agents:   Give them EVERYTHING (full specs, all reference files)
 ```
 
 The constraint is on the coordinator's context, not what gets passed to sub-agents. A complex feature might need 15+ reference files—pass all of them.
+
+### The Continuity Rule
+
+```
+Coordinators: Do NOT end your turn while work remains
+              Spawn → Wait → Collect → Act → Repeat
+              The entire workflow is one atomic turn
+```
+
+Coordinators must stay active and wait for sub-agent results. They must not describe future actions and stop — they must actually execute the full loop.
 
 ## Customization Points
 
@@ -175,6 +189,8 @@ Edit the "Final Review Phase" section in `implementation-orchestrator.md` to add
 | Context exhaustion | Ensure coordinator isn't reading full source files |
 | Inconsistent phases | Add cross-reference check in planning coordinator |
 | Missed requirements | Strengthen requirements coverage final review |
+| **Coordinator stops early** | Ensure "Execution Loop — CRITICAL" section is present and coordinator is told not to yield its turn |
+| **Coordinator describes future work and stops** | Add explicit "Do NOT describe what you will do and stop — actually do it" language |
 
 ## Quick Commands
 
@@ -199,5 +215,5 @@ Resume from: [track/phase]
 
 ## Version
 
-Last updated: January 2025
+Last updated: February 2025
 Compatible with: Claude Code with sub-agent/Task capabilities
