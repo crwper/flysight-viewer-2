@@ -75,6 +75,7 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
             return;
         }
         m_player->setVideoOutput(voObj);
+        connect(root, SIGNAL(clicked()), this, SLOT(onPlayPauseClicked()));
         qDebug() << "VideoSurface: setVideoOutput succeeded";
     };
 
