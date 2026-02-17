@@ -346,4 +346,125 @@ Item {
             }
         }
     }
+
+    // Map type selector overlay
+    Rectangle {
+        id: mapTypeSelector
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.topMargin: 8
+        anchors.rightMargin: 8
+        z: 100
+        width: selectedLabel.implicitWidth + 28
+        height: 28
+        radius: 4
+        color: dropdownArea.containsMouse ? "#f0f0f0" : "#e0ffffff"
+        border.color: "#aaaaaa"
+        border.width: 1
+
+        property int currentIndex: 0
+        property var mapTypes: map.supportedMapTypes
+
+        function applyPreference() {
+            if (!mapPreferences) return
+            var idx = mapPreferences.mapTypeIndex
+            if (idx >= 0 && idx < mapTypes.length) {
+                currentIndex = idx
+                map.activeMapType = mapTypes[idx]
+            }
+        }
+
+        function selectType(index) {
+            if (index < 0 || index >= mapTypes.length) return
+            currentIndex = index
+            map.activeMapType = mapTypes[index]
+            if (mapPreferences)
+                mapPreferences.mapTypeIndex = index
+            dropdownList.visible = false
+        }
+
+        Component.onCompleted: applyPreference()
+
+        Connections {
+            target: mapPreferences || null
+            function onMapTypeIndexChanged() { mapTypeSelector.applyPreference() }
+        }
+
+        Text {
+            id: selectedLabel
+            anchors.left: parent.left
+            anchors.leftMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            text: (mapTypeSelector.currentIndex >= 0
+                   && mapTypeSelector.currentIndex < mapTypeSelector.mapTypes.length)
+                  ? mapTypeSelector.mapTypes[mapTypeSelector.currentIndex].name
+                  : ""
+            font.pixelSize: 12
+        }
+
+        Text {
+            anchors.right: parent.right
+            anchors.rightMargin: 6
+            anchors.verticalCenter: parent.verticalCenter
+            text: dropdownList.visible ? "\u25B2" : "\u25BC"
+            font.pixelSize: 8
+            color: "#666666"
+        }
+
+        MouseArea {
+            id: dropdownArea
+            anchors.fill: parent
+            hoverEnabled: true
+            onClicked: dropdownList.visible = !dropdownList.visible
+        }
+
+        // Dropdown list
+        Rectangle {
+            id: dropdownList
+            visible: false
+            anchors.top: parent.bottom
+            anchors.topMargin: 2
+            anchors.right: parent.right
+            width: Math.max(parent.width, 160)
+            height: dropdownColumn.implicitHeight + 4
+            radius: 4
+            color: "#f8f8f8"
+            border.color: "#aaaaaa"
+            border.width: 1
+
+            Column {
+                id: dropdownColumn
+                anchors.fill: parent
+                anchors.margins: 2
+
+                Repeater {
+                    model: mapTypeSelector.mapTypes
+
+                    Rectangle {
+                        width: dropdownColumn.width
+                        height: 26
+                        radius: 2
+                        color: itemArea.containsMouse ? "#d0d0d0"
+                             : (index === mapTypeSelector.currentIndex ? "#e0e0e0" : "transparent")
+
+                        Text {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: modelData.name
+                            font.pixelSize: 12
+                            font.bold: index === mapTypeSelector.currentIndex
+                        }
+
+                        MouseArea {
+                            id: itemArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: mapTypeSelector.selectType(index)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

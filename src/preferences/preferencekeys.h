@@ -38,6 +38,7 @@ inline const QString LegendTextSize = QStringLiteral("legend/textSize");
 inline const QString MapLineThickness = QStringLiteral("map/lineThickness");
 inline const QString MapMarkerSize = QStringLiteral("map/markerSize");
 inline const QString MapTrackOpacity = QStringLiteral("map/trackOpacity");
+inline const QString MapType = QStringLiteral("map/type");
 
 // ============================================================================
 // Per-Plot Preference Key Generators

@@ -20,6 +20,7 @@ void MapPreferencesBridge::loadAllPreferences()
     m_lineThickness = prefs.getValue(PreferenceKeys::MapLineThickness).toDouble();
     m_markerSize = prefs.getValue(PreferenceKeys::MapMarkerSize).toInt();
     m_trackOpacity = prefs.getValue(PreferenceKeys::MapTrackOpacity).toDouble();
+    m_mapTypeIndex = prefs.getValue(PreferenceKeys::MapType).toInt();
 }
 
 void MapPreferencesBridge::onPreferenceChanged(const QString &key, const QVariant &value)
@@ -36,6 +37,17 @@ void MapPreferencesBridge::onPreferenceChanged(const QString &key, const QVarian
         m_trackOpacity = value.toDouble();
         emit trackOpacityChanged();
     }
+    else if (key == PreferenceKeys::MapType) {
+        m_mapTypeIndex = value.toInt();
+        emit mapTypeIndexChanged();
+    }
+}
+
+void MapPreferencesBridge::setMapTypeIndex(int index)
+{
+    if (m_mapTypeIndex == index)
+        return;
+    PreferencesManager::instance().setValue(PreferenceKeys::MapType, index);
 }
 
 } // namespace FlySight

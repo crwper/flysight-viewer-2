@@ -12,11 +12,13 @@ namespace FlySight {
 static const char* kLineThicknessKey = "map/lineThickness";
 static const char* kTrackOpacityKey = "map/trackOpacity";
 static const char* kMarkerSizeKey = "map/markerSize";
+static const char* kMapTypeKey = "map/type";
 
 // Default values
 static constexpr double kDefaultLineThickness = 3.0;
 static constexpr double kDefaultTrackOpacity = 0.85;
 static constexpr int kDefaultMarkerSize = 10;
+static constexpr int kDefaultMapType = 0;
 
 MapSettingsPage::MapSettingsPage(QWidget *parent)
     : QWidget(parent)
@@ -26,6 +28,7 @@ MapSettingsPage::MapSettingsPage(QWidget *parent)
     prefs.registerPreference(kLineThicknessKey, kDefaultLineThickness);
     prefs.registerPreference(kTrackOpacityKey, kDefaultTrackOpacity);
     prefs.registerPreference(kMarkerSizeKey, kDefaultMarkerSize);
+    prefs.registerPreference(kMapTypeKey, kDefaultMapType);
 
     // Build UI
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
@@ -179,6 +182,7 @@ void MapSettingsPage::resetToDefaults()
     prefs.setValue(kLineThicknessKey, kDefaultLineThickness);
     prefs.setValue(kTrackOpacityKey, kDefaultTrackOpacity);
     prefs.setValue(kMarkerSizeKey, kDefaultMarkerSize);
+    prefs.setValue(kMapTypeKey, kDefaultMapType);
 
     // Reload UI from preferences
     loadSettings();
