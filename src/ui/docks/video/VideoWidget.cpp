@@ -242,6 +242,8 @@ void VideoWidget::loadVideo(const QString &filePath)
         m_player->stop();
     }
 
+    m_lastSeekTarget = -1;
+
     m_filePath = filePath;
 
     if (!m_player || !m_statusLabel) {
@@ -292,6 +294,7 @@ void VideoWidget::onPlayPauseClicked()
     if (isPlaying) {
         m_player->pause();
     } else {
+        m_lastSeekTarget = -1;
         m_player->play();
     }
 }
@@ -303,11 +306,10 @@ void VideoWidget::onStepBackwardClicked()
 
     m_player->pause();
 
-    const qint64 pos = m_player->position();
+    const qint64 pos = (m_lastSeekTarget >= 0) ? m_lastSeekTarget
+                                                : m_player->position();
     const qint64 newPos = qMax<qint64>(0, pos - kStepMs);
-    m_player->setPosition(newPos);
-
-    updateVideoCursorFromPositionMs(newPos);
+    seekVideo(newPos);
 }
 
 void VideoWidget::onStepForwardClicked()
@@ -317,15 +319,13 @@ void VideoWidget::onStepForwardClicked()
 
     m_player->pause();
 
-    const qint64 pos = m_player->position();
+    const qint64 pos = (m_lastSeekTarget >= 0) ? m_lastSeekTarget
+                                                : m_player->position();
     const qint64 dur = m_player->duration();
 
     const qint64 unclamped = pos + kStepMs;
     const qint64 newPos = (dur > 0) ? qMin(dur, unclamped) : unclamped;
-
-    m_player->setPosition(newPos);
-
-    updateVideoCursorFromPositionMs(newPos);
+    seekVideo(newPos);
 }
 
 void VideoWidget::onSliderPressed()
@@ -345,14 +345,6 @@ void VideoWidget::onSliderPressed()
     if (m_resumeAfterScrub) {
         m_player->pause();
     }
-
-    m_scrubSeekInFlight = false;
-    m_pendingScrubPos = -1;
-
-    if (auto *sink = m_player->videoSink()) {
-        connect(sink, &QVideoSink::videoFrameChanged,
-                this, &VideoWidget::onVideoFrameChanged);
-    }
 }
 
 void VideoWidget::onSliderReleased()
@@ -360,13 +352,8 @@ void VideoWidget::onSliderReleased()
     if (!m_player || !m_positionSlider)
         return;
 
-    if (auto *sink = m_player->videoSink()) {
-        disconnect(sink, &QVideoSink::videoFrameChanged,
-                   this, &VideoWidget::onVideoFrameChanged);
-    }
-
-    m_scrubSeekInFlight = false;
-    m_pendingScrubPos = -1;
+    cancelPendingSeek();
+    m_lastSeekTarget = -1;
 
     m_sliderIsDown = false;
 
@@ -386,37 +373,69 @@ void VideoWidget::onSliderMoved(int value)
     if (!m_player || !m_sliderIsDown)
         return;
 
-    const qint64 newPos = static_cast<qint64>(value);
+    seekVideo(static_cast<qint64>(value));
+}
 
-    // Always keep time label responsive while dragging.
-    updateTimeLabel(newPos, m_player->duration());
+void VideoWidget::seekVideo(qint64 positionMs)
+{
+    if (!m_player)
+        return;
 
-    if (m_scrubSeekInFlight) {
-        // Previous frame still rendering — just buffer.
-        m_pendingScrubPos = newPos;
-    } else {
-        // Backend is idle — seek immediately.
-        m_scrubSeekInFlight = true;
-        m_pendingScrubPos = -1;
-        m_player->setPosition(newPos);
-        updateVideoCursorFromPositionMs(newPos);
+    m_lastSeekTarget = positionMs;
+
+    updateTimeLabel(positionMs, m_player->duration());
+    updateVideoCursorFromPositionMs(positionMs);
+
+    if (m_positionSlider && !m_sliderIsDown) {
+        const QSignalBlocker blocker(m_positionSlider);
+        m_positionSlider->setValue(static_cast<int>(qMax<qint64>(0, positionMs)));
+    }
+
+    if (m_seekInFlight) {
+        m_pendingSeekPos = positionMs;
+        return;
+    }
+
+    m_seekInFlight = true;
+    m_pendingSeekPos = -1;
+    m_player->setPosition(positionMs);
+
+    if (!m_seekSignalConnected) {
+        if (auto *sink = m_player->videoSink()) {
+            connect(sink, &QVideoSink::videoFrameChanged,
+                    this, &VideoWidget::onVideoFrameChanged);
+            m_seekSignalConnected = true;
+        }
+    }
+}
+
+void VideoWidget::cancelPendingSeek()
+{
+    m_seekInFlight = false;
+    m_pendingSeekPos = -1;
+
+    if (m_seekSignalConnected) {
+        if (auto *sink = m_player->videoSink()) {
+            disconnect(sink, &QVideoSink::videoFrameChanged,
+                       this, &VideoWidget::onVideoFrameChanged);
+        }
+        m_seekSignalConnected = false;
     }
 }
 
 void VideoWidget::onVideoFrameChanged()
 {
-    if (!m_sliderIsDown || !m_scrubSeekInFlight)
+    if (!m_seekInFlight)
         return;
 
-    m_scrubSeekInFlight = false;
+    m_seekInFlight = false;
 
-    if (m_pendingScrubPos >= 0) {
-        m_scrubSeekInFlight = true;
-        const qint64 next = m_pendingScrubPos;
-        m_pendingScrubPos = -1;
-        m_player->setPosition(next);
-        updateTimeLabel(next, m_player->duration());
-        updateVideoCursorFromPositionMs(next);
+    if (m_pendingSeekPos >= 0) {
+        const qint64 next = m_pendingSeekPos;
+        m_pendingSeekPos = -1;
+        seekVideo(next);
+    } else {
+        cancelPendingSeek();
     }
 }
 
@@ -443,6 +462,18 @@ void VideoWidget::onDurationChanged(qint64 durationMs)
 void VideoWidget::onPositionChanged(qint64 positionMs)
 {
     if (!m_positionSlider)
+        return;
+
+    // While throttled seeking is active, seekVideo maintains the UI
+    // at the intended position. Don't let the backend's actual position
+    // (which may be keyframe-snapped) overwrite it.
+    if (m_seekSignalConnected)
+        return;
+
+    // After seeking completes, the scrub target remains authoritative
+    // until the user explicitly transitions (play, slider release, etc.).
+    // This prevents keyframe-snapped positions from causing jitter.
+    if (m_lastSeekTarget >= 0)
         return;
 
     if (!m_sliderIsDown) {
@@ -750,6 +781,9 @@ void VideoWidget::wheelEvent(QWheelEvent *event)
         return;
     }
 
+    // Pause playback during wheel scrubbing (matches step-button behavior).
+    m_player->pause();
+
     // Get wheel delta (positive = scroll up/away = forward, negative = scroll down/toward = backward)
     const int delta = event->angleDelta().y();
 
@@ -796,17 +830,15 @@ void VideoWidget::wheelEvent(QWheelEvent *event)
     const qint64 signedStep = (delta > 0) ? stepMs : -stepMs;
 
     // Calculate and clamp new position
-    const qint64 currentPos = m_player->position();
+    const qint64 currentPos = (m_lastSeekTarget >= 0) ? m_lastSeekTarget
+                                                       : m_player->position();
     const qint64 duration = m_player->duration();
     const qint64 newPos = qBound(static_cast<qint64>(0),
                                   currentPos + signedStep,
                                   duration > 0 ? duration : currentPos);
 
     // Apply the position change
-    m_player->setPosition(newPos);
-
-    // Update cursor to sync with plots
-    updateVideoCursorFromPositionMs(newPos);
+    seekVideo(newPos);
 }
 
 } // namespace FlySight

@@ -74,6 +74,9 @@ private:
     QString selectedSessionId() const;
     void updateMarkExitEnabled();
 
+    void seekVideo(qint64 positionMs);
+    void cancelPendingSeek();
+
     // Drives CursorModel's "video" cursor while the video is synced.
     void updateVideoCursorSyncState();
     void updateVideoCursorFromPositionMs(qint64 positionMs);
@@ -111,9 +114,11 @@ private:
     bool m_sliderIsDown = false;
     bool m_resumeAfterScrub = false;
 
-    // Slider scrubbing throttle state
-    bool   m_scrubSeekInFlight = false;
-    qint64 m_pendingScrubPos = -1;
+    // Seek throttle state (frame-ready based)
+    bool   m_seekInFlight = false;
+    qint64 m_pendingSeekPos = -1;
+    bool   m_seekSignalConnected = false;
+    qint64 m_lastSeekTarget = -1;
 
     std::optional<double> m_anchorVideoSeconds;
     std::optional<double> m_anchorUtcSeconds;
