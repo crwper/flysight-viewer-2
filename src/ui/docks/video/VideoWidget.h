@@ -39,6 +39,7 @@ public:
 
 protected:
     void wheelEvent(QWheelEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
     void onPlayPauseClicked();

@@ -265,6 +265,12 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
         }
     });
 
+    // Capture wheel events from all children so scrolling anywhere in the
+    // dock triggers video scrubbing instead of the child's default behavior.
+    const auto children = findChildren<QWidget *>();
+    for (QWidget *child : children)
+        child->installEventFilter(this);
+
     setControlsEnabled(false);
     updatePlayPauseButton();
     updateSyncLabels();
@@ -847,6 +853,15 @@ void VideoWidget::updateVideoCursorFromPositionMs(qint64 positionMs)
     const double utcNow = (*m_anchorUtcSeconds) + (videoNowSeconds - (*m_anchorVideoSeconds));
 
     m_cursorModel->setCursorPositionUtc(QStringLiteral("video"), utcNow);
+}
+
+bool VideoWidget::eventFilter(QObject *obj, QEvent *event)
+{
+    if (event->type() == QEvent::Wheel) {
+        wheelEvent(static_cast<QWheelEvent *>(event));
+        return true;   // consumed — don't let the child handle it
+    }
+    return QWidget::eventFilter(obj, event);
 }
 
 void VideoWidget::wheelEvent(QWheelEvent *event)
