@@ -11,7 +11,6 @@
 QT_BEGIN_NAMESPACE
 class QQuickWidget;
 class QSlider;
-class QTimer;
 class QToolButton;
 class QPushButton;
 class QLabel;
@@ -48,7 +47,7 @@ private slots:
     void onSliderPressed();
     void onSliderReleased();
     void onSliderMoved(int value);
-    void onScrubTimerFired();
+    void onVideoFrameChanged();
 
     void onDurationChanged(qint64 durationMs);
     void onPositionChanged(qint64 positionMs);
@@ -113,9 +112,8 @@ private:
     bool m_resumeAfterScrub = false;
 
     // Slider scrubbing throttle state
-    QTimer       *m_scrubTimer = nullptr;
-    qint64        m_pendingScrubPos = -1;
-    QElapsedTimer m_scrubElapsed;
+    bool   m_scrubSeekInFlight = false;
+    qint64 m_pendingScrubPos = -1;
 
     std::optional<double> m_anchorVideoSeconds;
     std::optional<double> m_anchorUtcSeconds;
