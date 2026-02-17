@@ -40,6 +40,8 @@ static constexpr qint64 kWheelFastThresholdMs = 50;  // Time threshold for fast 
 static constexpr qint64 kWheelSlowThresholdMs = 200; // Time threshold for slow scrolling
 static constexpr double kWheelMaxMultiplier = 50.0;  // Max acceleration multiplier
 static constexpr int kWheelDeltaPerStep = 120;       // Standard wheel delta per notch
+static constexpr int   kSeekWatchdogMs = 300;        // Failsafe timeout for frame-gated seeks
+static constexpr int   kWheelPixelsPerStep = 40;     // Approx pixels per "notch" for trackpads
 
 VideoWidget::VideoWidget(SessionModel *sessionModel,
                          CursorModel *cursorModel,
@@ -226,6 +228,43 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
 
     rebuildSessionSelector();
 
+    // Seek watchdog: if a frame doesn't arrive after setPosition(), don't let gating get stuck.
+    m_seekWatchdog.setSingleShot(true);
+    m_seekWatchdog.setInterval(kSeekWatchdogMs);
+    connect(&m_seekWatchdog, &QTimer::timeout, this, [this]() {
+        if (!m_seekInFlight)
+            return;
+
+        // Treat as "seek completion" even if no new frame arrived (e.g., snapped to same frame).
+        m_seekInFlight = false;
+
+        if (m_pendingSeekPos >= 0) {
+            const qint64 next = m_pendingSeekPos;
+            m_pendingSeekPos = -1;
+            seekVideo(next);
+            return;
+        }
+
+        // Release gating so normal playback/UI updates are not blocked.
+        cancelPendingSeek();
+
+        // Option A: snap UI/cursor to actual backend position once seek settles.
+        if (m_player) {
+            const qint64 actual = m_player->position();
+            m_lastSeekTarget = -1;
+
+            if (m_positionSlider && !m_sliderIsDown) {
+                const QSignalBlocker blocker(m_positionSlider);
+                m_positionSlider->setValue(static_cast<int>(qMax<qint64>(0, actual)));
+            }
+
+            updateTimeLabel(actual, m_player->duration());
+            updateVideoCursorFromPositionMs(actual);
+        } else {
+            m_lastSeekTarget = -1;
+        }
+    });
+
     setControlsEnabled(false);
     updatePlayPauseButton();
     updateSyncLabels();
@@ -238,11 +277,13 @@ void VideoWidget::loadVideo(const QString &filePath)
     m_anchorUtcSeconds.reset();
     updateSyncLabels();
 
+    // Reset any in-flight seek gating so it can't affect the next media.
+    cancelPendingSeek();
+    m_lastSeekTarget = -1;
+
     if (m_player) {
         m_player->stop();
     }
-
-    m_lastSeekTarget = -1;
 
     m_filePath = filePath;
 
@@ -294,6 +335,8 @@ void VideoWidget::onPlayPauseClicked()
     if (isPlaying) {
         m_player->pause();
     } else {
+        // Starting playback should never be blocked by a pending gated seek.
+        cancelPendingSeek();
         m_lastSeekTarget = -1;
         m_player->play();
     }
@@ -391,6 +434,20 @@ void VideoWidget::seekVideo(qint64 positionMs)
         m_positionSlider->setValue(static_cast<int>(qMax<qint64>(0, positionMs)));
     }
 
+    // If we don't have a sink yet (e.g., QML output not wired), we can't gate on frames.
+    // Fall back to direct seeking so we never deadlock the gating state.
+    auto *sink = m_player->videoSink();
+    if (!sink) {
+        m_player->setPosition(positionMs);
+        return;
+    }
+
+    if (!m_seekSignalConnected) {
+        connect(sink, &QVideoSink::videoFrameChanged,
+                this, &VideoWidget::onVideoFrameChanged);
+        m_seekSignalConnected = true;
+    }
+
     if (m_seekInFlight) {
         m_pendingSeekPos = positionMs;
         return;
@@ -398,24 +455,22 @@ void VideoWidget::seekVideo(qint64 positionMs)
 
     m_seekInFlight = true;
     m_pendingSeekPos = -1;
+
     m_player->setPosition(positionMs);
 
-    if (!m_seekSignalConnected) {
-        if (auto *sink = m_player->videoSink()) {
-            connect(sink, &QVideoSink::videoFrameChanged,
-                    this, &VideoWidget::onVideoFrameChanged);
-            m_seekSignalConnected = true;
-        }
-    }
+    // Failsafe in case no frame arrives for this seek.
+    m_seekWatchdog.start();
 }
 
 void VideoWidget::cancelPendingSeek()
 {
+    m_seekWatchdog.stop();
+
     m_seekInFlight = false;
     m_pendingSeekPos = -1;
 
     if (m_seekSignalConnected) {
-        if (auto *sink = m_player->videoSink()) {
+        if (auto *sink = m_player ? m_player->videoSink() : nullptr) {
             disconnect(sink, &QVideoSink::videoFrameChanged,
                        this, &VideoWidget::onVideoFrameChanged);
         }
@@ -428,14 +483,34 @@ void VideoWidget::onVideoFrameChanged()
     if (!m_seekInFlight)
         return;
 
+    m_seekWatchdog.stop();
     m_seekInFlight = false;
 
     if (m_pendingSeekPos >= 0) {
         const qint64 next = m_pendingSeekPos;
         m_pendingSeekPos = -1;
         seekVideo(next);
+        return;
+    }
+
+    // No more pending seeks: release gating.
+    cancelPendingSeek();
+
+    // Option A: snap UI/cursor to the actual backend position (keyframe-snapped),
+    // then clear the "requested position is authoritative" override.
+    if (m_player) {
+        const qint64 actual = m_player->position();
+        m_lastSeekTarget = -1;
+
+        if (m_positionSlider && !m_sliderIsDown) {
+            const QSignalBlocker blocker(m_positionSlider);
+            m_positionSlider->setValue(static_cast<int>(qMax<qint64>(0, actual)));
+        }
+
+        updateTimeLabel(actual, m_player->duration());
+        updateVideoCursorFromPositionMs(actual);
     } else {
-        cancelPendingSeek();
+        m_lastSeekTarget = -1;
     }
 }
 
@@ -785,7 +860,13 @@ void VideoWidget::wheelEvent(QWheelEvent *event)
     m_player->pause();
 
     // Get wheel delta (positive = scroll up/away = forward, negative = scroll down/toward = backward)
-    const int delta = event->angleDelta().y();
+    int delta = event->angleDelta().y();
+    bool usingPixels = false;
+
+    if (delta == 0) {
+        delta = event->pixelDelta().y();
+        usingPixels = true;
+    }
 
     if (delta == 0) {
         event->ignore();
@@ -818,7 +899,9 @@ void VideoWidget::wheelEvent(QWheelEvent *event)
 
     // Calculate step based on delta magnitude and acceleration
     // Standard wheel notch is 120 units; high-resolution wheels may send smaller values
-    const double notches = static_cast<double>(delta) / kWheelDeltaPerStep;
+    const double denom = usingPixels ? static_cast<double>(kWheelPixelsPerStep)
+                                     : static_cast<double>(kWheelDeltaPerStep);
+    const double notches = static_cast<double>(delta) / denom;
     const double rawStepMs = kWheelBaseStepMs * accelerationMultiplier * qAbs(notches);
 
     // Clamp to reasonable bounds

@@ -6,6 +6,7 @@
 #include <optional>
 
 #include <QElapsedTimer>
+#include <QTimer>
 #include <QMediaPlayer>
 
 QT_BEGIN_NAMESPACE
@@ -119,6 +120,9 @@ private:
     qint64 m_pendingSeekPos = -1;
     bool   m_seekSignalConnected = false;
     qint64 m_lastSeekTarget = -1;
+
+    // Failsafe: prevents seek gating from getting stuck if no new frame arrives
+    QTimer m_seekWatchdog;
 
     std::optional<double> m_anchorVideoSeconds;
     std::optional<double> m_anchorUtcSeconds;
