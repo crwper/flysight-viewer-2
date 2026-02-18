@@ -245,4 +245,45 @@ void CursorModel::setCursorTargetPolicy(const QString &id, TargetPolicy policy)
     emit cursorsChanged();
 }
 
+void CursorModel::setCursorState(const QString &id,
+                                  const QSet<QString> &targetSessions,
+                                  double utcSeconds,
+                                  bool active)
+{
+    const int row = rowForId(id);
+    if (row < 0)
+        return;
+
+    Cursor &c = m_cursors[row];
+
+    // Check each field group for changes
+    const bool changedTargetPolicy = (c.targetPolicy != TargetPolicy::Explicit);
+    const bool changedTargetIds    = (c.targetSessions != targetSessions);
+    const bool changedPosSpace     = (c.positionSpace != PositionSpace::UtcSeconds);
+    const bool changedPosAxis      = (!c.axisKey.isEmpty());
+    const bool changedPosValue     = (c.positionValue != utcSeconds);
+    const bool changedActive       = (c.active != active);
+
+    if (!changedTargetPolicy && !changedTargetIds
+        && !changedPosSpace && !changedPosAxis && !changedPosValue
+        && !changedActive) {
+        return; // nothing changed -- skip emission
+    }
+
+    // Apply all mutations
+    c.targetPolicy   = TargetPolicy::Explicit;
+    c.targetSessions = targetSessions;
+    c.positionSpace  = PositionSpace::UtcSeconds;
+    c.axisKey.clear();
+    c.positionValue  = utcSeconds;
+    c.active         = active;
+
+    // Emit dataChanged once with the union of all affected roles
+    const QModelIndex idx = index(row, 0);
+    emit dataChanged(idx, idx, {TargetPolicyRole, TargetSessionsRole,
+                                PositionSpaceRole, AxisKeyRole,
+                                PositionValueRole, ActiveRole});
+    emit cursorsChanged();
+}
+
 } // namespace FlySight

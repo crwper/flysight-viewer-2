@@ -76,6 +76,13 @@ public:
     void setCursorTargetsExplicit(const QString &id, const QSet<QString> &sessionIds);
     void setCursorTargetPolicy(const QString &id, TargetPolicy policy);
 
+    // Atomic combined setter -- updates targets, position, and active in one
+    // call and emits cursorsChanged() at most once.
+    void setCursorState(const QString &id,
+                        const QSet<QString> &targetSessions,
+                        double utcSeconds,
+                        bool active);
+
     // Convenience
     bool hasCursor(const QString &id) const;
     Cursor cursorById(const QString &id) const;

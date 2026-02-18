@@ -29,9 +29,10 @@ void MapCursorProxy::setMapHover(const QString &sessionId, double utcSeconds)
         return;
     }
 
-    m_cursorModel->setCursorTargetsExplicit(kMouseCursorId, QSet<QString>{ sessionId });
-    m_cursorModel->setCursorPositionUtc(kMouseCursorId, utcSeconds);
-    m_cursorModel->setCursorActive(kMouseCursorId, true);
+    m_cursorModel->setCursorState(kMouseCursorId,
+                                   QSet<QString>{ sessionId },
+                                   utcSeconds,
+                                   true);
 
     // Optional (spec): keep the hovered-session highlight consistent
     if (m_sessionModel)
@@ -41,8 +42,10 @@ void MapCursorProxy::setMapHover(const QString &sessionId, double utcSeconds)
 void MapCursorProxy::clearMapHover()
 {
     if (m_cursorModel) {
-        m_cursorModel->setCursorTargetsExplicit(kMouseCursorId, QSet<QString>{});
-        m_cursorModel->setCursorActive(kMouseCursorId, false);
+        m_cursorModel->setCursorState(kMouseCursorId,
+                                      QSet<QString>{},
+                                      0.0,
+                                      false);
     }
 
     if (m_sessionModel)
