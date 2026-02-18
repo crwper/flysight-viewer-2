@@ -338,7 +338,7 @@ There is no need to manually run `macdeployqt`, `windeployqt`, copy libraries, o
 
 ```bash
 # 1. Build
-cmake -G "Visual Studio 17 2022" -A x64 -B build -S .
+cmake -G "Visual Studio 17 2022" -A x64 -B build -S . -DCMAKE_PREFIX_PATH="C:/Qt/6.9.3/msvc2022_64"
 cmake --build build --config Release
 
 # 2. Install (creates self-contained deployment)
