@@ -253,14 +253,20 @@ MapCursorDotModel::MapCursorDotModel(SessionModel *sessionModel, CursorModel *cu
     , m_sessionModel(sessionModel)
     , m_cursorModel(cursorModel)
 {
+    // Zero-interval single-shot timer coalesces rapid cursorsChanged bursts
+    // (e.g. 3 emissions per hover event) into a single rebuild.
+    m_rebuildTimer.setInterval(0);
+    m_rebuildTimer.setSingleShot(true);
+    connect(&m_rebuildTimer, &QTimer::timeout, this, &MapCursorDotModel::rebuild);
+
     if (m_sessionModel) {
         connect(m_sessionModel, &SessionModel::modelChanged,
-                this, &MapCursorDotModel::rebuild);
+                this, &MapCursorDotModel::scheduleRebuild);
     }
 
     if (m_cursorModel) {
         connect(m_cursorModel, &CursorModel::cursorsChanged,
-                this, &MapCursorDotModel::rebuild);
+                this, &MapCursorDotModel::scheduleRebuild);
     }
 
     // Connect to preferences system
@@ -268,6 +274,11 @@ MapCursorDotModel::MapCursorDotModel(SessionModel *sessionModel, CursorModel *cu
             this, &MapCursorDotModel::onPreferenceChanged);
 
     rebuild();
+}
+
+void MapCursorDotModel::scheduleRebuild()
+{
+    m_rebuildTimer.start();
 }
 
 int MapCursorDotModel::rowCount(const QModelIndex &parent) const
@@ -333,55 +344,67 @@ void MapCursorDotModel::onPreferenceChanged(const QString &key, const QVariant &
 
 void MapCursorDotModel::rebuild()
 {
+    QVector<Dot> newDots;
+
+    if (m_sessionModel && m_cursorModel) {
+        const CursorModel::Cursor c = chooseEffectiveCursor(m_cursorModel);
+
+        if (!c.id.isEmpty() && c.active) {
+            const bool explicitTargets =
+                (c.targetPolicy == CursorModel::TargetPolicy::Explicit && !c.targetSessions.isEmpty());
+
+            const auto &sessions = m_sessionModel->getAllSessions();
+
+            for (const auto &session : sessions) {
+                if (!session.isVisible())
+                    continue;
+
+                const QString sessionId =
+                    session.getAttribute(SessionKeys::SessionId).toString();
+
+                if (sessionId.isEmpty())
+                    continue;
+
+                if (explicitTargets && !c.targetSessions.contains(sessionId))
+                    continue;
+
+                double utcSeconds = 0.0;
+                if (!cursorUtcSecondsForSession(c, session, &utcSeconds))
+                    continue;
+
+                double lat = 0.0;
+                double lon = 0.0;
+                if (!sampleLatLonAtUtc(session, utcSeconds, &lat, &lon))
+                    continue;
+
+                Dot d;
+                d.sessionId = sessionId;
+                d.lat = lat;
+                d.lon = lon;
+                d.color = colorForSession(sessionId);
+                newDots.push_back(std::move(d));
+            }
+        }
+    }
+
+    // Skip the model reset if nothing changed
+    if (newDots.size() == m_dots.size()) {
+        bool same = true;
+        for (int i = 0; i < newDots.size(); ++i) {
+            const Dot &a = m_dots[i];
+            const Dot &b = newDots[i];
+            if (a.sessionId != b.sessionId || a.lat != b.lat
+                || a.lon != b.lon || a.color != b.color) {
+                same = false;
+                break;
+            }
+        }
+        if (same)
+            return;
+    }
+
     beginResetModel();
-    m_dots.clear();
-
-    if (!m_sessionModel || !m_cursorModel) {
-        endResetModel();
-        return;
-    }
-
-    const CursorModel::Cursor c = chooseEffectiveCursor(m_cursorModel);
-    if (c.id.isEmpty() || !c.active) {
-        endResetModel();
-        return;
-    }
-
-    const bool explicitTargets =
-        (c.targetPolicy == CursorModel::TargetPolicy::Explicit && !c.targetSessions.isEmpty());
-
-    const auto &sessions = m_sessionModel->getAllSessions();
-
-    for (const auto &session : sessions) {
-        if (!session.isVisible())
-            continue;
-
-        const QString sessionId =
-            session.getAttribute(SessionKeys::SessionId).toString();
-
-        if (sessionId.isEmpty())
-            continue;
-
-        if (explicitTargets && !c.targetSessions.contains(sessionId))
-            continue;
-
-        double utcSeconds = 0.0;
-        if (!cursorUtcSecondsForSession(c, session, &utcSeconds))
-            continue;
-
-        double lat = 0.0;
-        double lon = 0.0;
-        if (!sampleLatLonAtUtc(session, utcSeconds, &lat, &lon))
-            continue;
-
-        Dot d;
-        d.sessionId = sessionId;
-        d.lat = lat;
-        d.lon = lon;
-        d.color = colorForSession(sessionId);
-        m_dots.push_back(std::move(d));
-    }
-
+    m_dots = std::move(newDots);
     endResetModel();
 }
 

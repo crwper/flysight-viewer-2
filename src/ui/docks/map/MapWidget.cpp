@@ -10,10 +10,13 @@
 
 #include <QWebEngineView>
 #include <QWebEnginePage>
+#include <QWebEngineScript>
+#include <QWebEngineScriptCollection>
 #include <QWebEngineSettings>
 #include <QWebChannel>
 #include <QVBoxLayout>
 #include <QCoreApplication>
+#include <QScreen>
 #include <QUrl>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -58,6 +61,23 @@ MapWidget::MapWidget(SessionModel *sessionModel,
     // Allow the local HTML page to load the Google Maps API from https://
     m_webView->page()->settings()->setAttribute(
         QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
+
+    // Compensate for DPI double-scaling: Qt scales the widget, and Chromium
+    // inside QWebEngine also scales based on devicePixelRatio.  Undo the
+    // Chromium-level scaling so map controls appear at their normal size.
+    // After setZoomFactor, window.devicePixelRatio reports 1.0, so inject
+    // the true native DPR as a JS global for our own size compensation.
+    const qreal dpr = m_webView->screen()
+                      ? m_webView->screen()->devicePixelRatio() : 1.0;
+    if (dpr > 1.0) {
+        m_webView->setZoomFactor(1.0 / dpr);
+
+        QWebEngineScript dprScript;
+        dprScript.setSourceCode(QStringLiteral("window._nativeDpr = %1;").arg(dpr));
+        dprScript.setInjectionPoint(QWebEngineScript::DocumentCreation);
+        dprScript.setWorldId(QWebEngineScript::MainWorld);
+        m_webView->page()->scripts().insert(dprScript);
+    }
 
 #ifdef Q_OS_MACOS
     const QString htmlPath = QCoreApplication::applicationDirPath()

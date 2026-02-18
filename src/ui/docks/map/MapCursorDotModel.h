@@ -5,6 +5,7 @@
 #include <QColor>
 #include <QHash>
 #include <QString>
+#include <QTimer>
 #include <QVariant>
 #include <QVector>
 
@@ -42,6 +43,7 @@ public:
 
 public slots:
     void rebuild();
+    void scheduleRebuild();
 
 private slots:
     void onPreferenceChanged(const QString &key, const QVariant &value);
@@ -56,6 +58,7 @@ private:
 
     SessionModel *m_sessionModel = nullptr;
     CursorModel *m_cursorModel = nullptr;
+    QTimer m_rebuildTimer;
     QVector<Dot> m_dots;
 
     static QColor colorForSession(const QString &sessionId);

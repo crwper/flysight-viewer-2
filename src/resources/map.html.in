@@ -115,6 +115,13 @@ var prefLineThickness = 3.0;
 var prefTrackOpacity = 0.85;
 var prefMarkerSize = 10;
 
+// DPI compensation: QWebEngineView applies setZoomFactor(1/dpr) to fix
+// oversized Google Maps controls.  After that, window.devicePixelRatio
+// reports 1.0, so C++ injects the true native DPR as window._nativeDpr.
+// Multiply our own drawing sizes by this value so tracks and markers
+// remain at their intended physical size.
+var dpiScale = window._nativeDpr || 1.0;
+
 // Hover state (Task 4.7)
 var HOVER_THRESHOLD_PX = 10;
 var HOVER_MIN_MOVE_PX = 2;
@@ -212,7 +219,7 @@ function onTracksChanged(tracks) {
             path: path,
             strokeColor: qtColorRGB(track.color),
             strokeOpacity: prefTrackOpacity,
-            strokeWeight: prefLineThickness,
+            strokeWeight: prefLineThickness * dpiScale,
             map: map,
             zIndex: 10
         });
@@ -224,30 +231,46 @@ function onTracksChanged(tracks) {
 // Task 4.6: Cursor Dot Markers
 // ===========================================================================
 function onCursorDotsChanged(dots) {
-    // Remove existing markers
-    cursorMarkers.forEach(function(marker) { marker.setMap(null); });
-    cursorMarkers.clear();
+    // Build a set of session IDs present in the new data
+    var incoming = new Set();
 
-    if (!dots) return;
+    if (dots) {
+        for (var i = 0; i < dots.length; i++) {
+            var dot = dots[i];
+            incoming.add(dot.sessionId);
 
-    for (var i = 0; i < dots.length; i++) {
-        var dot = dots[i];
-        var marker = new google.maps.Marker({
-            position: { lat: dot.lat, lng: dot.lon },
-            map: map,
-            icon: {
-                path: google.maps.SymbolPath.CIRCLE,
-                fillColor: qtColorRGB(dot.color),
-                fillOpacity: 1.0,
-                strokeColor: "#ffffff",
-                strokeWeight: 2,
-                scale: prefMarkerSize / 2
-            },
-            zIndex: 20,
-            clickable: false
-        });
-        cursorMarkers.set(dot.sessionId, marker);
+            var existing = cursorMarkers.get(dot.sessionId);
+            if (existing) {
+                // Update position of existing marker (no flicker)
+                existing.setPosition({ lat: dot.lat, lng: dot.lon });
+            } else {
+                // Create marker for new session
+                var marker = new google.maps.Marker({
+                    position: { lat: dot.lat, lng: dot.lon },
+                    map: map,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        fillColor: qtColorRGB(dot.color),
+                        fillOpacity: 1.0,
+                        strokeColor: "#ffffff",
+                        strokeWeight: 2 * dpiScale,
+                        scale: (prefMarkerSize / 2) * dpiScale
+                    },
+                    zIndex: 20,
+                    clickable: false
+                });
+                cursorMarkers.set(dot.sessionId, marker);
+            }
+        }
     }
+
+    // Remove markers for sessions no longer present
+    cursorMarkers.forEach(function(marker, sessionId) {
+        if (!incoming.has(sessionId)) {
+            marker.setMap(null);
+            cursorMarkers.delete(sessionId);
+        }
+    });
 }
 
 // ===========================================================================
@@ -307,7 +330,8 @@ function distPointToSegment2(px, py, ax, ay, bx, by) {
 function updateHoverAt(mx, my) {
     if (!bridge) return;
 
-    var thr2 = HOVER_THRESHOLD_PX * HOVER_THRESHOLD_PX;
+    var thr = HOVER_THRESHOLD_PX * dpiScale;
+    var thr2 = thr * thr;
     var bestDist2 = thr2 + 1;
     var bestSessionId = "";
     var bestUtc = NaN;
@@ -462,7 +486,7 @@ function onPreferenceChanged(key, value) {
     if (key === "map/lineThickness") {
         prefLineThickness = value;
         polylines.forEach(function(pl) {
-            pl.setOptions({ strokeWeight: value });
+            pl.setOptions({ strokeWeight: value * dpiScale });
         });
     } else if (key === "map/trackOpacity") {
         prefTrackOpacity = value;
@@ -474,7 +498,7 @@ function onPreferenceChanged(key, value) {
         cursorMarkers.forEach(function(marker) {
             var icon = marker.getIcon();
             if (icon) {
-                icon.scale = value / 2;
+                icon.scale = (value / 2) * dpiScale;
                 marker.setIcon(icon);
             }
         });
