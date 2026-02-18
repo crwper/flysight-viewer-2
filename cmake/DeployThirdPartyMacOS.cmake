@@ -49,8 +49,14 @@ function(deploy_third_party_macos)
         message(FATAL_ERROR "deploy_third_party_macos: TARGET argument is required")
     endif()
 
+    # Resolve the actual output name (may differ from target name, e.g. "FlySight Viewer" vs "FlySightViewer")
+    get_target_property(_output_name ${ARG_TARGET} OUTPUT_NAME)
+    if(NOT _output_name)
+        set(_output_name "${ARG_TARGET}")
+    endif()
+
     # Bundle name for install destinations (relative to CMAKE_INSTALL_PREFIX)
-    set(_bundle_name "${ARG_TARGET}.app")
+    set(_bundle_name "${_output_name}.app")
 
     message(STATUS "")
     message(STATUS "----------------------------------------")
@@ -338,7 +344,7 @@ foreach(DYLIB \${ALL_DYLIBS})
 endforeach()
 
 # Fix the main executable
-set(EXECUTABLE \"\${MACOS_DIR}/${ARG_TARGET}\")
+set(EXECUTABLE \"\${MACOS_DIR}/${_output_name}\")
 if(EXISTS \"\${EXECUTABLE}\")
     message(STATUS \"Fixing executable: \${EXECUTABLE}\")
 
@@ -535,11 +541,17 @@ function(copy_dylib_to_bundle target dylib_path)
         return()
     endif()
 
+    # Resolve the actual output name for the bundle directory
+    get_target_property(_output_name ${target} OUTPUT_NAME)
+    if(NOT _output_name)
+        set(_output_name "${target}")
+    endif()
+
     get_filename_component(_dylib_name "${dylib_path}" NAME)
 
     install(
         FILES "${dylib_path}"
-        DESTINATION "${target}.app/Contents/Frameworks"
+        DESTINATION "${_output_name}.app/Contents/Frameworks"
         COMPONENT Runtime
     )
 endfunction()

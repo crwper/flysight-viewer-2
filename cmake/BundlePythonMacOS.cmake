@@ -114,8 +114,14 @@ function(bundle_python_macos)
         message(FATAL_ERROR "bundle_python_macos: TARGET argument is required")
     endif()
 
+    # Resolve the actual output name (may differ from target name, e.g. "FlySight Viewer" vs "FlySightViewer")
+    get_target_property(_output_name ${ARG_TARGET} OUTPUT_NAME)
+    if(NOT _output_name)
+        set(_output_name "${ARG_TARGET}")
+    endif()
+
     # Bundle name for install destinations (relative to CMAKE_INSTALL_PREFIX)
-    set(_bundle_name "${ARG_TARGET}.app")
+    set(_bundle_name "${_output_name}.app")
 
     if(NOT ARG_PYTHON_VERSION)
         set(ARG_PYTHON_VERSION "3.13")
