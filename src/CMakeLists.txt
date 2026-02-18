@@ -25,7 +25,10 @@ endif()
 #   THIRD_PARTY_DIR, EIGEN_DIR, QCUSTOMPLOT_ROOT, QCUSTOMPLOT_DIR,
 #   GTSAM_ROOT, TBB_ROOT, KDDW_ROOT, BOOST_ROOT, BOOST_LIBRARYDIR
 #
-# These are defined as CACHE PATH variables at the start of this file.
+# Build configuration variables:
+#   GOOGLE_MAPS_API_KEY  - Google Maps JavaScript API key (CACHE STRING)
+#
+# These are defined as CACHE PATH/STRING variables at the start of this file.
 # Do not redefine these variables elsewhere - CMake's cache ensures
 # command-line overrides work correctly.
 #
@@ -50,6 +53,9 @@ set(QCUSTOMPLOT_DIR  "${QCUSTOMPLOT_ROOT}/QCustomPlot"        CACHE PATH "QCusto
 set(GTSAM_ROOT     "${THIRD_PARTY_DIR}/GTSAM-install"         CACHE PATH "GTSAM install prefix")
 set(TBB_ROOT       "${THIRD_PARTY_DIR}/oneTBB-install"        CACHE PATH "oneTBB install prefix")
 set(KDDW_ROOT      "${THIRD_PARTY_DIR}/KDDockWidgets-install" CACHE PATH "KDDockWidgets install prefix")
+
+# Google Maps API key for the embedded map view
+set(GOOGLE_MAPS_API_KEY "" CACHE STRING "Google Maps JavaScript API key")
 
 # Allow environment variable override for CI/CD
 if(DEFINED ENV{KDDW_ROOT} AND NOT KDDW_ROOT)
@@ -80,7 +86,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/../cmake/BoostDiscovery.cmake")
 
 # ─────────────────────────────── Qt
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets PrintSupport QuickWidgets Quick Qml Location Positioning Multimedia MultimediaWidgets)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets PrintSupport QuickWidgets Quick Qml WebEngineWidgets WebChannel Multimedia MultimediaWidgets)
 
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
   # Nice-to-have; safe to omit if you prefer older style
@@ -89,6 +95,13 @@ if(QT_VERSION_MAJOR GREATER_EQUAL 6)
     qt_standard_project_setup()
   endif()
 endif()
+
+# ─────────────────────────────── Google Maps HTML template
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/map.html.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/resources/map.html"
+    @ONLY
+)
 
 # ─────────────────────────────── Python / pybind11
 # Full Python install for embedding + extension module build
@@ -444,6 +457,7 @@ set(PROJECT_SOURCES
   ui/docks/video/VideoWidget.h    ui/docks/video/VideoWidget.cpp
   ui/docks/map/MapDockFeature.h    ui/docks/map/MapDockFeature.cpp
   ui/docks/map/MapWidget.h    ui/docks/map/MapWidget.cpp
+  ui/docks/map/MapBridge.h    ui/docks/map/MapBridge.cpp
   ui/docks/map/TrackMapModel.h    ui/docks/map/TrackMapModel.cpp
   ui/docks/map/MapCursorDotModel.h    ui/docks/map/MapCursorDotModel.cpp
   ui/docks/map/MapCursorProxy.h    ui/docks/map/MapCursorProxy.cpp
@@ -494,8 +508,8 @@ target_link_libraries(FlySightViewer PRIVATE
   Qt${QT_VERSION_MAJOR}::QuickWidgets
   Qt${QT_VERSION_MAJOR}::Quick
   Qt${QT_VERSION_MAJOR}::Qml
-  Qt${QT_VERSION_MAJOR}::Location
-  Qt${QT_VERSION_MAJOR}::Positioning
+  Qt${QT_VERSION_MAJOR}::WebEngineWidgets
+  Qt${QT_VERSION_MAJOR}::WebChannel
   Qt${QT_VERSION_MAJOR}::Multimedia
   Qt${QT_VERSION_MAJOR}::MultimediaWidgets
 
@@ -594,14 +608,28 @@ install(FILES
   DESTINATION "${_plugins_dest}"
 )
 
+# Install configured map.html for Google Maps view
+if(APPLE)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/resources/map.html"
+        DESTINATION "FlySightViewer.app/Contents/Resources/resources"
+    )
+elseif(WIN32)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/resources/map.html"
+        DESTINATION "resources"
+    )
+else()
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/resources/map.html"
+        DESTINATION "${CMAKE_INSTALL_BINDIR}/../resources"
+    )
+endif()
+
 # ─────────────────────────────── Qt deployment (Qt 6.3+)
 # On all platforms with Qt 6, use the built-in deployment API to bundle Qt libraries.
 # We use the QML-aware variant (qt_generate_deploy_qml_app_script) because the app
-# includes QML components (MapDock). This is a strict superset of
+# includes QML components (VideoSurface). This is a strict superset of
 # qt_generate_deploy_app_script — it deploys all C++ runtime dependencies AND
-# automatically discovers and deploys QML modules (QtLocation, QtPositioning, etc.)
+# automatically discovers and deploys QML modules (QtMultimedia, etc.)
 # by scanning QML source files for import statements.
-# This is the same approach used by QGroundControl and other major Qt mapping apps.
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
   qt_generate_deploy_qml_app_script(
     TARGET FlySightViewer
@@ -629,54 +657,6 @@ include("${FLYSIGHT_CMAKE_DIR}/QtPathDiscovery.cmake")
 # Discover Qt resource directories (plugins, QML modules)
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
   find_qt6_resource_dirs()
-
-  # ─────────────────────────────── Geoservices Plugin Deployment
-  # These are not included by qt_generate_deploy_app_script by default
-  if(QT6_PLUGINS_DIR AND EXISTS "${QT6_PLUGINS_DIR}/geoservices")
-    # Platform-specific destination and file pattern
-    if(WIN32)
-      set(_geoservices_dest "plugins/geoservices")
-      set(_geoservices_pattern "*.dll")
-    elseif(APPLE)
-      set(_geoservices_dest "FlySightViewer.app/Contents/PlugIns/geoservices")
-      set(_geoservices_pattern "*.dylib")
-    else()
-      # Linux: Deploy to AppDir if available, otherwise standard plugins dir
-      if(DEFINED FLYSIGHT_APPDIR_PATH)
-        set(_geoservices_dest "${FLYSIGHT_APPDIR_PATH}/usr/plugins/geoservices")
-      else()
-        set(_geoservices_dest "plugins/geoservices")
-      endif()
-      set(_geoservices_pattern "*.so")
-    endif()
-
-    # Install geoservices plugins
-    install(DIRECTORY "${QT6_PLUGINS_DIR}/geoservices"
-      DESTINATION "${_geoservices_dest}/.."
-      FILES_MATCHING PATTERN "${_geoservices_pattern}"
-    )
-
-    # Count plugins for verification at configure time
-    file(GLOB _geo_plugins "${QT6_PLUGINS_DIR}/geoservices/${_geoservices_pattern}")
-    list(LENGTH _geo_plugins _geo_count)
-    message(STATUS "Geoservices: Found ${_geo_count} plugins to deploy")
-
-    # Install-time verification
-    install(CODE "
-      set(_dest_dir \"\${CMAKE_INSTALL_PREFIX}/${_geoservices_dest}\")
-      if(NOT EXISTS \"\${_dest_dir}\")
-        message(WARNING \"Geoservices plugins not found in deployment at \${_dest_dir}\")
-      else()
-        file(GLOB _deployed_plugins \"\${_dest_dir}/*\")
-        list(LENGTH _deployed_plugins _count)
-        message(STATUS \"Deployed \${_count} geoservices plugins to \${_dest_dir}\")
-      endif()
-    ")
-  else()
-    message(WARNING "Qt geoservices plugins not found at ${QT6_PLUGINS_DIR}/geoservices")
-    message(STATUS "  Searched from Qt prefix: ${QT6_PREFIX}")
-    message(STATUS "  Maps functionality may not work at runtime")
-  endif()
 
   # ─────────────────────────────── Additional Qt Plugin Categories
   # qt_generate_deploy_app_script handles most plugins (platforms, imageformats, etc.)
@@ -751,7 +731,7 @@ if(QT_VERSION_MAJOR GREATER_EQUAL 6)
   endif()
 
   # ─────────────────────────────── QML Module & qt.conf Deployment
-  # QtLocation, QtPositioning, and other QML modules are deployed automatically
+  # QML modules (e.g., QtMultimedia) are deployed automatically
   # by qt_generate_deploy_qml_app_script() above. It scans QML source files for
   # import statements and deploys the required modules. It also generates qt.conf.
   # No manual QML deployment or qt.conf generation is needed here.

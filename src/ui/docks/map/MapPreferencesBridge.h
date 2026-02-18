@@ -7,10 +7,16 @@
 namespace FlySight {
 
 /**
- * @brief Bridge class to expose map preferences to QML.
+ * @brief Bridge class to expose map preferences.
  *
- * This class listens to PreferencesManager changes and notifies QML
+ * This class listens to PreferencesManager changes and notifies consumers
  * when map-related preferences change.
+ *
+ * Map type index mapping (Google Maps):
+ *   0 = roadmap
+ *   1 = satellite
+ *   2 = terrain
+ *   3 = hybrid
  */
 class MapPreferencesBridge : public QObject
 {
@@ -20,6 +26,7 @@ class MapPreferencesBridge : public QObject
     Q_PROPERTY(int markerSize READ markerSize NOTIFY markerSizeChanged)
     Q_PROPERTY(double trackOpacity READ trackOpacity NOTIFY trackOpacityChanged)
     Q_PROPERTY(int mapTypeIndex READ mapTypeIndex WRITE setMapTypeIndex NOTIFY mapTypeIndexChanged)
+    // Map type: 0=roadmap, 1=satellite, 2=terrain, 3=hybrid
 
 public:
     explicit MapPreferencesBridge(QObject *parent = nullptr);

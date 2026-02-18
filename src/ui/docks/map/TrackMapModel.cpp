@@ -134,8 +134,12 @@ void TrackMapModel::rebuild()
 {
     const bool oldHasData = m_hasData;
     const int oldCount = m_tracks.size();
-    const QGeoCoordinate oldCenter = m_center;
-    const QGeoRectangle oldBounds = m_bounds;
+    const double oldCenterLat = m_centerLat;
+    const double oldCenterLon = m_centerLon;
+    const double oldBoundsNorth = m_boundsNorth;
+    const double oldBoundsSouth = m_boundsSouth;
+    const double oldBoundsEast = m_boundsEast;
+    const double oldBoundsWest = m_boundsWest;
 
     beginResetModel();
     m_tracks.clear();
@@ -186,7 +190,7 @@ void TrackMapModel::rebuild()
                 QVariantMap pt;
                 pt.insert(QStringLiteral("lat"), la);
                 pt.insert(QStringLiteral("lon"), lo);
-                pt.insert(QStringLiteral("t"), tt); // UTC seconds for QML hover interpolation
+                pt.insert(QStringLiteral("t"), tt); // UTC seconds for JS hover interpolation
                 points.push_back(pt);
 
                 if (!haveBounds) {
@@ -220,19 +224,28 @@ void TrackMapModel::rebuild()
     m_hasData = !m_tracks.isEmpty();
 
     if (haveBounds) {
-        const QGeoCoordinate topLeft(maxLat, minLon);
-        const QGeoCoordinate bottomRight(minLat, maxLon);
-        m_bounds = QGeoRectangle(topLeft, bottomRight);
-        m_center = m_bounds.center();
+        m_boundsNorth = maxLat;
+        m_boundsSouth = minLat;
+        m_boundsEast  = maxLon;
+        m_boundsWest  = minLon;
+        m_centerLat   = (maxLat + minLat) / 2.0;
+        m_centerLon   = (maxLon + minLon) / 2.0;
     } else {
-        m_bounds = QGeoRectangle();
-        m_center = QGeoCoordinate();
+        m_boundsNorth = 0.0;
+        m_boundsSouth = 0.0;
+        m_boundsEast  = 0.0;
+        m_boundsWest  = 0.0;
+        m_centerLat   = 0.0;
+        m_centerLon   = 0.0;
     }
 
     if (oldHasData != m_hasData) emit hasDataChanged();
     if (oldCount != m_tracks.size()) emit countChanged();
-    if (oldCenter != m_center) emit centerChanged();
-    if (oldBounds != m_bounds) emit boundsChanged();
+    if (oldCenterLat != m_centerLat || oldCenterLon != m_centerLon)
+        emit centerChanged();
+    if (oldBoundsNorth != m_boundsNorth || oldBoundsSouth != m_boundsSouth ||
+        oldBoundsEast != m_boundsEast || oldBoundsWest != m_boundsWest)
+        emit boundsChanged();
 }
 
 } // namespace FlySight

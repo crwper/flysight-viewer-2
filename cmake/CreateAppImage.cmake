@@ -204,7 +204,7 @@ else
 fi
 
 # Check QML modules
-for mod in QtLocation QtPositioning; do
+for mod in QtMultimedia; do
     if [ -d "${APPDIR}/usr/qml/${mod}" ]; then
         echo "  QML ${mod}: Found"
     else

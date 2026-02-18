@@ -3,8 +3,6 @@
 
 #include <QAbstractListModel>
 #include <QColor>
-#include <QGeoCoordinate>
-#include <QGeoRectangle>
 #include <QVariantList>
 #include <QVector>
 
@@ -18,21 +16,26 @@ class PlotRangeModel;
 class SessionData;
 
 /**
- * Exposes visible session GNSS tracks to QML for display on a Qt Location Map.
+ * Exposes visible session GNSS tracks for display on a map.
  *
  * Each row corresponds to one visible session.
  * The "trackPoints" role is a QVariantList of QVariantMaps:
  *   { "lat": <double>, "lon": <double> }
  *
- * QML converts these into coordinates via QtPositioning.coordinate(lat, lon).
+ * Center and bounds are exposed as plain doubles so that QWebChannel
+ * can serialize them natively (no QGeoCoordinate / QGeoRectangle).
  */
 class TrackMapModel : public QAbstractListModel
 {
     Q_OBJECT
     Q_PROPERTY(bool hasData READ hasData NOTIFY hasDataChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
-    Q_PROPERTY(QGeoCoordinate center READ center NOTIFY centerChanged)
-    Q_PROPERTY(QGeoRectangle bounds READ bounds NOTIFY boundsChanged)
+    Q_PROPERTY(double centerLat READ centerLat NOTIFY centerChanged)
+    Q_PROPERTY(double centerLon READ centerLon NOTIFY centerChanged)
+    Q_PROPERTY(double boundsNorth READ boundsNorth NOTIFY boundsChanged)
+    Q_PROPERTY(double boundsSouth READ boundsSouth NOTIFY boundsChanged)
+    Q_PROPERTY(double boundsEast READ boundsEast NOTIFY boundsChanged)
+    Q_PROPERTY(double boundsWest READ boundsWest NOTIFY boundsChanged)
 
 public:
     enum Roles {
@@ -51,8 +54,12 @@ public:
 
     bool hasData() const { return m_hasData; }
     int count() const { return m_tracks.size(); }
-    QGeoCoordinate center() const { return m_center; }
-    QGeoRectangle bounds() const { return m_bounds; }
+    double centerLat() const { return m_centerLat; }
+    double centerLon() const { return m_centerLon; }
+    double boundsNorth() const { return m_boundsNorth; }
+    double boundsSouth() const { return m_boundsSouth; }
+    double boundsEast() const { return m_boundsEast; }
+    double boundsWest() const { return m_boundsWest; }
 
 public slots:
     void rebuild();
@@ -81,8 +88,12 @@ private:
                                 double *outLower, double *outUpper) const;
 
     bool m_hasData = false;
-    QGeoCoordinate m_center;
-    QGeoRectangle m_bounds;
+    double m_centerLat = 0.0;
+    double m_centerLon = 0.0;
+    double m_boundsNorth = 0.0;
+    double m_boundsSouth = 0.0;
+    double m_boundsEast = 0.0;
+    double m_boundsWest = 0.0;
 
     double m_trackOpacity = 0.85;
 

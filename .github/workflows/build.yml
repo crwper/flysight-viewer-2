@@ -215,7 +215,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
-          modules: qtlocation qtpositioning qtmultimedia
+          modules: qtwebengine qtwebchannel qtmultimedia
           cache: true
 
       # =========================================================================
@@ -265,11 +265,6 @@ jobs:
             for dir in "$QT6_PREFIX/plugins" "$QT6_PREFIX/share/qt6/plugins" "$QT6_PREFIX/lib/qt6/plugins"; do
               if [ -d "$dir" ]; then
                 echo "Found plugins at: $dir"
-                if [ -d "$dir/geoservices" ]; then
-                  echo "  Geoservices: $(ls "$dir/geoservices" 2>/dev/null | wc -l) files"
-                else
-                  echo "  Geoservices: directory not found"
-                fi
               fi
             done
 
@@ -278,8 +273,6 @@ jobs:
             for dir in "$QT6_PREFIX/qml" "$QT6_PREFIX/share/qt6/qml" "$QT6_PREFIX/lib/qt6/qml"; do
               if [ -d "$dir" ]; then
                 echo "Found QML at: $dir"
-                echo "  QtLocation: $(test -d "$dir/QtLocation" && echo "present" || echo "missing")"
-                echo "  QtPositioning: $(test -d "$dir/QtPositioning" && echo "present" || echo "missing")"
               fi
             done
           else
@@ -429,7 +422,8 @@ jobs:
             ${PYTHON_ROOT_DIR:+-DPython_ROOT_DIR="$PYTHON_ROOT_DIR"} \
             ${QT6_INSTALL_PREFIX:+-DQT6_INSTALL_PREFIX="$QT6_INSTALL_PREFIX"} \
             ${BOOST_ROOT:+-DBOOST_ROOT="$BOOST_ROOT"} \
-            ${BOOST_LIBRARYDIR:+-DBOOST_LIBRARYDIR="$BOOST_LIBRARYDIR"}
+            ${BOOST_LIBRARYDIR:+-DBOOST_LIBRARYDIR="$BOOST_LIBRARYDIR"} \
+            ${GOOGLE_MAPS_API_KEY:+-DGOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY"}
 
       # =========================================================================
       # Task 3.5: Verify Boost Discovery
@@ -487,25 +481,6 @@ jobs:
           ls -la build/install/python/ || true
           echo "Checking for executable..."
           test -f build/install/FlySightViewer.exe && echo "FlySightViewer.exe found" || echo "WARNING: FlySightViewer.exe not found"
-
-          echo ""
-          echo "=== Checking Qt plugins ==="
-          if [ -d "build/install/plugins/geoservices" ]; then
-            echo "Geoservices plugins found:"
-            ls -la build/install/plugins/geoservices/
-          else
-            echo "WARNING: Geoservices plugins not found"
-          fi
-
-          echo ""
-          echo "=== Checking QML modules ==="
-          for mod in QtLocation QtPositioning; do
-            if [ -d "build/install/qml/$mod" ]; then
-              echo "$mod: Found"
-            else
-              echo "WARNING: $mod not found"
-            fi
-          done
 
           echo ""
           echo "=== Checking qt.conf ==="
@@ -606,34 +581,6 @@ jobs:
           fi
 
           echo ""
-          echo "--- Checking Qt Plugins ---"
-          if [ -d "$BUNDLE/Contents/PlugIns/geoservices" ]; then
-            echo "Geoservices plugins:"
-            for plugin in "$BUNDLE/Contents/PlugIns/geoservices"/*.dylib; do
-              [ -f "$plugin" ] || continue
-              name=$(basename "$plugin")
-              bad_deps=$(otool -L "$plugin" | grep -v "@" | grep -v "/usr/lib" | grep -v "/System" | grep "dylib" || true)
-              if [ -z "$bad_deps" ]; then
-                echo "  OK: $name"
-              else
-                echo "  WARN: $name has absolute paths"
-              fi
-            done
-          else
-            echo "No geoservices plugins found"
-          fi
-
-          echo ""
-          echo "--- Checking QML modules ---"
-          for mod in QtLocation QtPositioning; do
-            if [ -d "$BUNDLE/Contents/Resources/qml/$mod" ]; then
-              echo "$mod: Found"
-            else
-              echo "WARNING: $mod not found"
-            fi
-          done
-
-          echo ""
           echo "--- Checking qt.conf ---"
           if [ -f "$BUNDLE/Contents/Resources/qt.conf" ]; then
             echo "qt.conf found:"
@@ -686,14 +633,6 @@ jobs:
           else
             echo "  Platform plugins: MISSING"
           fi
-          if [ -d "$APPDIR/usr/plugins/geoservices" ]; then
-            echo "  Geoservices plugins: $(ls "$APPDIR/usr/plugins/geoservices/" 2>/dev/null | wc -l) files"
-          else
-            echo "  Geoservices plugins: MISSING"
-          fi
-          for mod in QtLocation QtPositioning; do
-            test -d "$APPDIR/usr/qml/$mod" && echo "  QML $mod: OK" || echo "  QML $mod: MISSING"
-          done
           test -f "$APPDIR/usr/bin/qt.conf" && echo "  qt.conf: OK" || echo "  qt.conf: MISSING"
 
           echo ""

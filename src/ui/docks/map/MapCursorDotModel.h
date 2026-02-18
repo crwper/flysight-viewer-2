@@ -17,7 +17,7 @@ class SessionModel;
 class CursorModel;
 
 /**
- * Exposes cursor-driven dot markers to QML for display on a Qt Location Map.
+ * Exposes cursor-driven dot markers for display on the Google Maps view.
  *
  * Dots are derived from the effective cursor (same precedence rules as the legend)
  * and sampled from the "Simplified" GNSS track (lat/lon vs SessionKeys::Time) for

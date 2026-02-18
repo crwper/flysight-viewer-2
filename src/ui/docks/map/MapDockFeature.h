@@ -10,7 +10,7 @@ struct AppContext;
 
 /**
  * DockFeature for the map view.
- * Displays GNSS tracks on a Qt Location map.
+ * Displays GNSS tracks on a Google Maps view.
  */
 class MapDockFeature : public DockFeature
 {

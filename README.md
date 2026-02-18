@@ -80,7 +80,7 @@ The following Qt 6 components are required:
 
 - Core, Widgets, PrintSupport
 - QuickWidgets, Quick, Qml, QuickControls2
-- Location, Positioning
+- WebEngineWidgets, WebChannel
 - Multimedia, MultimediaWidgets
 
 Qt is typically installed via the Qt Online Installer. Ensure the Qt installation is discoverable by CMake (either in your PATH or via `CMAKE_PREFIX_PATH`).
@@ -324,7 +324,7 @@ FlySight Viewer deploys as a self-contained application with a bundled Python in
 | Concern | Windows | macOS | Linux |
 |---------|---------|-------|-------|
 | Qt libraries & plugins | `qt_generate_deploy_app_script` | `qt_generate_deploy_app_script` | `qt_generate_deploy_app_script` |
-| Geoservices & QML modules | CMake install rules | CMake install rules | CMake install rules |
+| map.html (Google Maps) | Installed to `resources/` | Installed to `Resources/resources/` | Installed to `usr/resources/` |
 | Third-party libs (TBB, GTSAM, KDDW) | DLLs copied to app root | dylibs copied to `Frameworks/` | `.so` files copied to `usr/lib/` |
 | Boost | DLLs copied (if dynamic) | N/A (static via Homebrew) | `.so` files copied |
 | Python runtime | Embeddable package downloaded | python-build-standalone downloaded | python-build-standalone downloaded |
@@ -437,11 +437,11 @@ FlySightViewer/
 ├── qt.conf
 ├── plugins/
 │   ├── platforms/
-│   ├── geoservices/
 │   └── ...
 ├── qml/
-│   ├── QtLocation/
-│   └── QtPositioning/
+│   └── ...
+├── resources/
+│   └── map.html
 └── python/
     ├── python313.dll
     ├── python313.zip
@@ -461,12 +461,13 @@ FlySightViewer.app/
     │   └── libpython3.XX.dylib
     ├── PlugIns/
     │   ├── platforms/
-    │   └── geoservices/
+    │   └── ...
     └── Resources/
         ├── qt.conf
         ├── qml/
-        │   ├── QtLocation/
-        │   └── QtPositioning/
+        │   └── ...
+        ├── resources/
+        │   └── map.html
         ├── python/
         │   └── lib/python3.XX/site-packages/
         └── python_plugins/
@@ -488,10 +489,11 @@ FlySightViewer.AppDir/
     │   └── libkddockwidgets-qt6.so.*
     ├── plugins/
     │   ├── platforms/
-    │   └── geoservices/
+    │   └── ...
     ├── qml/
-    │   ├── QtLocation/
-    │   └── QtPositioning/
+    │   └── ...
+    ├── resources/
+    │   └── map.html
     └── share/
         └── python/
             ├── bin/python3

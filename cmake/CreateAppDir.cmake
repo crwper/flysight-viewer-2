@@ -14,8 +14,8 @@
 #   └── usr/
 #       ├── bin/                  (executables + qt.conf)
 #       ├── lib/                  (shared libraries with RPATH $ORIGIN/../lib)
-#       ├── plugins/              (Qt plugins - platforms, geoservices, etc.)
-#       ├── qml/                  (QML modules - QtLocation, QtPositioning)
+#       ├── plugins/              (Qt plugins - platforms, etc.)
+#       ├── qml/                  (QML modules - QtMultimedia)
 #       └── share/
 #           ├── python/           (bundled Python runtime)
 #           │   ├── bin/
@@ -229,6 +229,14 @@ if(NOT DEFINED BUNDLE_PYTHON_VERSION)
 endif()
 install(TARGETS flysight_cpp_bridge
     LIBRARY DESTINATION "${APPDIR_NAME}/usr/share/python/lib/python${BUNDLE_PYTHON_VERSION}/site-packages"
+    COMPONENT AppImage
+)
+
+# Install the configured map.html for Google Maps view
+# MapWidget.cpp looks for applicationDirPath() + "/resources/map.html"
+# which resolves to usr/bin/resources/map.html in the AppDir
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/resources/map.html"
+    DESTINATION "${APPDIR_NAME}/usr/bin/resources"
     COMPONENT AppImage
 )
 

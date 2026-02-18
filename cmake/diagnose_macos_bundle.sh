@@ -331,8 +331,8 @@ diagnose_bundle() {
             plugin_count=$(find "$category" -name "*.dylib" -type f 2>/dev/null | wc -l | tr -d ' ')
             echo "$cat_name: $plugin_count plugins"
 
-            # Check for issues in geoservices (important for maps)
-            if [ "$cat_name" = "geoservices" ]; then
+            # Check for issues in platform plugins (important for display)
+            if [ "$cat_name" = "platforms" ]; then
                 while IFS= read -r -d '' plugin; do
                     local plugin_name
                     plugin_name=$(basename "$plugin")
@@ -357,7 +357,7 @@ diagnose_bundle() {
     log_subsection "QML Modules"
 
     if [ -d "$qml_dir" ]; then
-        local required_qml=("QtLocation" "QtPositioning")
+        local required_qml=("QtMultimedia")
         for mod in "${required_qml[@]}"; do
             if [ -d "$qml_dir/$mod" ]; then
                 log_ok "$mod: Found"

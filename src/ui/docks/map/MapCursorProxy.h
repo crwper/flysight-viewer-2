@@ -10,9 +10,10 @@ class SessionModel;
 class CursorModel;
 
 /**
- * Thin QObject exposed to QML so the map can drive CursorModel.
+ * Thin QObject that relays map hover events from JavaScript
+ * (via MapBridge) to CursorModel.
  *
- * QML calls:
+ * Called by MapBridge:
  *   - setMapHover(sessionId, utcSeconds)
  *   - clearMapHover()
  */

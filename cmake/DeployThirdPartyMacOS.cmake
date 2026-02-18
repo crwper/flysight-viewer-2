@@ -199,7 +199,7 @@ message(STATUS \"Symlink creation complete\")
 # Fix library paths for third-party dylibs in macOS app bundle
 # This script runs at install time and processes:
 # - Contents/Frameworks/*.dylib (third-party and Python libraries)
-# - Contents/PlugIns/**/*.dylib (Qt plugins like geoservices)
+# - Contents/PlugIns/**/*.dylib (Qt plugins like platforms, imageformats)
 # - Contents/Resources/qml/**/*.dylib (QML module libraries)
 
 set(BUNDLE_DIR \"\${CMAKE_INSTALL_PREFIX}/${_bundle_name}\")
