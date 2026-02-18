@@ -32,7 +32,7 @@ A desktop application for viewing and analyzing FlySight GPS data with advanced 
 **Windows:**
 
 ```bash
-cmake -G "Visual Studio 17 2022" -A x64 -B build -S .
+cmake -G "Visual Studio 17 2022" -A x64 -B build -S . -DCMAKE_PREFIX_PATH="C:/Qt/6.9.3/msvc2022_64" -DGOOGLE_MAPS_API_KEY="your-api-key"
 cmake --build build --config Release
 cmake --install build --config Release --prefix dist
 ```
@@ -43,7 +43,8 @@ cmake --install build --config Release --prefix dist
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_PREFIX_PATH=/opt/local/libexec/qt6 \
   -DPython_ROOT_DIR=/opt/local \
-  -DPython_EXECUTABLE=/opt/local/bin/python3.13
+  -DPython_EXECUTABLE=/opt/local/bin/python3.13 \
+  -DGOOGLE_MAPS_API_KEY="your-api-key"
 cmake --build build
 cmake --install build --prefix dist
 ```
@@ -51,7 +52,7 @@ cmake --install build --prefix dist
 **Linux:**
 
 ```bash
-cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DGOOGLE_MAPS_API_KEY="your-api-key"
 cmake --build build
 cmake --install build --prefix dist
 ```
@@ -136,7 +137,7 @@ This is the default build mode that builds all third-party dependencies (oneTBB,
 **Windows:**
 
 ```bash
-cmake -G "Visual Studio 17 2022" -A x64 -B build -S .
+cmake -G "Visual Studio 17 2022" -A x64 -B build -S . -DCMAKE_PREFIX_PATH="C:/Qt/6.9.3/msvc2022_64" -DGOOGLE_MAPS_API_KEY="your-api-key"
 cmake --build build --config Release
 ```
 
@@ -146,14 +147,15 @@ cmake --build build --config Release
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_PREFIX_PATH=/opt/local/libexec/qt6 \
   -DPython_ROOT_DIR=/opt/local \
-  -DPython_EXECUTABLE=/opt/local/bin/python3.13
+  -DPython_EXECUTABLE=/opt/local/bin/python3.13 \
+  -DGOOGLE_MAPS_API_KEY="your-api-key"
 cmake --build build
 ```
 
 **Linux:**
 
 ```bash
-cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DGOOGLE_MAPS_API_KEY="your-api-key"
 cmake --build build
 ```
 
@@ -164,7 +166,7 @@ Build only the third-party dependencies without building the application:
 **Windows:**
 
 ```bash
-cmake -G "Visual Studio 17 2022" -A x64 -B build -S . -DFLYSIGHT_THIRD_PARTY_ONLY=ON
+cmake -G "Visual Studio 17 2022" -A x64 -B build -S . -DCMAKE_PREFIX_PATH="C:/Qt/6.9.3/msvc2022_64" -DFLYSIGHT_THIRD_PARTY_ONLY=ON
 cmake --build build --config Release
 ```
 
@@ -190,14 +192,14 @@ If third-party dependencies are already built and installed in the `third-party/
 **Windows:**
 
 ```bash
-cmake -G "Visual Studio 17 2022" -A x64 -B build -S . -DFLYSIGHT_BUILD_THIRD_PARTY=OFF
+cmake -G "Visual Studio 17 2022" -A x64 -B build -S . -DCMAKE_PREFIX_PATH="C:/Qt/6.9.3/msvc2022_64" -DGOOGLE_MAPS_API_KEY="your-api-key" -DFLYSIGHT_BUILD_THIRD_PARTY=OFF
 cmake --build build --config Release
 ```
 
 **macOS / Linux:**
 
 ```bash
-cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DFLYSIGHT_BUILD_THIRD_PARTY=OFF
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DGOOGLE_MAPS_API_KEY="your-api-key" -DFLYSIGHT_BUILD_THIRD_PARTY=OFF
 cmake --build build
 ```
 
@@ -208,6 +210,7 @@ cmake --build build
 | `FLYSIGHT_BUILD_THIRD_PARTY` | `ON` | Build third-party dependencies (oneTBB, GTSAM, KDDockWidgets) |
 | `FLYSIGHT_BUILD_APP` | `ON` | Build the main FlySight Viewer application |
 | `FLYSIGHT_THIRD_PARTY_ONLY` | `OFF` | Build only third-party dependencies (automatically disables app build) |
+| `GOOGLE_MAPS_API_KEY` | (none) | Google Maps JavaScript API key for the map view |
 
 **Path Variables:**
 
@@ -338,7 +341,7 @@ There is no need to manually run `macdeployqt`, `windeployqt`, copy libraries, o
 
 ```bash
 # 1. Build
-cmake -G "Visual Studio 17 2022" -A x64 -B build -S . -DCMAKE_PREFIX_PATH="C:/Qt/6.9.3/msvc2022_64"
+cmake -G "Visual Studio 17 2022" -A x64 -B build -S . -DCMAKE_PREFIX_PATH="C:/Qt/6.9.3/msvc2022_64" -DGOOGLE_MAPS_API_KEY="your-api-key"
 cmake --build build --config Release
 
 # 2. Install (creates self-contained deployment)
@@ -357,7 +360,8 @@ The install step produces a flat directory with the executable, all DLLs, Qt plu
 cmake -B build -S . -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_PREFIX_PATH=/opt/local/libexec/qt6 \
   -DPython_ROOT_DIR=/opt/local \
-  -DPython_EXECUTABLE=/opt/local/bin/python3.13
+  -DPython_EXECUTABLE=/opt/local/bin/python3.13 \
+  -DGOOGLE_MAPS_API_KEY="your-api-key"
 cmake --build build
 
 # 2. Install (creates .app bundle with Frameworks, Python, etc.)
@@ -378,6 +382,7 @@ cmake -B build -S . -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_PREFIX_PATH=/opt/local/libexec/qt6 \
   -DPython_ROOT_DIR=/opt/local \
   -DPython_EXECUTABLE=/opt/local/bin/python3.13 \
+  -DGOOGLE_MAPS_API_KEY="your-api-key" \
   -DFLYSIGHT_CODESIGN_IDENTITY="Developer ID Application: Your Name (XXXXXXXXXX)"
 cmake --build build
 
@@ -402,7 +407,7 @@ xcrun stapler staple FlySightViewer.dmg
 
 ```bash
 # 1. Build
-cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DGOOGLE_MAPS_API_KEY="your-api-key"
 cmake --build build
 
 # 2. Install (creates AppDir with AppRun, libraries, Python, etc.)
