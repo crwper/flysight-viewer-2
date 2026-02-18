@@ -10,6 +10,7 @@
 
 #include <QWebEngineView>
 #include <QWebEnginePage>
+#include <QWebEngineSettings>
 #include <QWebChannel>
 #include <QVBoxLayout>
 #include <QCoreApplication>
@@ -53,6 +54,10 @@ MapWidget::MapWidget(SessionModel *sessionModel,
     // Create QWebEngineView, set the channel on its page, and load map.html
     m_webView = new QWebEngineView(this);
     m_webView->page()->setWebChannel(m_channel);
+
+    // Allow the local HTML page to load the Google Maps API from https://
+    m_webView->page()->settings()->setAttribute(
+        QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
 
 #ifdef Q_OS_MACOS
     const QString htmlPath = QCoreApplication::applicationDirPath()
