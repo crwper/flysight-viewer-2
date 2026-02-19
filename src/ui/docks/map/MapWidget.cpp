@@ -15,7 +15,6 @@
 #include <QWebEngineSettings>
 #include <QWebChannel>
 #include <QVBoxLayout>
-#include <QCoreApplication>
 #include <QScreen>
 #include <QUrl>
 #include <QJsonArray>
@@ -79,14 +78,12 @@ MapWidget::MapWidget(SessionModel *sessionModel,
         m_webView->page()->scripts().insert(dprScript);
     }
 
-#ifdef Q_OS_MACOS
-    const QString htmlPath = QCoreApplication::applicationDirPath()
-                           + QStringLiteral("/../Resources/resources/map.html");
-#else
-    const QString htmlPath = QCoreApplication::applicationDirPath()
-                           + QStringLiteral("/resources/map.html");
-#endif
-    m_webView->load(QUrl::fromLocalFile(htmlPath));
+    m_webView->load(QUrl(QStringLiteral("qrc:///map.html")));
+
+    connect(m_webView, &QWebEngineView::loadFinished, this, [](bool ok) {
+        if (!ok)
+            qWarning() << "MapWidget: map.html failed to load";
+    });
 
     layout->addWidget(m_webView);
 

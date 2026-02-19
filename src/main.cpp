@@ -5,6 +5,12 @@
 #include "mainwindow.h"
 
 int main(int argc, char *argv[]) {
+#ifdef Q_OS_MACOS
+    // V8 fails to reserve virtual memory for its JIT CodeRange on Apple Silicon.
+    // Jitless mode uses the interpreter only, avoiding that allocation.
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", "--js-flags=--jitless");
+#endif
+
     QApplication app(argc, argv);
 #ifndef Q_OS_MACOS
     app.setWindowIcon(QIcon(":/resources/icons/FlySightViewer.png"));

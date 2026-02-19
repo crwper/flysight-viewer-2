@@ -494,6 +494,14 @@ else()
   add_executable(FlySightViewer WIN32 ${PROJECT_SOURCES})
 endif()
 
+# Embed configured map.html as a Qt resource so QWebEngineView can load it via
+# qrc://, avoiding file:// origin restrictions on macOS.
+qt_add_resources(FlySightViewer map_resource
+    PREFIX "/"
+    BASE "${CMAKE_CURRENT_BINARY_DIR}/resources"
+    FILES "${CMAKE_CURRENT_BINARY_DIR}/resources/map.html"
+)
+
 target_link_libraries(FlySightViewer PRIVATE
   flysight_model
   flysight_headers
@@ -608,20 +616,6 @@ install(FILES
   DESTINATION "${_plugins_dest}"
 )
 
-# Install configured map.html for Google Maps view
-if(APPLE)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/resources/map.html"
-        DESTINATION "FlySight Viewer.app/Contents/Resources/resources"
-    )
-elseif(WIN32)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/resources/map.html"
-        DESTINATION "resources"
-    )
-else()
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/resources/map.html"
-        DESTINATION "${CMAKE_INSTALL_BINDIR}/../resources"
-    )
-endif()
 
 # ─────────────────────────────── Qt deployment (Qt 6.3+)
 # On all platforms with Qt 6, use the built-in deployment API to bundle Qt libraries.

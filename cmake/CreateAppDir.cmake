@@ -232,14 +232,6 @@ install(TARGETS flysight_cpp_bridge
     COMPONENT AppImage
 )
 
-# Install the configured map.html for Google Maps view
-# MapWidget.cpp looks for applicationDirPath() + "/resources/map.html"
-# which resolves to usr/bin/resources/map.html in the AppDir
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/resources/map.html"
-    DESTINATION "${APPDIR_NAME}/usr/bin/resources"
-    COMPONENT AppImage
-)
-
 # Install the icon (if it exists) to AppDir root
 set(ICON_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/resources/FlySightViewer.png")
 install(CODE "
