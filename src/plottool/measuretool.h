@@ -39,6 +39,7 @@ private:
     QCPItemLine  *m_lineLeft;
     QCPItemLine  *m_lineRight;
     bool          m_measuring = false;
+    bool          m_multiTrack = false;
     QPoint        m_startPixel;
     double        m_startX = 0.0;
     QString       m_lockedSessionId;

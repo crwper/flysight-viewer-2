@@ -26,6 +26,7 @@ public:
         : QObject(parent) {}
 
     bool isActive() const { return m_active; }
+    bool isMultiTrack() const { return m_multiTrack; }
 
     QString sessionDesc() const { return m_sessionDesc; }
     QString utcText()     const { return m_utcText; }
@@ -35,9 +36,11 @@ public:
     void setData(const QString &sessionDesc,
                  const QString &utcText,
                  const QString &coordsText,
-                 const QVector<Row> &rows)
+                 const QVector<Row> &rows,
+                 bool multiTrack = false)
     {
         m_active      = true;
+        m_multiTrack  = multiTrack;
         m_sessionDesc = sessionDesc;
         m_utcText     = utcText;
         m_coordsText  = coordsText;
@@ -50,6 +53,7 @@ public:
         if (!m_active)
             return;
         m_active = false;
+        m_multiTrack = false;
         m_sessionDesc.clear();
         m_utcText.clear();
         m_coordsText.clear();
@@ -62,6 +66,7 @@ signals:
 
 private:
     bool m_active = false;
+    bool m_multiTrack = false;
     QString m_sessionDesc;
     QString m_utcText;
     QString m_coordsText;

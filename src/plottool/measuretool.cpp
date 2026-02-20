@@ -134,13 +134,20 @@ bool MeasureTool::mousePressEvent(QMouseEvent *event)
     if (!m_plot->axisRect()->rect().contains(event->pos()))
         return false;
 
-    // Lock the focused (hovered) session at click time.
-    m_lockedSessionId = m_model->hoveredSessionId();
-    if (m_lockedSessionId.isEmpty())
-        return false;
+    const bool shiftHeld = event->modifiers().testFlag(Qt::ShiftModifier);
 
-    // Lock crosshair focus to the clicked session so cursor doesn't jump.
-    m_widget->lockFocusToSession(m_lockedSessionId);
+    if (shiftHeld) {
+        // Multi-track mode: measure across all visible tracks.
+        m_multiTrack = true;
+        m_lockedSessionId.clear();
+    } else {
+        // Single-track mode: lock to the focused (hovered) session.
+        m_multiTrack = false;
+        m_lockedSessionId = m_model->hoveredSessionId();
+        if (m_lockedSessionId.isEmpty())
+            return false;
+        m_widget->lockFocusToSession(m_lockedSessionId);
+    }
 
     m_measuring  = true;
     m_startPixel = event->pos();
@@ -181,6 +188,7 @@ bool MeasureTool::mouseReleaseEvent(QMouseEvent *event)
         return false;
 
     m_measuring = false;
+    m_multiTrack = false;
     m_rect->setVisible(false);
     m_lineLeft->setVisible(false);
     m_lineRight->setVisible(false);
@@ -206,6 +214,7 @@ void MeasureTool::closeTool()
 {
     if (m_measuring) {
         m_measuring = false;
+        m_multiTrack = false;
         m_rect->setVisible(false);
         m_lineLeft->setVisible(false);
         m_lineRight->setVisible(false);
@@ -247,6 +256,106 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
         m_plot->replot(QCustomPlot::rpQueuedReplot);
     }
 
+    const QString axisKey = m_widget->getXAxisKey();
+    const QVector<PlotValue> enabledPlots = m_plotModel->enabledPlots();
+
+    if (enabledPlots.isEmpty()) {
+        m_measureModel->clear();
+        return;
+    }
+
+    const double xLo = qMin(m_startX, currentX);
+    const double xHi = qMax(m_startX, currentX);
+
+    if (m_multiTrack) {
+        // ---- Multi-track: min/avg/max across all visible sessions ----
+
+        // Collect visible session IDs from the graph map.
+        QSet<QString> visibleSessionIds;
+        for (auto it = m_graphMap->begin(); it != m_graphMap->end(); ++it) {
+            QCPGraph *g = it.key();
+            if (g && g->visible())
+                visibleSessionIds.insert(it.value().sessionId);
+        }
+
+        // Build session lookup.
+        QHash<QString, const SessionData *> sessionById;
+        for (const auto &s : m_model->getAllSessions()) {
+            const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
+            if (visibleSessionIds.contains(sid))
+                sessionById.insert(sid, &s);
+        }
+
+        if (sessionById.isEmpty()) {
+            m_measureModel->clear();
+            return;
+        }
+
+        QVector<MeasureModel::Row> rows;
+        rows.reserve(enabledPlots.size());
+        bool hasData = false;
+
+        for (const PlotValue &pv : enabledPlots) {
+            MeasureModel::Row row;
+            row.name  = seriesDisplayName(pv);
+            row.color = pv.defaultColor;
+
+            // Collect samples from ALL visible sessions.
+            QVector<double> samples;
+
+            for (auto it = sessionById.constBegin(); it != sessionById.constEnd(); ++it) {
+                const SessionData *session = it.value();
+                const QVector<double> xData = session->getMeasurement(pv.sensorID, axisKey);
+                const QVector<double> yData = session->getMeasurement(pv.sensorID, pv.measurementID);
+
+                // Interpolated endpoints
+                const double yAtLo = interpolateAtX(xData, yData, xLo);
+                const double yAtHi = interpolateAtX(xData, yData, xHi);
+                if (!std::isnan(yAtLo)) samples.append(yAtLo);
+                if (!std::isnan(yAtHi)) samples.append(yAtHi);
+
+                // Interior data points
+                if (!xData.isEmpty() && xData.size() == yData.size()) {
+                    auto itBegin = std::lower_bound(xData.cbegin(), xData.cend(), xLo);
+                    auto itEnd   = std::upper_bound(xData.cbegin(), xData.cend(), xHi);
+                    for (auto jt = itBegin; jt != itEnd; ++jt) {
+                        int i = static_cast<int>(std::distance(xData.cbegin(), jt));
+                        double y = yData[i];
+                        if (!std::isnan(y))
+                            samples.append(y);
+                    }
+                }
+            }
+
+            if (samples.isEmpty()) {
+                row.minValue = QStringLiteral("--");
+                row.avgValue = QStringLiteral("--");
+                row.maxValue = QStringLiteral("--");
+            } else {
+                hasData = true;
+                double minVal = *std::min_element(samples.begin(), samples.end());
+                double maxVal = *std::max_element(samples.begin(), samples.end());
+                double avgVal = std::accumulate(samples.begin(), samples.end(), 0.0) / samples.size();
+
+                row.minValue = formatValue(minVal, pv.measurementID, pv.measurementType);
+                row.avgValue = formatValue(avgVal, pv.measurementID, pv.measurementType);
+                row.maxValue = formatValue(maxVal, pv.measurementID, pv.measurementType);
+            }
+
+            rows.push_back(row);
+        }
+
+        if (!hasData) {
+            m_measureModel->clear();
+            return;
+        }
+
+        m_measureModel->setData(QString(), QString(), QString(), rows, /*multiTrack=*/true);
+        return;
+    }
+
+    // ---- Single-track: locked session ----
+
     // Find the locked session.
     const SessionData *session = nullptr;
     for (const auto &s : m_model->getAllSessions()) {
@@ -259,17 +368,6 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
         m_measureModel->clear();
         return;
     }
-
-    const QString axisKey = m_widget->getXAxisKey();
-    const QVector<PlotValue> enabledPlots = m_plotModel->enabledPlots();
-
-    if (enabledPlots.isEmpty()) {
-        m_measureModel->clear();
-        return;
-    }
-
-    const double xLo = qMin(m_startX, currentX);
-    const double xHi = qMax(m_startX, currentX);
 
     // Build rows for each enabled plot value.
     QVector<MeasureModel::Row> rows;

@@ -328,11 +328,18 @@ void LegendPresenter::recompute()
             widgetRows.push_back(wr);
         }
 
-        m_legendWidget->setMode(LegendWidget::MeasureMode);
-        m_legendWidget->setHeader(m_measureModel->sessionDesc(),
-                                  m_measureModel->utcText(),
-                                  m_measureModel->coordsText());
-        m_legendWidget->setRows(widgetRows);
+        if (m_measureModel->isMultiTrack()) {
+            // Multi-track: show only Min/Avg/Max, no header.
+            m_legendWidget->setMode(LegendWidget::RangeStatsMode);
+            m_legendWidget->setRows(widgetRows);
+        } else {
+            // Single-track: full measure layout with header.
+            m_legendWidget->setMode(LegendWidget::MeasureMode);
+            m_legendWidget->setHeader(m_measureModel->sessionDesc(),
+                                      m_measureModel->utcText(),
+                                      m_measureModel->coordsText());
+            m_legendWidget->setRows(widgetRows);
+        }
         return;
     }
 
