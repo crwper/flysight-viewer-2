@@ -7,6 +7,7 @@
 #include <QMap>
 #include <QHash>
 #include <QSet>
+#include <QTimer>
 #include <QCustomPlot/qcustomplot.h>
 #include "sessionmodel.h"
 #include "graphinfo.h"
@@ -22,8 +23,7 @@ namespace FlySight {
  * 3) Single vs. multi tracer display
  * 4) Hovered session detection (calling model->setHoveredSessionId)
  *
- * It duplicates the "single-tracer if near, else multi-tracer" logic
- * that was previously inside the tools.
+ * It focuses the nearest track by default, with Shift+hover for multi-tracer mode.
  */
 class CrosshairManager : public QObject
 {
@@ -44,10 +44,7 @@ public:
     void setEnabled(bool enabled);
     bool isEnabled() const { return m_enabled; }
 
-    //! If you want to override the distance threshold for single-tracer mode
-    void setPixelThreshold(double px) { m_pixelThreshold = px; }
-
-    //! Enable or disable the "multi-trace" fallback when not near a specific graph.
+    //! Enable or disable the "multi-trace" fallback (Shift+hover).
     void setMultiTraceEnabled(bool enabled);
 
     //! Called if your plot was re-drawn or re-laid out,
@@ -67,8 +64,13 @@ public:
     //! Returns the set of session IDs currently marked by a visible tracer.
     QSet<QString> getTracedSessionIds() const;
 
+signals:
+    //! Emitted whenever the set of traced sessions changes (including from modifier key changes).
+    void tracedSessionsChanged(const QSet<QString> &sessionIds);
+
 private slots:
     void onPreferenceChanged(const QString &key, const QVariant &value);
+    void checkModifiers();
 
 private:
     void applyCrosshairPreferences();
@@ -93,8 +95,11 @@ private:
     void hideAllTracers();
     void hideAllExcept(QCPGraph* keep);
 
-    // Finds the "closest graph" to pixelPos; returns distance in px
+    // Finds the "closest graph" to pixelPos; returns vertical pixel distance
     QCPGraph* findClosestGraph(const QPoint &pixelPos, double &distOut) const;
+
+    // Returns the minimum vertical pixel distance from pixelPos to any graph in the given session
+    double distToSession(const QPoint &pixelPos, double xPlot, const QString &sessionId) const;
 
 private:
     QPointer<QCustomPlot> m_plot;
@@ -110,10 +115,7 @@ private:
     QCursor m_originalCursor;
     QCursor m_transparentCursor;
 
-    // We do "single-tracer" if distance < pixelThreshold, else "multi-tracer"
-    double m_pixelThreshold = 8.0;
-
-    // If false, the "multi-trace" fallback (when not near a graph) is disabled.
+    // If false, the Shift+hover multi-trace mode is disabled.
     bool m_multiTraceEnabled = true;
 
     // Each graph can have its own tracer. We'll create them on demand.
@@ -121,6 +123,10 @@ private:
 
     // Keep track of which sessions have visible tracers
     QSet<QString> m_currentlyTracedSessionIds;
+
+    // Modifier key polling for instant Shift response
+    QTimer *m_modifierPollTimer = nullptr;
+    bool m_lastShiftState = false;
 
     // Cached preference values
     QColor m_crosshairColor = Qt::gray;

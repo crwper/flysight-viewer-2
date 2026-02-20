@@ -4,6 +4,7 @@
 #include "preferences/preferencesmanager.h"
 #include "preferences/preferencekeys.h"
 
+#include <QGuiApplication>
 #include <QMouseEvent>
 #include <QDebug>
 
@@ -38,6 +39,12 @@ CrosshairManager::CrosshairManager(QCustomPlot *plot,
 
     // Apply initial preferences
     applyCrosshairPreferences();
+
+    // Poll for modifier key changes so Shift toggles focus instantly
+    m_modifierPollTimer = new QTimer(this);
+    m_modifierPollTimer->setInterval(50);
+    connect(m_modifierPollTimer, &QTimer::timeout, this, &CrosshairManager::checkModifiers);
+    m_modifierPollTimer->start();
 }
 
 void CrosshairManager::setEnabled(bool enabled)
@@ -116,6 +123,18 @@ void CrosshairManager::onPreferenceChanged(const QString &key, const QVariant &v
     }
 }
 
+void CrosshairManager::checkModifiers()
+{
+    if (!m_isCursorOverPlot)
+        return;
+
+    const bool shiftNow = QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier);
+    if (shiftNow != m_lastShiftState) {
+        m_lastShiftState = shiftNow;
+        updateIfOverPlotArea();
+    }
+}
+
 void CrosshairManager::handleMouseMove(const QPoint &pixelPos)
 {
     if (!m_enabled || !m_plot || !m_graphInfoMap)
@@ -147,6 +166,7 @@ void CrosshairManager::handleMouseMove(const QPoint &pixelPos)
     if (m_isCursorOverPlot) {
         updateCrosshairLines(pixelPos);
         updateTracers(pixelPos);
+        m_lastShiftState = QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier);
     }
 }
 
@@ -166,6 +186,7 @@ void CrosshairManager::handleMouseLeave()
 
         // Clear traced IDs
         m_currentlyTracedSessionIds.clear();
+        m_lastShiftState = false;
     }
 }
 
@@ -385,27 +406,56 @@ void CrosshairManager::updateCrosshairLines(const QPoint &pixelPos)
 
 void CrosshairManager::updateTracers(const QPoint &pixelPos)
 {
-    // single-tracer if nearest graph is within threshold
     double bestDist = 999999.0;
     QCPGraph *closest = findClosestGraph(pixelPos, bestDist);
     double xPlot = m_plot->xAxis->pixelToCoord(pixelPos.x());
 
-    // Start Tracer Update
     hideAllTracers();
     m_currentlyTracedSessionIds.clear();
 
-    // We'll assume single-tracer if dist < threshold, else multi-tracer
-    if (closest && bestDist < m_pixelThreshold) {
+    const bool shiftHeld = QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier);
+
+    if (shiftHeld && m_multiTraceEnabled) {
+        // Shift held: show all tracks (multi-trace mode)
+        if (m_model)
+            m_model->setHoveredSessionId(QString());
+
+        for (auto it = m_graphInfoMap->begin(); it != m_graphInfoMap->end(); ++it) {
+            QCPGraph* g = it.key();
+            if (!g || !g->visible())
+                continue;
+            double yPlot = PlotWidget::interpolateY(g, xPlot);
+            if (std::isnan(yPlot))
+                continue;
+            QCPItemTracer *tr = getOrCreateTracer(g);
+            tr->position->setAxes(m_plot->xAxis, g->valueAxis());
+            tr->position->setCoords(xPlot, yPlot);
+            tr->setPen(it.value().defaultPen);
+            tr->setBrush(it.value().defaultPen.color());
+            tr->setVisible(true);
+            m_currentlyTracedSessionIds.insert(it.value().sessionId);
+        }
+    } else if (closest) {
+        // Determine target session, applying hysteresis to prevent jitter
+        const double kHysteresisMargin = m_plot->selectionTolerance();
+
+        QString targetSessionId;
         const auto itClosest = m_graphInfoMap->find(closest);
-        if (itClosest != m_graphInfoMap->end()) {
-            if (m_model)
-                m_model->setHoveredSessionId(itClosest.value().sessionId);
+        if (itClosest != m_graphInfoMap->end())
+            targetSessionId = itClosest.value().sessionId;
+
+        const QString currentSessionId = m_model ? m_model->hoveredSessionId() : QString();
+        if (!currentSessionId.isEmpty() && currentSessionId != targetSessionId) {
+            const double currentDist = distToSession(pixelPos, xPlot, currentSessionId);
+            if (currentDist < bestDist + kHysteresisMargin)
+                targetSessionId = currentSessionId;
         }
 
-        double xPlot = m_plot->xAxis->pixelToCoord(pixelPos.x());
-        hideAllTracers(); // We'll re-show them
+        if (m_model)
+            m_model->setHoveredSessionId(targetSessionId);
+
         for (auto it = m_graphInfoMap->begin(); it != m_graphInfoMap->end(); ++it) {
-            if (it.value().sessionId != m_model->hoveredSessionId())
+            if (it.value().sessionId != targetSessionId)
                 continue;
             QCPGraph* g = it.key();
             if (!g || !g->visible())
@@ -422,31 +472,13 @@ void CrosshairManager::updateTracers(const QPoint &pixelPos)
             m_currentlyTracedSessionIds.insert(it.value().sessionId);
         }
     } else {
+        // No graphs visible
         if (m_model)
             m_model->setHoveredSessionId(QString());
-
-        if (m_multiTraceEnabled) {
-            double xPlot = m_plot->xAxis->pixelToCoord(pixelPos.x());
-            hideAllTracers(); // We'll re-show them
-            for (auto it = m_graphInfoMap->begin(); it != m_graphInfoMap->end(); ++it) {
-                QCPGraph* g = it.key();
-                if (!g || !g->visible())
-                    continue;
-                double yPlot = PlotWidget::interpolateY(g, xPlot);
-                if (std::isnan(yPlot))
-                    continue;
-                QCPItemTracer *tr = getOrCreateTracer(g);
-                tr->position->setAxes(m_plot->xAxis, g->valueAxis());
-                tr->position->setCoords(xPlot, yPlot);
-                tr->setPen(it.value().defaultPen);
-                tr->setBrush(it.value().defaultPen.color());
-                tr->setVisible(true);
-                m_currentlyTracedSessionIds.insert(it.value().sessionId);
-            }
-        }
     }
 
     m_plot->replot(QCustomPlot::rpQueuedReplot);
+    emit tracedSessionsChanged(m_currentlyTracedSessionIds);
 }
 
 QCPItemTracer* CrosshairManager::getOrCreateTracer(QCPGraph *g)
@@ -487,18 +519,46 @@ QCPGraph* CrosshairManager::findClosestGraph(const QPoint &pixelPos, double &dis
     if (!m_plot || !m_graphInfoMap)
         return nullptr;
 
-    // For each graph in the map, call selectTest to measure distance in px
+    // Interpolate each graph's value at the cursor x-position and measure
+    // vertical pixel distance. This is robust at any zoom level, unlike
+    // selectTest() which can miss graphs when adaptive sampling leaves gaps.
+    const double xPlot = m_plot->xAxis->pixelToCoord(pixelPos.x());
+
     for (auto it = m_graphInfoMap->begin(); it != m_graphInfoMap->end(); ++it) {
         QCPGraph* graph = it.key();
         if (!graph->visible())
             continue;
-        double d = graph->selectTest(pixelPos, false);
-        if (d >= 0 && d < distOut) {
+        const double yPlot = PlotWidget::interpolateY(graph, xPlot);
+        if (std::isnan(yPlot))
+            continue;
+        const double yPixel = graph->valueAxis()->coordToPixel(yPlot);
+        const double d = qAbs(pixelPos.y() - yPixel);
+        if (d < distOut) {
             distOut = d;
             closest = graph;
         }
     }
     return closest;
+}
+
+double CrosshairManager::distToSession(const QPoint &pixelPos, double xPlot, const QString &sessionId) const
+{
+    double best = 999999.0;
+    for (auto it = m_graphInfoMap->begin(); it != m_graphInfoMap->end(); ++it) {
+        if (it.value().sessionId != sessionId)
+            continue;
+        QCPGraph* g = it.key();
+        if (!g || !g->visible())
+            continue;
+        const double yPlot = PlotWidget::interpolateY(g, xPlot);
+        if (std::isnan(yPlot))
+            continue;
+        const double yPixel = g->valueAxis()->coordToPixel(yPlot);
+        const double d = qAbs(pixelPos.y() - yPixel);
+        if (d < best)
+            best = d;
+    }
+    return best;
 }
 
 QSet<QString> CrosshairManager::getTracedSessionIds() const

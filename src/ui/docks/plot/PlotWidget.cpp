@@ -126,6 +126,17 @@ PlotWidget::PlotWidget(SessionModel *model,
         this
         );
 
+    // Update cursor model when traced sessions change (e.g. Shift press/release)
+    connect(m_crosshairManager.get(), &CrosshairManager::tracedSessionsChanged,
+            this, [this](const QSet<QString> &tracedSessions) {
+        if (!m_cursorModel || !m_mouseInPlotArea)
+            return;
+        m_cursorModel->setCursorTargetsExplicit(
+            QStringLiteral("mouse"), tracedSessions);
+        m_cursorModel->setCursorActive(
+            QStringLiteral("mouse"), !tracedSessions.isEmpty());
+    });
+
     // For example, installing event filter:
     customPlot->installEventFilter(this);
 
