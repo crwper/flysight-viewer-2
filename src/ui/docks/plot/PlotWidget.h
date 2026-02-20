@@ -163,6 +163,7 @@ private:
 
     // Plot Management
     QMap<QCPGraph*, GraphInfo> m_graphInfoMap;
+    QVector<QCPGraph*> m_graphDrawOrder;   // graphs in plot-model draw order
     QMap<QString, QCPAxis*> m_plotValueAxes;
 
     // State Management

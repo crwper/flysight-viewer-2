@@ -313,6 +313,7 @@ void PlotWidget::updatePlot()
     // Clear existing graphs and axes
     customPlot->clearPlottables();
     m_graphInfoMap.clear();
+    m_graphDrawOrder.clear();
 
     const QList<QCPAxis *> axesToRemove = m_plotValueAxes.values();
     m_plotValueAxes.clear();
@@ -438,6 +439,7 @@ void PlotWidget::updatePlot()
             graph->setLayer(determineGraphLayer(info, hoveredSessionId));
 
             m_graphInfoMap.insert(graph, info);
+            m_graphDrawOrder.append(graph);
         }
     }
 
@@ -625,9 +627,13 @@ void PlotWidget::onXAxisKeyChanged(const QString &newKey, const QString &newLabe
 
 void PlotWidget::onHoveredSessionChanged(const QString &sessionId)
 {
-    // update graph appearance based on the hovered session
-    for (auto it = m_graphInfoMap.cbegin(); it != m_graphInfoMap.cend(); ++it) {
-        QCPGraph *graph = it.key();
+    // Update graph appearance based on the hovered session.
+    // Iterate in plot-model draw order (not QMap pointer order) so that
+    // setLayer() calls re-establish the correct visual stacking.
+    for (QCPGraph *graph : m_graphDrawOrder) {
+        auto it = m_graphInfoMap.constFind(graph);
+        if (it == m_graphInfoMap.constEnd())
+            continue;
         const GraphInfo &info = it.value();
 
         graph->setLayer(determineGraphLayer(info, sessionId));
