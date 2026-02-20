@@ -498,7 +498,7 @@ void MeasureTool::applyLinePenFromPreferences()
     if (thickness <= 0)
         thickness = 1.0;
 
-    QPen pen(color, thickness, Qt::SolidLine);
+    QPen pen(color, thickness, Qt::DashLine);
     m_lineLeft->setPen(pen);
     m_lineRight->setPen(pen);
 }
