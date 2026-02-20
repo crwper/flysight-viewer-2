@@ -67,8 +67,11 @@ void CrosshairManager::setEnabled(bool enabled)
         if (m_model)
             m_model->setHoveredSessionId(QString());
 
-        // Clear traced IDs
+        // Clear traced IDs and lock state
         m_currentlyTracedSessionIds.clear();
+        m_ctrlLocked = false;
+        m_lockedSessionId.clear();
+        m_lastCtrlState = false;
     } else {
         // if enabling, we won't do anything until the next mouseMove
     }
@@ -128,11 +131,36 @@ void CrosshairManager::checkModifiers()
     if (!m_isCursorOverPlot)
         return;
 
-    const bool shiftNow = QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier);
+    const Qt::KeyboardModifiers mods = QGuiApplication::queryKeyboardModifiers();
+    const bool shiftNow = mods.testFlag(Qt::ShiftModifier);
+    const bool ctrlNow  = mods.testFlag(Qt::ControlModifier);
+
+    bool needsUpdate = false;
+
     if (shiftNow != m_lastShiftState) {
         m_lastShiftState = shiftNow;
-        updateIfOverPlotArea();
+        needsUpdate = true;
     }
+
+    if (ctrlNow != m_lastCtrlState) {
+        if (ctrlNow) {
+            // Ctrl just pressed: capture the currently hovered session
+            const QString candidate = m_model ? m_model->hoveredSessionId() : QString();
+            if (!candidate.isEmpty()) {
+                m_ctrlLocked = true;
+                m_lockedSessionId = candidate;
+            }
+        } else {
+            // Ctrl released: unlock
+            m_ctrlLocked = false;
+            m_lockedSessionId.clear();
+        }
+        m_lastCtrlState = ctrlNow;
+        needsUpdate = true;
+    }
+
+    if (needsUpdate)
+        updateIfOverPlotArea();
 }
 
 void CrosshairManager::handleMouseMove(const QPoint &pixelPos)
@@ -164,9 +192,29 @@ void CrosshairManager::handleMouseMove(const QPoint &pixelPos)
 
     // If still over the plot, update crosshair and tracers
     if (m_isCursorOverPlot) {
+        // Detect Ctrl transitions before updateTracers so the lock
+        // state is current when the tracer logic runs.
+        const Qt::KeyboardModifiers mods = QGuiApplication::queryKeyboardModifiers();
+        const bool ctrlNow = mods.testFlag(Qt::ControlModifier);
+
+        if (ctrlNow && !m_lastCtrlState) {
+            // Ctrl just pressed: capture the currently hovered session
+            const QString candidate = m_model ? m_model->hoveredSessionId() : QString();
+            if (!candidate.isEmpty()) {
+                m_ctrlLocked = true;
+                m_lockedSessionId = candidate;
+            }
+        } else if (!ctrlNow && m_lastCtrlState) {
+            // Ctrl released: unlock
+            m_ctrlLocked = false;
+            m_lockedSessionId.clear();
+        }
+
         updateCrosshairLines(pixelPos);
         updateTracers(pixelPos);
-        m_lastShiftState = QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier);
+
+        m_lastShiftState = mods.testFlag(Qt::ShiftModifier);
+        m_lastCtrlState = ctrlNow;
     }
 }
 
@@ -187,6 +235,9 @@ void CrosshairManager::handleMouseLeave()
         // Clear traced IDs
         m_currentlyTracedSessionIds.clear();
         m_lastShiftState = false;
+        m_lastCtrlState = false;
+        m_ctrlLocked = false;
+        m_lockedSessionId.clear();
     }
 }
 
@@ -415,7 +466,29 @@ void CrosshairManager::updateTracers(const QPoint &pixelPos)
 
     const bool shiftHeld = QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier);
 
-    if (shiftHeld && m_multiTraceEnabled) {
+    if (m_ctrlLocked && !m_lockedSessionId.isEmpty()) {
+        // Ctrl-lock: show tracers only for the locked session
+        if (m_model)
+            m_model->setHoveredSessionId(m_lockedSessionId);
+
+        for (auto it = m_graphInfoMap->begin(); it != m_graphInfoMap->end(); ++it) {
+            if (it.value().sessionId != m_lockedSessionId)
+                continue;
+            QCPGraph* g = it.key();
+            if (!g || !g->visible())
+                continue;
+            double yPlot = PlotWidget::interpolateY(g, xPlot);
+            if (std::isnan(yPlot))
+                continue;
+            QCPItemTracer *tr = getOrCreateTracer(g);
+            tr->position->setAxes(m_plot->xAxis, g->valueAxis());
+            tr->position->setCoords(xPlot, yPlot);
+            tr->setPen(it.value().defaultPen);
+            tr->setBrush(it.value().defaultPen.color());
+            tr->setVisible(true);
+            m_currentlyTracedSessionIds.insert(it.value().sessionId);
+        }
+    } else if (shiftHeld && m_multiTraceEnabled) {
         // Shift held: show all tracks (multi-trace mode)
         if (m_model)
             m_model->setHoveredSessionId(QString());

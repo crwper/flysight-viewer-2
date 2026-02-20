@@ -124,9 +124,12 @@ private:
     // Keep track of which sessions have visible tracers
     QSet<QString> m_currentlyTracedSessionIds;
 
-    // Modifier key polling for instant Shift response
+    // Modifier key polling for instant Shift/Ctrl response
     QTimer *m_modifierPollTimer = nullptr;
     bool m_lastShiftState = false;
+    bool m_lastCtrlState = false;
+    bool m_ctrlLocked = false;
+    QString m_lockedSessionId;
 
     // Cached preference values
     QColor m_crosshairColor = Qt::gray;
