@@ -47,7 +47,9 @@ int LegendTableModel::columnCount(const QModelIndex &parent) const
 {
     if (parent.isValid())
         return 0;
-    return (m_mode == PointDataMode) ? 2 : 4;
+    if (m_mode == PointDataMode) return 2;
+    if (m_mode == MeasureMode)   return 6;
+    return 4; // RangeStatsMode
 }
 
 QVariant LegendTableModel::headerData(int section,
@@ -65,6 +67,18 @@ QVariant LegendTableModel::headerData(int section,
         return QVariant();
     }
 
+    if (m_mode == MeasureMode) {
+        switch (section) {
+        case 1: return tr("Delta");
+        case 2: return tr("Value");
+        case 3: return tr("Min");
+        case 4: return tr("Avg");
+        case 5: return tr("Max");
+        default: return QVariant();
+        }
+    }
+
+    // RangeStatsMode
     switch (section) {
     case 1: return tr("Min");
     case 2: return tr("Avg");
@@ -95,6 +109,18 @@ QVariant LegendTableModel::data(const QModelIndex &index, int role) const
             return QVariant();
         }
 
+        if (m_mode == MeasureMode) {
+            switch (c) {
+            case 1: return row.deltaValue.isEmpty() ? QStringLiteral("--") : row.deltaValue;
+            case 2: return row.value.isEmpty()      ? QStringLiteral("--") : row.value;
+            case 3: return row.minValue.isEmpty()    ? QStringLiteral("--") : row.minValue;
+            case 4: return row.avgValue.isEmpty()    ? QStringLiteral("--") : row.avgValue;
+            case 5: return row.maxValue.isEmpty()    ? QStringLiteral("--") : row.maxValue;
+            default: return QVariant();
+            }
+        }
+
+        // RangeStatsMode
         switch (c) {
         case 1: return row.minValue.isEmpty() ? QStringLiteral("--") : row.minValue;
         case 2: return row.avgValue.isEmpty() ? QStringLiteral("--") : row.avgValue;

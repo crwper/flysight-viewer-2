@@ -1,0 +1,408 @@
+#include "measuretool.h"
+#include "../measuremodel.h"
+#include "../plotmodel.h"
+#include "../sessiondata.h"
+#include "../crosshairmanager.h"
+#include "../units/unitconverter.h"
+
+#include <QDateTime>
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <numeric>
+
+namespace FlySight {
+namespace {
+
+constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+
+// ------- helpers (same logic as LegendPresenter) -------
+
+QString seriesDisplayName(const PlotValue &pv)
+{
+    QString displayUnits = pv.plotUnits;
+    if (!pv.measurementType.isEmpty()) {
+        QString converted = UnitConverter::instance().getUnitLabel(pv.measurementType);
+        if (!converted.isEmpty())
+            displayUnits = converted;
+    }
+    if (!displayUnits.isEmpty())
+        return QStringLiteral("%1 (%2)").arg(pv.plotName, displayUnits);
+    return pv.plotName;
+}
+
+double interpolateAtX(const QVector<double> &xData,
+                      const QVector<double> &yData,
+                      double x)
+{
+    if (xData.isEmpty() || yData.isEmpty() || xData.size() != yData.size())
+        return kNaN;
+
+    auto it = std::lower_bound(xData.cbegin(), xData.cend(), x);
+    if (it == xData.cbegin() || it == xData.cend())
+        return kNaN;
+
+    const int idx = static_cast<int>(std::distance(xData.cbegin(), it));
+    const double x1 = xData[idx - 1], y1 = yData[idx - 1];
+    const double x2 = xData[idx],     y2 = yData[idx];
+    if (x2 == x1)
+        return kNaN;
+    return y1 + (y2 - y1) * (x - x1) / (x2 - x1);
+}
+
+double interpolateSessionMeasurement(const SessionData &session,
+                                     const QString &sensorId,
+                                     const QString &xAxisKey,
+                                     const QString &measurementId,
+                                     double x)
+{
+    const QVector<double> xData = session.getMeasurement(sensorId, xAxisKey);
+    const QVector<double> yData = session.getMeasurement(sensorId, measurementId);
+    return interpolateAtX(xData, yData, x);
+}
+
+QString formatValue(double value, const QString &measurementId, const QString &measurementType)
+{
+    if (std::isnan(value))
+        return QStringLiteral("--");
+
+    const QString m = measurementId.toLower();
+    if (m.contains(QStringLiteral("lat")) || m.contains(QStringLiteral("lon")))
+        return QString::number(value, 'f', 6);
+
+    if (!measurementType.isEmpty()) {
+        double displayValue = UnitConverter::instance().convert(value, measurementType);
+        int precision = UnitConverter::instance().getPrecision(measurementType);
+        if (precision < 0) precision = 1;
+        return QString::number(displayValue, 'f', precision);
+    }
+
+    int precision = 1;
+    if (m.contains(QStringLiteral("time")))
+        precision = 3;
+    return QString::number(value, 'f', precision);
+}
+
+// Convert plot-axis X to UTC seconds for header display.
+double plotAxisXToUtcSeconds(double plotAxisX,
+                             const QString &axisKey,
+                             const SessionData &session)
+{
+    if (axisKey == SessionKeys::Time)
+        return plotAxisX;
+
+    if (axisKey == SessionKeys::TimeFromExit) {
+        QVariant v = session.getAttribute(SessionKeys::ExitTime);
+        if (!v.canConvert<QDateTime>())
+            return kNaN;
+        QDateTime dt = v.toDateTime();
+        if (!dt.isValid())
+            return kNaN;
+        return dt.toMSecsSinceEpoch() / 1000.0 + plotAxisX;
+    }
+    return kNaN;
+}
+
+} // anonymous namespace
+
+// -----------------------------------------------------------------------
+
+MeasureTool::MeasureTool(const PlotWidget::PlotContext &ctx)
+    : m_widget(ctx.widget)
+    , m_plot(ctx.plot)
+    , m_graphMap(ctx.graphMap)
+    , m_model(ctx.model)
+    , m_plotModel(ctx.plotModel)
+    , m_measureModel(ctx.measureModel)
+    , m_rect(new QCPItemRect(ctx.plot))
+    , m_lineLeft(new QCPItemLine(ctx.plot))
+    , m_lineRight(new QCPItemLine(ctx.plot))
+{
+    m_rect->setVisible(false);
+    m_rect->setPen(Qt::NoPen);
+    m_rect->setBrush(QColor(0, 120, 215, 40));
+
+    m_lineLeft->setVisible(false);
+    m_lineRight->setVisible(false);
+    applyLinePenFromPreferences();
+}
+
+bool MeasureTool::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() != Qt::LeftButton)
+        return false;
+    if (!m_plot->axisRect()->rect().contains(event->pos()))
+        return false;
+
+    // Lock the focused (hovered) session at click time.
+    m_lockedSessionId = m_model->hoveredSessionId();
+    if (m_lockedSessionId.isEmpty())
+        return false;
+
+    // Lock crosshair focus to the clicked session so cursor doesn't jump.
+    m_widget->lockFocusToSession(m_lockedSessionId);
+
+    m_measuring  = true;
+    m_startPixel = event->pos();
+    m_startX     = m_plot->xAxis->pixelToCoord(event->pos().x());
+
+    // Show the overlay.
+    double yLow  = m_plot->yAxis->range().lower;
+    double yHigh = m_plot->yAxis->range().upper;
+    m_rect->topLeft->setCoords(m_startX, yHigh);
+    m_rect->bottomRight->setCoords(m_startX, yLow);
+    m_rect->setVisible(true);
+
+    applyLinePenFromPreferences();
+    m_lineLeft->start->setCoords(m_startX, yLow);
+    m_lineLeft->end->setCoords(m_startX, yHigh);
+    m_lineLeft->setVisible(true);
+    m_lineRight->start->setCoords(m_startX, yLow);
+    m_lineRight->end->setCoords(m_startX, yHigh);
+    m_lineRight->setVisible(true);
+
+    m_plot->replot(QCustomPlot::rpQueuedReplot);
+
+    return true;
+}
+
+bool MeasureTool::mouseMoveEvent(QMouseEvent *event)
+{
+    if (!m_measuring)
+        return false;
+
+    updateMeasurement(event->pos());
+    return true;
+}
+
+bool MeasureTool::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (!m_measuring || event->button() != Qt::LeftButton)
+        return false;
+
+    m_measuring = false;
+    m_rect->setVisible(false);
+    m_lineLeft->setVisible(false);
+    m_lineRight->setVisible(false);
+    m_plot->replot(QCustomPlot::rpQueuedReplot);
+
+    m_widget->unlockFocus();
+
+    if (m_measureModel)
+        m_measureModel->clear();
+
+    return true;
+}
+
+bool MeasureTool::leaveEvent(QEvent *event)
+{
+    Q_UNUSED(event);
+    // If dragging and mouse leaves the widget, keep the measurement active —
+    // it will update when the mouse re-enters or on release.
+    return false;
+}
+
+void MeasureTool::closeTool()
+{
+    if (m_measuring) {
+        m_measuring = false;
+        m_rect->setVisible(false);
+        m_lineLeft->setVisible(false);
+        m_lineRight->setVisible(false);
+        m_plot->replot(QCustomPlot::rpQueuedReplot);
+        m_widget->unlockFocus();
+    }
+    if (m_measureModel)
+        m_measureModel->clear();
+}
+
+// -----------------------------------------------------------------------
+
+void MeasureTool::updateMeasurement(const QPoint &currentPixel)
+{
+    if (!m_measureModel || !m_plotModel)
+        return;
+
+    const double currentX = m_plot->xAxis->pixelToCoord(currentPixel.x());
+
+    // Update the visual overlay.
+    {
+        double xLeft  = qMin(m_startX, currentX);
+        double xRight = qMax(m_startX, currentX);
+        double yLow   = m_plot->yAxis->range().lower;
+        double yHigh  = m_plot->yAxis->range().upper;
+
+        m_rect->topLeft->setCoords(xLeft, yHigh);
+        m_rect->bottomRight->setCoords(xRight, yLow);
+        m_rect->setVisible(true);
+
+        applyLinePenFromPreferences();
+        m_lineLeft->start->setCoords(xLeft, yLow);
+        m_lineLeft->end->setCoords(xLeft, yHigh);
+        m_lineLeft->setVisible(true);
+        m_lineRight->start->setCoords(xRight, yLow);
+        m_lineRight->end->setCoords(xRight, yHigh);
+        m_lineRight->setVisible(true);
+
+        m_plot->replot(QCustomPlot::rpQueuedReplot);
+    }
+
+    // Find the locked session.
+    const SessionData *session = nullptr;
+    for (const auto &s : m_model->getAllSessions()) {
+        if (s.getAttribute(SessionKeys::SessionId).toString() == m_lockedSessionId) {
+            session = &s;
+            break;
+        }
+    }
+    if (!session) {
+        m_measureModel->clear();
+        return;
+    }
+
+    const QString axisKey = m_widget->getXAxisKey();
+    const QVector<PlotValue> enabledPlots = m_plotModel->enabledPlots();
+
+    if (enabledPlots.isEmpty()) {
+        m_measureModel->clear();
+        return;
+    }
+
+    const double xLo = qMin(m_startX, currentX);
+    const double xHi = qMax(m_startX, currentX);
+
+    // Build rows for each enabled plot value.
+    QVector<MeasureModel::Row> rows;
+    rows.reserve(enabledPlots.size());
+    bool hasData = false;
+
+    for (const PlotValue &pv : enabledPlots) {
+        MeasureModel::Row row;
+        row.name  = seriesDisplayName(pv);
+        row.color = pv.defaultColor;
+
+        const QVector<double> xData = session->getMeasurement(pv.sensorID, axisKey);
+        const QVector<double> yData = session->getMeasurement(pv.sensorID, pv.measurementID);
+
+        const double initialVal = interpolateAtX(xData, yData, m_startX);
+        const double finalVal   = interpolateAtX(xData, yData, currentX);
+
+        if (std::isnan(initialVal) && std::isnan(finalVal)) {
+            row.deltaValue = QStringLiteral("--");
+            row.finalValue = QStringLiteral("--");
+            row.minValue   = QStringLiteral("--");
+            row.avgValue   = QStringLiteral("--");
+            row.maxValue   = QStringLiteral("--");
+            rows.push_back(row);
+            continue;
+        }
+
+        hasData = true;
+
+        // Delta = final - initial
+        if (!std::isnan(initialVal) && !std::isnan(finalVal))
+            row.deltaValue = formatValue(finalVal - initialVal, pv.measurementID, pv.measurementType);
+        else
+            row.deltaValue = QStringLiteral("--");
+
+        row.finalValue = formatValue(finalVal, pv.measurementID, pv.measurementType);
+
+        // Compute min / avg / max across the range [xLo, xHi].
+        // Collect: interpolated endpoints + all interior data points.
+        QVector<double> samples;
+
+        // Interpolated endpoints
+        const double yAtLo = interpolateAtX(xData, yData, xLo);
+        const double yAtHi = interpolateAtX(xData, yData, xHi);
+        if (!std::isnan(yAtLo)) samples.append(yAtLo);
+        if (!std::isnan(yAtHi)) samples.append(yAtHi);
+
+        // Interior data points
+        if (!xData.isEmpty() && xData.size() == yData.size()) {
+            auto itBegin = std::lower_bound(xData.cbegin(), xData.cend(), xLo);
+            auto itEnd   = std::upper_bound(xData.cbegin(), xData.cend(), xHi);
+            for (auto it = itBegin; it != itEnd; ++it) {
+                int i = static_cast<int>(std::distance(xData.cbegin(), it));
+                double y = yData[i];
+                if (!std::isnan(y))
+                    samples.append(y);
+            }
+        }
+
+        if (samples.isEmpty()) {
+            row.minValue = QStringLiteral("--");
+            row.avgValue = QStringLiteral("--");
+            row.maxValue = QStringLiteral("--");
+        } else {
+            double minVal = *std::min_element(samples.begin(), samples.end());
+            double maxVal = *std::max_element(samples.begin(), samples.end());
+            double avgVal = std::accumulate(samples.begin(), samples.end(), 0.0) / samples.size();
+
+            row.minValue = formatValue(minVal, pv.measurementID, pv.measurementType);
+            row.avgValue = formatValue(avgVal, pv.measurementID, pv.measurementType);
+            row.maxValue = formatValue(maxVal, pv.measurementID, pv.measurementType);
+        }
+
+        rows.push_back(row);
+    }
+
+    if (!hasData) {
+        m_measureModel->clear();
+        return;
+    }
+
+    // Header: session description + UTC + coordinates at the *current* cursor position.
+    QString sessionDesc = session->getAttribute(SessionKeys::Description).toString();
+    if (sessionDesc.isEmpty())
+        sessionDesc = m_lockedSessionId;
+
+    QString utcText;
+    QString coordsText;
+
+    const double utcSecs = plotAxisXToUtcSeconds(currentX, axisKey, *session);
+    if (!std::isnan(utcSecs)) {
+        utcText = QStringLiteral("%1 UTC")
+                      .arg(QDateTime::fromMSecsSinceEpoch(
+                               qint64(utcSecs * 1000.0), Qt::UTC)
+                               .toString(QStringLiteral("yy-MM-dd HH:mm:ss.zzz")));
+
+        const double lat = interpolateSessionMeasurement(
+            *session, QStringLiteral("GNSS"), SessionKeys::Time, QStringLiteral("lat"), utcSecs);
+        const double lon = interpolateSessionMeasurement(
+            *session, QStringLiteral("GNSS"), SessionKeys::Time, QStringLiteral("lon"), utcSecs);
+        const double alt = interpolateSessionMeasurement(
+            *session, QStringLiteral("GNSS"), SessionKeys::Time, QStringLiteral("hMSL"), utcSecs);
+
+        if (!std::isnan(lat) && !std::isnan(lon) && !std::isnan(alt)) {
+            double displayAlt = UnitConverter::instance().convert(alt, QStringLiteral("altitude"));
+            QString altUnit   = UnitConverter::instance().getUnitLabel(QStringLiteral("altitude"));
+            int altPrecision  = UnitConverter::instance().getPrecision(QStringLiteral("altitude"));
+            if (altPrecision < 0) altPrecision = 1;
+
+            coordsText = QStringLiteral("(%1 deg, %2 deg, %3 %4)")
+                             .arg(lat, 0, 'f', 7)
+                             .arg(lon, 0, 'f', 7)
+                             .arg(displayAlt, 0, 'f', altPrecision)
+                             .arg(altUnit);
+        }
+    }
+
+    m_measureModel->setData(sessionDesc, utcText, coordsText, rows);
+}
+
+void MeasureTool::applyLinePenFromPreferences()
+{
+    auto &prefs = PreferencesManager::instance();
+    QColor color = prefs.getValue(PreferenceKeys::PlotsCrosshairColor).value<QColor>();
+    if (!color.isValid())
+        color = Qt::gray;
+    double thickness = prefs.getValue(PreferenceKeys::PlotsCrosshairThickness).toDouble();
+    if (thickness <= 0)
+        thickness = 1.0;
+
+    QPen pen(color, thickness, Qt::SolidLine);
+    m_lineLeft->setPen(pen);
+    m_lineRight->setPen(pen);
+}
+
+} // namespace FlySight

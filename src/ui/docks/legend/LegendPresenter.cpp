@@ -4,6 +4,7 @@
 #include "plotmodel.h"
 #include "cursormodel.h"
 #include "plotviewsettingsmodel.h"
+#include "measuremodel.h"
 #include "LegendWidget.h"
 #include "sessiondata.h"
 #include "units/unitconverter.h"
@@ -240,6 +241,7 @@ LegendPresenter::LegendPresenter(SessionModel *sessionModel,
                                  PlotModel *plotModel,
                                  CursorModel *cursorModel,
                                  PlotViewSettingsModel *plotViewSettings,
+                                 MeasureModel *measureModel,
                                  LegendWidget *legendWidget,
                                  QObject *parent)
     : QObject(parent)
@@ -247,6 +249,7 @@ LegendPresenter::LegendPresenter(SessionModel *sessionModel,
     , m_plotModel(plotModel)
     , m_cursorModel(cursorModel)
     , m_plotViewSettings(plotViewSettings)
+    , m_measureModel(measureModel)
     , m_legendWidget(legendWidget)
 {
     m_updateTimer.setSingleShot(true);
@@ -277,6 +280,11 @@ LegendPresenter::LegendPresenter(SessionModel *sessionModel,
                 this, &LegendPresenter::scheduleUpdate);
     }
 
+    if (m_measureModel) {
+        connect(m_measureModel, &MeasureModel::dataChanged,
+                this, &LegendPresenter::scheduleUpdate);
+    }
+
     // Connect to unit system changes for reactive updates
     connect(&UnitConverter::instance(), &UnitConverter::systemChanged,
             this, &LegendPresenter::scheduleUpdate);
@@ -299,6 +307,32 @@ void LegendPresenter::scheduleUpdate()
 void LegendPresenter::recompute()
 {
     if (!m_legendWidget) {
+        return;
+    }
+
+    // If the measure tool is actively dragging, it overrides the legend display.
+    if (m_measureModel && m_measureModel->isActive()) {
+        const auto &mRows = m_measureModel->rows();
+
+        QVector<LegendWidget::Row> widgetRows;
+        widgetRows.reserve(mRows.size());
+        for (const auto &mr : mRows) {
+            LegendWidget::Row wr;
+            wr.name       = mr.name;
+            wr.color      = mr.color;
+            wr.deltaValue = mr.deltaValue;
+            wr.value      = mr.finalValue;
+            wr.minValue   = mr.minValue;
+            wr.avgValue   = mr.avgValue;
+            wr.maxValue   = mr.maxValue;
+            widgetRows.push_back(wr);
+        }
+
+        m_legendWidget->setMode(LegendWidget::MeasureMode);
+        m_legendWidget->setHeader(m_measureModel->sessionDesc(),
+                                  m_measureModel->utcText(),
+                                  m_measureModel->coordsText());
+        m_legendWidget->setRows(widgetRows);
         return;
     }
 

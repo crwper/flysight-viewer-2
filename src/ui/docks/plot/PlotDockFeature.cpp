@@ -23,6 +23,7 @@ PlotDockFeature::PlotDockFeature(const AppContext& ctx, QObject* parent)
                                   ctx.plotViewSettings,
                                   ctx.cursorModel,
                                   ctx.rangeModel,
+                                  ctx.measureModel,
                                   m_dock);
     m_dock->setWidget(m_plotWidget);
 

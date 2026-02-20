@@ -419,6 +419,8 @@ set(PROJECT_SOURCES
   plottool/zoomtool.h
   plottool/setexittool.h     plottool/setexittool.cpp
   plottool/setgroundtool.h   plottool/setgroundtool.cpp
+  plottool/measuretool.h     plottool/measuretool.cpp
+  measuremodel.h
   preferences/preferencesmanager.h
   preferences/preferencekeys.h
   preferences/preferencesdialog.h  preferences/preferencesdialog.cpp

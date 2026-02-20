@@ -22,11 +22,13 @@ class ZoomTool;
 class SelectTool;
 class SetExitTool;
 class SetGroundTool;
+class MeasureTool;
 class PlotViewSettingsModel;
 class PlotModel;
 class MarkerModel;
 class CursorModel;
 class PlotRangeModel;
+class MeasureModel;
 
 struct ReferenceMoment
 {
@@ -45,6 +47,7 @@ public:
     enum class Tool {
         Pan,
         Zoom,
+        Measure,
         Select,
         SetExit,
         SetGround
@@ -55,6 +58,8 @@ public:
         QCustomPlot* plot = nullptr;
         QMap<QCPGraph*, GraphInfo>* graphMap = nullptr;
         SessionModel *model = nullptr;
+        PlotModel *plotModel = nullptr;
+        MeasureModel *measureModel = nullptr;
     };
 
     struct MarkerBubbleMeta
@@ -70,6 +75,7 @@ public:
             PlotViewSettingsModel *viewSettingsModel,
             CursorModel *cursorModel,
             PlotRangeModel *rangeModel,
+            MeasureModel *measureModel,
             QWidget *parent = nullptr);
     ~PlotWidget();
 
@@ -79,6 +85,8 @@ public:
     void setXAxisRange(double min, double max);
     void handleSessionsSelected(const QList<QString> &sessionIds);
     CrosshairManager* crosshairManager() const;
+    void lockFocusToSession(const QString &sessionId);
+    void unlockFocus();
 
     const QVector<QVector<QPointer<QCPAbstractItem>>> &markerItemsByLane() const { return m_markerItemsByLane; }
 
@@ -160,6 +168,7 @@ private:
     std::unique_ptr<SelectTool> m_selectTool;
     std::unique_ptr<SetExitTool> m_setExitTool;
     std::unique_ptr<SetGroundTool> m_setGroundTool;
+    std::unique_ptr<MeasureTool> m_measureTool;
 
     // Plot Management
     QMap<QCPGraph*, GraphInfo> m_graphInfoMap;

@@ -21,17 +21,21 @@ class LegendWidget : public QWidget
 public:
     enum Mode {
         PointDataMode,
-        RangeStatsMode
+        RangeStatsMode,
+        MeasureMode
     };
 
     struct Row {
         QString name;
         QColor  color;
 
-        // PointDataMode
+        // PointDataMode & MeasureMode
         QString value;
 
-        // RangeStatsMode
+        // MeasureMode only
+        QString deltaValue;
+
+        // RangeStatsMode & MeasureMode
         QString minValue;
         QString avgValue;
         QString maxValue;

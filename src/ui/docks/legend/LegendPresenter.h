@@ -11,6 +11,7 @@ class SessionModel;
 class PlotModel;
 class CursorModel;
 class PlotViewSettingsModel;
+class MeasureModel;
 class LegendWidget;
 
 class LegendPresenter : public QObject
@@ -21,6 +22,7 @@ public:
                              PlotModel *plotModel,
                              CursorModel *cursorModel,
                              PlotViewSettingsModel *plotViewSettings,
+                             MeasureModel *measureModel,
                              LegendWidget *legendWidget,
                              QObject *parent = nullptr);
 
@@ -33,6 +35,7 @@ private:
     QPointer<PlotModel> m_plotModel;
     QPointer<CursorModel> m_cursorModel;
     QPointer<PlotViewSettingsModel> m_plotViewSettings;
+    QPointer<MeasureModel> m_measureModel;
     QPointer<LegendWidget> m_legendWidget;
 
     QTimer m_updateTimer;

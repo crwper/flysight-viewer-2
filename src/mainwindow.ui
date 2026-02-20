@@ -56,6 +56,7 @@
     </property>
     <addaction name="action_Pan"/>
     <addaction name="action_Zoom"/>
+    <addaction name="action_Measure"/>
     <addaction name="separator"/>
     <addaction name="action_Select"/>
     <addaction name="action_SetExit"/>
@@ -188,6 +189,17 @@
    </property>
    <property name="shortcut">
     <string>N</string>
+   </property>
+  </action>
+  <action name="action_Measure">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>&amp;Measure</string>
+   </property>
+   <property name="shortcut">
+    <string>M</string>
    </property>
   </action>
  </widget>

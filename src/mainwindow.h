@@ -24,6 +24,7 @@ class PlotModel;
 class MarkerModel;
 class CursorModel;
 class PlotRangeModel;
+class MeasureModel;
 
 class MainWindow : public KDDockWidgets::QtWidgets::MainWindow
 {
@@ -57,6 +58,7 @@ private slots:
     void on_action_ImportVideo_triggered();
     void on_action_Pan_triggered();
     void on_action_Zoom_triggered();
+    void on_action_Measure_triggered();
     void on_action_Select_triggered();
     void on_action_SetExit_triggered();
     void on_action_SetGround_triggered();
@@ -115,6 +117,9 @@ private:
 
     // Range model for synchronizing plot x-axis range with other docks
     PlotRangeModel *m_rangeModel = nullptr;
+
+    // Measure model for measure tool data
+    MeasureModel *m_measureModel = nullptr;
 
     // Helper functions for plot values
     static void registerBuiltInPlots();

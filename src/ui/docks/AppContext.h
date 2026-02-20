@@ -11,6 +11,7 @@ class MarkerModel;
 class CursorModel;
 class PlotRangeModel;
 class PlotViewSettingsModel;
+class MeasureModel;
 
 /**
  * Bundles all shared services that dock features may need.
@@ -24,6 +25,7 @@ struct AppContext {
     CursorModel* cursorModel = nullptr;
     PlotRangeModel* rangeModel = nullptr;
     PlotViewSettingsModel* plotViewSettings = nullptr;
+    MeasureModel* measureModel = nullptr;
     QSettings* settings = nullptr;
 };
 

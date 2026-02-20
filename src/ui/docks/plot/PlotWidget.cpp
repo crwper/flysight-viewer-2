@@ -21,6 +21,7 @@
 #include "plottool/selecttool.h"
 #include "plottool/setexittool.h"
 #include "plottool/setgroundtool.h"
+#include "plottool/measuretool.h"
 
 namespace {
 
@@ -70,6 +71,7 @@ PlotWidget::PlotWidget(SessionModel *model,
                        PlotViewSettingsModel *viewSettingsModel,
                        CursorModel *cursorModel,
                        PlotRangeModel *rangeModel,
+                       MeasureModel *measureModel,
                        QWidget *parent)
     : QWidget(parent)
     , customPlot(new QCustomPlot(this))
@@ -104,10 +106,13 @@ PlotWidget::PlotWidget(SessionModel *model,
     ctx.plot = customPlot;
     ctx.graphMap = &m_graphInfoMap;
     ctx.model = model;
+    ctx.plotModel = plotModel;
+    ctx.measureModel = measureModel;
 
     // instantiate tools for interacting with the plot
     m_panTool = std::make_unique<PanTool>(ctx);
     m_zoomTool = std::make_unique<ZoomTool>(ctx);
+    m_measureTool = std::make_unique<MeasureTool>(ctx);
     m_selectTool = std::make_unique<SelectTool>(ctx);
     m_setExitTool = std::make_unique<SetExitTool>(ctx);
     m_setGroundTool = std::make_unique<SetGroundTool>(ctx);
@@ -203,6 +208,9 @@ void PlotWidget::setCurrentTool(Tool tool)
     case Tool::Zoom:
         m_currentTool = m_zoomTool.get();
         break;
+    case Tool::Measure:
+        m_currentTool = m_measureTool.get();
+        break;
     case Tool::Select:
         m_currentTool = m_selectTool.get();
         break;
@@ -277,6 +285,18 @@ void PlotWidget::handleSessionsSelected(const QList<QString> &sessionIds)
 CrosshairManager* PlotWidget::crosshairManager() const
 {
     return m_crosshairManager.get();
+}
+
+void PlotWidget::lockFocusToSession(const QString &sessionId)
+{
+    if (m_crosshairManager)
+        m_crosshairManager->setToolFocusLock(sessionId);
+}
+
+void PlotWidget::unlockFocus()
+{
+    if (m_crosshairManager)
+        m_crosshairManager->clearToolFocusLock();
 }
 
 QString PlotWidget::getXAxisKey() const

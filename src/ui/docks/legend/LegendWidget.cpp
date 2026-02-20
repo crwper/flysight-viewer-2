@@ -12,9 +12,11 @@ namespace FlySight {
 
 static LegendTableModel::Mode toModelMode(LegendWidget::Mode m)
 {
-    return (m == LegendWidget::PointDataMode)
-    ? LegendTableModel::PointDataMode
-    : LegendTableModel::RangeStatsMode;
+    switch (m) {
+    case LegendWidget::PointDataMode:  return LegendTableModel::PointDataMode;
+    case LegendWidget::MeasureMode:    return LegendTableModel::MeasureMode;
+    default:                           return LegendTableModel::RangeStatsMode;
+    }
 }
 
 LegendWidget::LegendWidget(QWidget *parent)
@@ -91,6 +93,12 @@ void LegendWidget::configureTableForMode(Mode mode)
 
     if (mode == PointDataMode) {
         hh->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    } else if (mode == MeasureMode) {
+        hh->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+        hh->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+        hh->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+        hh->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+        hh->setSectionResizeMode(5, QHeaderView::ResizeToContents);
     } else {
         hh->setSectionResizeMode(1, QHeaderView::ResizeToContents);
         hh->setSectionResizeMode(2, QHeaderView::ResizeToContents);
@@ -100,7 +108,7 @@ void LegendWidget::configureTableForMode(Mode mode)
 
 bool LegendWidget::headerAllowed() const
 {
-    return m_mode == PointDataMode;
+    return m_mode == PointDataMode || m_mode == MeasureMode;
 }
 
 void LegendWidget::updateHeaderVisibility() const
@@ -175,12 +183,13 @@ void LegendWidget::setRows(const QVector<Row> &rows)
 
     for (const auto &r : rows) {
         LegendTableModel::Row mr;
-        mr.name     = r.name;
-        mr.color    = r.color;
-        mr.value    = r.value;
-        mr.minValue = r.minValue;
-        mr.avgValue = r.avgValue;
-        mr.maxValue = r.maxValue;
+        mr.name       = r.name;
+        mr.color      = r.color;
+        mr.value      = r.value;
+        mr.deltaValue = r.deltaValue;
+        mr.minValue   = r.minValue;
+        mr.avgValue   = r.avgValue;
+        mr.maxValue   = r.maxValue;
         modelRows.push_back(std::move(mr));
     }
 

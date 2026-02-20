@@ -24,6 +24,7 @@ LegendDockFeature::LegendDockFeature(const AppContext& ctx, QObject* parent)
                                       ctx.plotModel,
                                       ctx.cursorModel,
                                       ctx.plotViewSettings,
+                                      ctx.measureModel,
                                       m_legendWidget,
                                       this);
 }

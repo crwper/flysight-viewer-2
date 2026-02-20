@@ -64,6 +64,13 @@ public:
     //! Returns the set of session IDs currently marked by a visible tracer.
     QSet<QString> getTracedSessionIds() const;
 
+    //! Lock focus to a specific session, driven by a tool (e.g., MeasureTool).
+    //! Takes priority over Ctrl-lock. Call clearToolFocusLock() to release.
+    void setToolFocusLock(const QString &sessionId);
+
+    //! Release tool-driven focus lock.
+    void clearToolFocusLock();
+
 signals:
     //! Emitted whenever the set of traced sessions changes (including from modifier key changes).
     void tracedSessionsChanged(const QSet<QString> &sessionIds);
@@ -130,6 +137,10 @@ private:
     bool m_lastCtrlState = false;
     bool m_ctrlLocked = false;
     QString m_lockedSessionId;
+
+    // Tool-driven focus lock (e.g., MeasureTool), takes priority over Ctrl-lock
+    bool m_toolFocusLocked = false;
+    QString m_toolFocusLockedSessionId;
 
     // Cached preference values
     QColor m_crosshairColor = Qt::gray;

@@ -71,6 +71,8 @@ void CrosshairManager::setEnabled(bool enabled)
         m_currentlyTracedSessionIds.clear();
         m_ctrlLocked = false;
         m_lockedSessionId.clear();
+        m_toolFocusLocked = false;
+        m_toolFocusLockedSessionId.clear();
         m_lastCtrlState = false;
     } else {
         // if enabling, we won't do anything until the next mouseMove
@@ -365,6 +367,18 @@ void CrosshairManager::setExternalCursorMulti(const QHash<QString, double> &xByS
     m_plot->replot(QCustomPlot::rpQueuedReplot);
 }
 
+void CrosshairManager::setToolFocusLock(const QString &sessionId)
+{
+    m_toolFocusLocked = true;
+    m_toolFocusLockedSessionId = sessionId;
+}
+
+void CrosshairManager::clearToolFocusLock()
+{
+    m_toolFocusLocked = false;
+    m_toolFocusLockedSessionId.clear();
+}
+
 void CrosshairManager::clearExternalCursor()
 {
     if (!m_plot)
@@ -463,13 +477,20 @@ void CrosshairManager::updateTracers(const QPoint &pixelPos)
 
     const bool shiftHeld = QGuiApplication::queryKeyboardModifiers().testFlag(Qt::ShiftModifier);
 
-    if (m_ctrlLocked && !m_lockedSessionId.isEmpty()) {
-        // Ctrl-lock: show tracers only for the locked session
+    // Determine effective focus lock: tool lock takes priority over Ctrl lock
+    const bool focusLocked = (m_toolFocusLocked && !m_toolFocusLockedSessionId.isEmpty())
+                          || (m_ctrlLocked && !m_lockedSessionId.isEmpty());
+    const QString &focusLockedId = (m_toolFocusLocked && !m_toolFocusLockedSessionId.isEmpty())
+                                 ? m_toolFocusLockedSessionId
+                                 : m_lockedSessionId;
+
+    if (focusLocked) {
+        // Focus-lock: show tracers only for the locked session
         if (m_model)
-            m_model->setHoveredSessionId(m_lockedSessionId);
+            m_model->setHoveredSessionId(focusLockedId);
 
         for (auto it = m_graphInfoMap->begin(); it != m_graphInfoMap->end(); ++it) {
-            if (it.value().sessionId != m_lockedSessionId)
+            if (it.value().sessionId != focusLockedId)
                 continue;
             QCPGraph* g = it.key();
             if (!g || !g->visible())

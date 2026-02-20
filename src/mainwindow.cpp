@@ -35,6 +35,7 @@
 #include "markerregistry.h"
 #include "cursormodel.h"
 #include "plotrangemodel.h"
+#include "measuremodel.h"
 #include "units/unitconverter.h"
 #include "calculations/calculatedvalueregistry.h"
 
@@ -86,6 +87,9 @@ MainWindow::MainWindow(QWidget *parent)
     // Create range model for synchronizing plot x-axis range with other docks
     m_rangeModel = new PlotRangeModel(this);
 
+    // Create measure model for measure tool data
+    m_measureModel = new MeasureModel(this);
+
     // Initialize cursor entries
     if (m_cursorModel) {
         // Mouse
@@ -125,6 +129,7 @@ MainWindow::MainWindow(QWidget *parent)
     ctx.cursorModel = m_cursorModel;
     ctx.rangeModel = m_rangeModel;
     ctx.plotViewSettings = m_plotViewSettingsModel;
+    ctx.measureModel = m_measureModel;
     ctx.settings = m_settings;
 
     m_features = DockRegistry::createAll(ctx, this);
@@ -514,6 +519,15 @@ void MainWindow::on_action_Zoom_triggered()
     }
 }
 
+void MainWindow::on_action_Measure_triggered()
+{
+    auto* plotFeature = findFeature<PlotDockFeature>();
+    if (plotFeature && plotFeature->plotWidget()) {
+        plotFeature->plotWidget()->setCurrentTool(PlotWidget::Tool::Measure);
+        qDebug() << "Switched to Measure tool";
+    }
+}
+
 void MainWindow::on_action_Select_triggered()
 {
     auto* plotFeature = findFeature<PlotDockFeature>();
@@ -652,6 +666,9 @@ void MainWindow::onPlotWidgetToolChanged(PlotWidget::Tool t)
         break;
     case PlotWidget::Tool::Zoom:
         ui->action_Zoom->setChecked(true);
+        break;
+    case PlotWidget::Tool::Measure:
+        ui->action_Measure->setChecked(true);
         break;
     case PlotWidget::Tool::Select:
         ui->action_Select->setChecked(true);
@@ -1027,6 +1044,7 @@ void MainWindow::setupPlotTools()
     // Add tool actions to the group
     toolActionGroup->addAction(ui->action_Pan);
     toolActionGroup->addAction(ui->action_Zoom);
+    toolActionGroup->addAction(ui->action_Measure);
     toolActionGroup->addAction(ui->action_Select);
     toolActionGroup->addAction(ui->action_SetExit);
     toolActionGroup->addAction(ui->action_SetGround);
