@@ -235,9 +235,6 @@ void CrosshairManager::handleMouseLeave()
         // Clear traced IDs
         m_currentlyTracedSessionIds.clear();
         m_lastShiftState = false;
-        m_lastCtrlState = false;
-        m_ctrlLocked = false;
-        m_lockedSessionId.clear();
     }
 }
 
