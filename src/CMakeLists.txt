@@ -611,13 +611,6 @@ install(FILES "${CMAKE_CURRENT_LIST_DIR}/../python_plugins/flysight_plugin_sdk.p
   DESTINATION "${_plugins_dest}"
 )
 
-# Install bundled Python plugins
-install(FILES
-  "${CMAKE_CURRENT_LIST_DIR}/../python_plugins/pitot_tube.py"
-  "${CMAKE_CURRENT_LIST_DIR}/../python_plugins/allan_variance.py"
-  DESTINATION "${_plugins_dest}"
-)
-
 
 # ─────────────────────────────── Qt deployment (Qt 6.3+)
 # On all platforms with Qt 6, use the built-in deployment API to bundle Qt libraries.
