@@ -3,6 +3,7 @@
 
 #include <QAbstractItemModel>
 #include <QHash>
+#include <QSettings>
 #include <QVector>
 #include <memory>
 #include <vector>
@@ -24,6 +25,8 @@ public:
     };
 
     explicit MarkerModel(QObject *parent = nullptr);
+
+    void setSettings(QSettings *settings);
 
     // Public API (minimum)
     void setMarkers(const QVector<MarkerDefinition>& defs);
@@ -74,6 +77,7 @@ private:
 
     static QString makeMarkerId(const QString& attributeKey);
     static QString makeMarkerId(const MarkerDefinition& def);
+    static QString settingsKey(const QString& attributeKey);
 
     Node* nodeFromIndex(const QModelIndex& index) const;
     CategoryNode* categoryFromIndex(const QModelIndex& index) const;
@@ -81,6 +85,7 @@ private:
 
     QModelIndex indexForMarker(const MarkerNode* node) const;
 
+    QSettings *m_settings = nullptr;
     std::vector<std::unique_ptr<CategoryNode>> m_categories;
     QHash<QString, MarkerNode*> m_markersByKey;
 };

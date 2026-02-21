@@ -59,6 +59,10 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     manualInit();
 
+    // Give models access to QSettings for persisting enabled state
+    plotModel->setSettings(m_settings);
+    markerModel->setSettings(m_settings);
+
     // Register built-in plots and markers BEFORE initializing preferences
     // so that we can dynamically register per-plot and per-marker preferences
     registerBuiltInPlots();

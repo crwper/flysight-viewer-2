@@ -11,6 +11,11 @@ MarkerModel::MarkerModel(QObject *parent)
 {
 }
 
+void MarkerModel::setSettings(QSettings *settings)
+{
+    m_settings = settings;
+}
+
 QString MarkerModel::makeMarkerId(const QString& attributeKey)
 {
     return attributeKey;
@@ -19,6 +24,11 @@ QString MarkerModel::makeMarkerId(const QString& attributeKey)
 QString MarkerModel::makeMarkerId(const MarkerDefinition& def)
 {
     return makeMarkerId(def.attributeKey);
+}
+
+QString MarkerModel::settingsKey(const QString& attributeKey)
+{
+    return QStringLiteral("state/markers/") + attributeKey;
 }
 
 MarkerModel::Node* MarkerModel::nodeFromIndex(const QModelIndex& index) const
@@ -91,12 +101,13 @@ void MarkerModel::setMarkers(const QVector<MarkerDefinition>& defs)
         auto markerNode = std::make_unique<MarkerNode>();
         markerNode->def = def;
 
-        // Default enabled behavior:
-        // - ExitTime enabled by default on first load
-        // - all others default disabled
+        // Restore enabled state: in-memory hash (within-session reset),
+        // then QSettings (cross-session), then default (ExitTime on, rest off).
+        const bool defaultEnabled = (key == SessionKeys::ExitTime);
         markerNode->enabled = enabledByKey.contains(key)
             ? enabledByKey.value(key)
-            : (key == SessionKeys::ExitTime);
+            : (m_settings ? m_settings->value(settingsKey(key), defaultEnabled).toBool()
+                          : defaultEnabled);
 
         markerNode->category = category;
         markerNode->categoryRow = category->row;
@@ -137,6 +148,9 @@ void MarkerModel::setMarkerEnabled(const QString& attributeKey, bool enabled)
     }
 
     node->enabled = enabled;
+
+    if (m_settings)
+        m_settings->setValue(settingsKey(key), enabled);
 
     const QModelIndex idx = indexForMarker(node);
     if (idx.isValid()) {
@@ -303,6 +317,10 @@ bool MarkerModel::setData(const QModelIndex& index, const QVariant& value, int r
     }
 
     marker->enabled = enabled;
+
+    if (m_settings)
+        m_settings->setValue(settingsKey(makeMarkerId(marker->def)), enabled);
+
     emit dataChanged(index, index, {Qt::CheckStateRole});
     return true;
 }

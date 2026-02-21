@@ -9,6 +9,11 @@ PlotModel::PlotModel(QObject *parent)
 {
 }
 
+void PlotModel::setSettings(QSettings *settings)
+{
+    m_settings = settings;
+}
+
 QString PlotModel::makePlotId(const QString& sensorId, const QString& measurementId)
 {
     return sensorId + "/" + measurementId;
@@ -17,6 +22,11 @@ QString PlotModel::makePlotId(const QString& sensorId, const QString& measuremen
 QString PlotModel::makePlotId(const PlotValue& pv)
 {
     return makePlotId(pv.sensorID, pv.measurementID);
+}
+
+QString PlotModel::settingsKey(const QString& plotId)
+{
+    return QStringLiteral("state/plots/") + plotId;
 }
 
 PlotModel::Node* PlotModel::nodeFromIndex(const QModelIndex& index) const
@@ -88,7 +98,9 @@ void PlotModel::setPlots(const QVector<PlotValue>& plots)
 
         auto plotNode = std::make_unique<PlotNode>();
         plotNode->value = pv;
-        plotNode->enabled = enabledById.value(id, false);
+        plotNode->enabled = enabledById.contains(id)
+            ? enabledById.value(id)
+            : (m_settings ? m_settings->value(settingsKey(id), false).toBool() : false);
 
         plotNode->category = category;
         plotNode->categoryRow = category->row;
@@ -142,6 +154,9 @@ void PlotModel::setPlotEnabled(const QString& sensorId, const QString& measureme
     }
 
     node->enabled = enabled;
+
+    if (m_settings)
+        m_settings->setValue(settingsKey(id), enabled);
 
     const QModelIndex idx = indexForPlot(node);
     if (idx.isValid()) {
@@ -303,6 +318,10 @@ bool PlotModel::setData(const QModelIndex& index, const QVariant& value, int rol
     }
 
     plot->enabled = enabled;
+
+    if (m_settings)
+        m_settings->setValue(settingsKey(makePlotId(plot->value)), enabled);
+
     emit dataChanged(index, index, {Qt::CheckStateRole});
     return true;
 }

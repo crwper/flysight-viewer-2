@@ -3,6 +3,7 @@
 
 #include <QAbstractItemModel>
 #include <QHash>
+#include <QSettings>
 #include <QVector>
 #include <memory>
 #include <vector>
@@ -30,6 +31,8 @@ public:
     };
 
     explicit PlotModel(QObject *parent = nullptr);
+
+    void setSettings(QSettings *settings);
 
     // Public API (minimum)
     void setPlots(const QVector<PlotValue>& plots);
@@ -80,6 +83,7 @@ private:
 
     static QString makePlotId(const QString& sensorId, const QString& measurementId);
     static QString makePlotId(const PlotValue& pv);
+    static QString settingsKey(const QString& plotId);
 
     Node* nodeFromIndex(const QModelIndex& index) const;
     CategoryNode* categoryFromIndex(const QModelIndex& index) const;
@@ -87,6 +91,7 @@ private:
 
     QModelIndex indexForPlot(const PlotNode* node) const;
 
+    QSettings *m_settings = nullptr;
     std::vector<std::unique_ptr<CategoryNode>> m_categories;
     QHash<QString, PlotNode*> m_plotsById;
 };
