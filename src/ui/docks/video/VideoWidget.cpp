@@ -278,6 +278,14 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
     updateSyncLabels();
 }
 
+VideoWidget::~VideoWidget()
+{
+    cancelPendingSeek();
+    if (m_player) {
+        m_player->stop();
+    }
+}
+
 void VideoWidget::loadVideo(const QString &filePath)
 {
     // Stop any previous playback and clear sync anchor state (v1: single video at a time).

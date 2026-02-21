@@ -33,6 +33,7 @@ public:
     explicit VideoWidget(SessionModel *sessionModel,
                          CursorModel *cursorModel,
                          QWidget *parent = nullptr);
+    ~VideoWidget() override;
 
     void loadVideo(const QString &filePath);
     QString videoFilePath() const { return m_filePath; }
