@@ -63,6 +63,7 @@ private slots:
 #endif
 
     void onMarkExitClicked();
+    void onExitTimeChanged(const QString &sessionId, double deltaSeconds);
     void onSelectedSessionChanged(int index);
     void rebuildSessionSelector();
 
@@ -80,6 +81,7 @@ private:
     void cancelPendingSeek();
 
     // Drives CursorModel's "video" cursor while the video is synced.
+    std::optional<double> syncedExitUtcSeconds() const;
     void updateVideoCursorSyncState();
     void updateVideoCursorFromPositionMs(qint64 positionMs);
 
@@ -126,7 +128,6 @@ private:
     QTimer m_seekWatchdog;
 
     std::optional<double> m_anchorVideoSeconds;
-    std::optional<double> m_anchorUtcSeconds;
 
     // Wheel scrubbing state
     QElapsedTimer m_wheelTimer;

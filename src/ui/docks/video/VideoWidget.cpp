@@ -224,6 +224,8 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
     if (m_sessionModel) {
         connect(m_sessionModel, &SessionModel::modelChanged,
                 this, &VideoWidget::rebuildSessionSelector);
+        connect(m_sessionModel, &SessionModel::exitTimeChanged,
+                this, &VideoWidget::onExitTimeChanged);
     }
 
     rebuildSessionSelector();
@@ -280,7 +282,6 @@ void VideoWidget::loadVideo(const QString &filePath)
 {
     // Stop any previous playback and clear sync anchor state (v1: single video at a time).
     m_anchorVideoSeconds.reset();
-    m_anchorUtcSeconds.reset();
     updateSyncLabels();
 
     // Reset any in-flight seek gating so it can't affect the next media.
@@ -603,45 +604,16 @@ void VideoWidget::onErrorOccurred(QMediaPlayer::Error error)
 
 void VideoWidget::onMarkExitClicked()
 {
-    if (!m_player || !m_sessionModel)
+    if (!m_player)
         return;
 
     if (m_filePath.isEmpty())
         return;
 
-    const QString sessionId = selectedSessionId();
-    if (sessionId.isEmpty())
-        return;
-
-    const int row = m_sessionModel->getSessionRow(sessionId);
-    if (row < 0)
-        return;
-
-    SessionData &session = m_sessionModel->sessionRef(row);
-
-    const QVariant exitVar = session.getAttribute(SessionKeys::ExitTime);
-    if (!exitVar.canConvert<QDateTime>()) {
-        if (m_statusLabel) {
-            m_statusLabel->setText(tr("Video: %1\nCannot mark exit: selected session has no Exit Time.")
-                                   .arg(QDir::toNativeSeparators(m_filePath)));
-        }
-        return;
-    }
-
-    const QDateTime exitDt = exitVar.toDateTime();
-    if (!exitDt.isValid()) {
-        if (m_statusLabel) {
-            m_statusLabel->setText(tr("Video: %1\nCannot mark exit: selected session Exit Time is invalid.")
-                                   .arg(QDir::toNativeSeparators(m_filePath)));
-        }
-        return;
-    }
-
-    const double exitUtcSeconds = exitDt.toMSecsSinceEpoch() / 1000.0;
-
+    // Record only the video frame position.
+    // The session and exit time are resolved dynamically from the combo selection.
     const qint64 posMs = m_player->position();
     m_anchorVideoSeconds = static_cast<double>(posMs) / 1000.0;
-    m_anchorUtcSeconds = exitUtcSeconds;
 
     updateSyncLabels();
 }
@@ -667,7 +639,7 @@ void VideoWidget::rebuildSessionSelector()
         m_sessionCombo->addItem(tr("No sessions"), QString());
         m_sessionCombo->setEnabled(false);
         updateMarkExitEnabled();
-        updateVideoCursorSyncState();
+        updateSyncLabels();
         return;
     }
 
@@ -704,7 +676,7 @@ void VideoWidget::rebuildSessionSelector()
     }
 
     updateMarkExitEnabled();
-    updateVideoCursorSyncState();
+    updateSyncLabels();
 }
 
 QString VideoWidget::selectedSessionId() const
@@ -722,9 +694,8 @@ void VideoWidget::updateMarkExitEnabled()
 
     const bool videoLoaded = !m_filePath.isEmpty();
     const bool playbackEnabled = (m_positionSlider && m_positionSlider->isEnabled());
-    const bool hasSession = !selectedSessionId().isEmpty();
 
-    m_markExitButton->setEnabled(videoLoaded && playbackEnabled && hasSession);
+    m_markExitButton->setEnabled(videoLoaded && playbackEnabled);
 }
 
 QString VideoWidget::formatTimeMs(qint64 ms)
@@ -783,22 +754,29 @@ void VideoWidget::updateSyncLabels()
     if (!m_frameAnchorLabel || !m_utcAnchorLabel || !m_syncStatusLabel)
         return;
 
-    const QString frameText = m_anchorVideoSeconds.has_value()
-        ? formatTimeMs(static_cast<qint64>(*m_anchorVideoSeconds * 1000.0))
-        : tr("—");
+    const bool hasVideoAnchor = m_anchorVideoSeconds.has_value();
+    const auto exitUtc        = syncedExitUtcSeconds();
 
-    const QString utcText = m_anchorUtcSeconds.has_value()
+    const QString frameText = hasVideoAnchor
+        ? formatTimeMs(static_cast<qint64>(*m_anchorVideoSeconds * 1000.0))
+        : tr("\u2014");
+
+    const QString utcText = exitUtc.has_value()
         ? QDateTime::fromMSecsSinceEpoch(
-              qint64((*m_anchorUtcSeconds) * 1000.0),
+              qint64(*exitUtc * 1000.0),
               QTimeZone::UTC
           ).toString(QStringLiteral("yy-MM-dd HH:mm:ss.zzz"))
-        : tr("—");
+        : tr("\u2014");
 
     m_frameAnchorLabel->setText(tr("Frame: %1").arg(frameText));
     m_utcAnchorLabel->setText(tr("UTC: %1").arg(utcText));
 
-    const bool synced = m_anchorVideoSeconds.has_value() && m_anchorUtcSeconds.has_value();
-    m_syncStatusLabel->setText(synced ? tr("Synced") : tr("Not synced"));
+    if (hasVideoAnchor && exitUtc.has_value())
+        m_syncStatusLabel->setText(tr("Synced"));
+    else if (hasVideoAnchor)
+        m_syncStatusLabel->setText(tr("Waiting for exit time"));
+    else
+        m_syncStatusLabel->setText(tr("Not synced"));
 
     updateVideoCursorSyncState();
 }
@@ -814,12 +792,44 @@ void VideoWidget::setControlsEnabled(bool enabled)
     updateMarkExitEnabled();
 }
 
+std::optional<double> VideoWidget::syncedExitUtcSeconds() const
+{
+    const QString sessionId = selectedSessionId();
+    if (sessionId.isEmpty() || !m_sessionModel)
+        return std::nullopt;
+
+    const int row = m_sessionModel->getSessionRow(sessionId);
+    if (row < 0)
+        return std::nullopt;
+
+    SessionData &session = m_sessionModel->sessionRef(row);
+    const QVariant v = session.getAttribute(SessionKeys::ExitTime);
+    if (!v.canConvert<QDateTime>())
+        return std::nullopt;
+
+    const QDateTime dt = v.toDateTime();
+    if (!dt.isValid())
+        return std::nullopt;
+
+    return dt.toMSecsSinceEpoch() / 1000.0;
+}
+
+void VideoWidget::onExitTimeChanged(const QString &sessionId, double deltaSeconds)
+{
+    Q_UNUSED(deltaSeconds);
+
+    if (sessionId != selectedSessionId())
+        return;
+
+    updateSyncLabels();
+}
+
 void VideoWidget::updateVideoCursorSyncState()
 {
     if (!m_cursorModel)
         return;
 
-    const bool synced = m_anchorVideoSeconds.has_value() && m_anchorUtcSeconds.has_value();
+    const bool synced = m_anchorVideoSeconds.has_value() && syncedExitUtcSeconds().has_value();
     if (!synced) {
         m_cursorModel->setCursorActive(QStringLiteral("video"), false);
         return;
@@ -843,14 +853,15 @@ void VideoWidget::updateVideoCursorSyncState()
 
 void VideoWidget::updateVideoCursorFromPositionMs(qint64 positionMs)
 {
-    if (!m_cursorModel)
+    if (!m_cursorModel || !m_anchorVideoSeconds.has_value())
         return;
 
-    if (!m_anchorVideoSeconds.has_value() || !m_anchorUtcSeconds.has_value())
+    const auto exitUtc = syncedExitUtcSeconds();
+    if (!exitUtc.has_value())
         return;
 
     const double videoNowSeconds = static_cast<double>(positionMs) / 1000.0;
-    const double utcNow = (*m_anchorUtcSeconds) + (videoNowSeconds - (*m_anchorVideoSeconds));
+    const double utcNow = *exitUtc + (videoNowSeconds - *m_anchorVideoSeconds);
 
     m_cursorModel->setCursorPositionUtc(QStringLiteral("video"), utcNow);
 }
