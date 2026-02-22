@@ -33,7 +33,7 @@ concurrency:
 
 env:
   # Qt version to use across all platforms
-  QT_VERSION: '6.7.3'
+  QT_VERSION: '6.9.3'
   # Boost version for Windows (match existing local development setup)
   BOOST_VERSION: '1.87.0'
   BOOST_VERSION_UNDERSCORE: '1_87_0'
@@ -977,7 +977,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: FlySightViewer-${{ matrix.platform }}-${{ matrix.arch }}
-          path: artifacts/FlySightViewer/
+          path: artifacts/
           retention-days: 30
           if-no-files-found: warn
 
