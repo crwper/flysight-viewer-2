@@ -442,7 +442,7 @@ jobs:
           echo ""
           echo "=== Checking critical DLLs ==="
           MISSING=0
-          for dll in kddockwidgets-qt6.dll vcruntime140.dll msvcp140.dll; do
+          for dll in vcruntime140.dll msvcp140.dll; do
             if [ -f "build/install/$dll" ]; then
               echo "OK: $dll"
             else
@@ -450,6 +450,13 @@ jobs:
               MISSING=1
             fi
           done
+          # KDDockWidgets DLL name includes version suffix (e.g. kddockwidgets-qt62.dll)
+          if ls build/install/kddockwidgets-qt6*.dll 1>/dev/null 2>&1; then
+            echo "OK: KDDockWidgets DLL found"
+          else
+            echo "ERROR: KDDockWidgets DLL MISSING"
+            MISSING=1
+          fi
           # GeographicLib DLL name varies by version
           if ls build/install/Geographic*.dll 1>/dev/null 2>&1; then
             echo "OK: GeographicLib DLL found"
