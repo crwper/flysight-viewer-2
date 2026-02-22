@@ -88,26 +88,34 @@ set(KDDW_BIN_DIR "${KDDW_ROOT}/bin")
 if(EXISTS "${KDDW_BIN_DIR}")
     message(STATUS "KDDockWidgets bin directory: ${KDDW_BIN_DIR}")
 
-    # Release DLL
-    set(KDDW_RELEASE_DLL "${KDDW_BIN_DIR}/kddockwidgets-qt6.dll")
-    if(EXISTS "${KDDW_RELEASE_DLL}")
-        install(FILES "${KDDW_RELEASE_DLL}"
-            DESTINATION "."
-        )
-        message(STATUS "  [Release] ${KDDW_RELEASE_DLL}")
-    endif()
+    # Find KDDockWidgets DLLs using glob patterns to handle versioned names
+    # (e.g., kddockwidgets-qt62.dll where 2 is the library major version)
+    file(GLOB KDDW_ALL_DLLS "${KDDW_BIN_DIR}/kddockwidgets-qt6*.dll")
 
-    # Debug DLL
-    set(KDDW_DEBUG_DLL "${KDDW_BIN_DIR}/kddockwidgets-qt6d.dll")
-    if(EXISTS "${KDDW_DEBUG_DLL}")
-        install(FILES "${KDDW_DEBUG_DLL}"
-            DESTINATION "."
-        )
-        message(STATUS "  [Debug] ${KDDW_DEBUG_DLL}")
-    endif()
+    # Separate debug and release DLLs
+    set(KDDW_RELEASE_DLLS)
+    set(KDDW_DEBUG_DLLS)
+    foreach(dll ${KDDW_ALL_DLLS})
+        get_filename_component(dll_name "${dll}" NAME)
+        if(dll_name MATCHES "kddockwidgets-qt6[^.]*d\\.dll$")
+            list(APPEND KDDW_DEBUG_DLLS "${dll}")
+        else()
+            list(APPEND KDDW_RELEASE_DLLS "${dll}")
+        endif()
+    endforeach()
+
+    foreach(dll ${KDDW_RELEASE_DLLS})
+        install(FILES "${dll}" DESTINATION ".")
+        message(STATUS "  [Release] ${dll}")
+    endforeach()
+
+    foreach(dll ${KDDW_DEBUG_DLLS})
+        install(FILES "${dll}" DESTINATION ".")
+        message(STATUS "  [Debug] ${dll}")
+    endforeach()
 
     # Verify at least one DLL was found
-    if(NOT EXISTS "${KDDW_RELEASE_DLL}" AND NOT EXISTS "${KDDW_DEBUG_DLL}")
+    if(NOT KDDW_RELEASE_DLLS AND NOT KDDW_DEBUG_DLLS)
         # List what's actually in the bin directory for diagnostics
         file(GLOB _kddw_files "${KDDW_BIN_DIR}/*")
         if(_kddw_files)
@@ -117,7 +125,7 @@ if(EXISTS "${KDDW_BIN_DIR}")
             endforeach()
         endif()
         message(FATAL_ERROR "KDDockWidgets DLL not found in ${KDDW_BIN_DIR}\n"
-                "Expected: ${KDDW_RELEASE_DLL} or ${KDDW_DEBUG_DLL}")
+                "Expected DLLs matching: kddockwidgets-qt6*.dll")
     endif()
 else()
     if(EXISTS "${KDDW_ROOT}")
