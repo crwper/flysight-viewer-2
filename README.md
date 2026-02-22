@@ -23,7 +23,7 @@ A desktop application for viewing and analyzing FlySight GPS data with advanced 
   - [macOS Deployment](#macos-deployment)
   - [Linux Deployment](#linux-deployment)
   - [CI/CD](#cicd)
-  - [macOS Code Signing (CI/CD)](#macos-code-signing-cicd)
+  - [CI/CD Secrets](#cicd-secrets)
   - [Package Structures](#package-structures)
   - [Deployment Tips](#deployment-tips)
 - [Troubleshooting](#troubleshooting)
@@ -420,9 +420,21 @@ GitHub Actions (`.github/workflows/build.yml`) automates the full pipeline on al
 4. Packages with CPack (ZIP on Windows, DMG on macOS, AppImage on Linux)
 5. Uploads artifacts and creates GitHub Releases on version tags
 
-### macOS Code Signing (CI/CD)
+### CI/CD Secrets
 
-The CI workflow automatically signs macOS builds with a Developer ID certificate when the required secrets are configured. Without secrets (e.g. forks, PRs from external contributors), builds fall back to ad-hoc signing.
+The CI workflow uses GitHub repository secrets to enable the Google Maps map view and macOS code signing/notarization. Without secrets (e.g. forks, PRs from external contributors), the map view is disabled and macOS builds fall back to ad-hoc signing.
+
+To configure secrets, go to your repository on GitHub: **Settings > Secrets and variables > Actions > New repository secret**, and add the secrets listed below.
+
+#### Google Maps API Key (all platforms)
+
+| Secret | Value |
+|--------|-------|
+| `GOOGLE_MAPS_API_KEY` | Your Google Maps JavaScript API key |
+
+To obtain a key, create a project in the [Google Cloud Console](https://console.cloud.google.com/), enable the **Maps JavaScript API**, and create an API key under **APIs & Services > Credentials**. Since the key is embedded in the distributed application binary, it is recommended to restrict the key to the Maps JavaScript API only and set appropriate usage quotas and billing alerts.
+
+#### macOS Code Signing and Notarization
 
 To set up code signing, you need a Developer ID Application certificate installed on your Mac:
 
@@ -450,9 +462,7 @@ This copies the base64 string to your clipboard.
 
 Go to [appleid.apple.com](https://appleid.apple.com) > Sign-In and Security > App-Specific Passwords, and generate a new password for "FlySight Notarization" (or similar).
 
-**5. Configure GitHub secrets:**
-
-In your repository, go to **Settings > Secrets and variables > Actions** and add these secrets:
+**5. Add these secrets to the repository:**
 
 | Secret | Value |
 |--------|-------|

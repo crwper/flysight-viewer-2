@@ -422,6 +422,8 @@ jobs:
       # =========================================================================
       - name: Configure main application
         shell: bash
+        env:
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
         run: |
           # Configure the main application build
           # Use src/ directory directly since we have pre-built third-party deps
