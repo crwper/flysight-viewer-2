@@ -448,7 +448,7 @@ Look for the line containing `Developer ID Application: Your Name (XXXXXXXXXX)`.
 
 **2. Export the certificate as a .p12 file:**
 
-Open **Keychain Access** (Applications > Utilities), find your "Developer ID Application" certificate, right-click it, and choose **Export**. Save as `.p12` format and set a strong password.
+Open **Keychain Access** (Applications > Utilities), select **login** in the left sidebar, then switch to the **My Certificates** tab across the top (not "Certificates" — only "My Certificates" shows certificates paired with their private keys). Find your "Developer ID Application" certificate, expand the disclosure triangle next to it, select the **private key** underneath, right-click it, and choose **Export**. Save as `.p12` format and set a strong password.
 
 **3. Base64-encode the .p12 file:**
 
