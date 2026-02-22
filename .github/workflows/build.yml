@@ -447,7 +447,7 @@ jobs:
         shell: bash
         run: |
           echo "=== Verifying macOS deployment ==="
-          BUNDLE="build/install/FlySightViewer.app"
+          BUNDLE="build/install/FlySight Viewer.app"
 
           echo ""
           echo "--- Bundle Structure ---"
@@ -611,10 +611,10 @@ jobs:
 
           echo ""
           echo "--- Executable RPATH ---"
-          EXE="$APPDIR/usr/bin/FlySightViewer"
+          EXE="$APPDIR/usr/bin/flysight-viewer"
           if [ -f "$EXE" ]; then
             RPATH=$(patchelf --print-rpath "$EXE" 2>/dev/null)
-            echo "  FlySightViewer RPATH: $RPATH"
+            echo "  flysight-viewer RPATH: $RPATH"
           fi
 
           echo ""
@@ -690,15 +690,15 @@ jobs:
             echo ""
             echo "--- Sanity checks ---"
             test -x squashfs-root/AppRun && echo "AppRun: OK" || echo "AppRun: FAILED"
-            test -x squashfs-root/usr/bin/FlySightViewer && echo "Executable: OK" || echo "Executable: FAILED"
+            test -x squashfs-root/usr/bin/flysight-viewer && echo "Executable: OK" || echo "Executable: FAILED"
             test -f squashfs-root/usr/bin/qt.conf && echo "qt.conf: OK" || echo "qt.conf: MISSING"
 
             # Check RPATH in extracted files
             echo ""
             echo "--- RPATH verification ---"
-            if [ -f squashfs-root/usr/bin/FlySightViewer ]; then
-              RPATH=$(patchelf --print-rpath squashfs-root/usr/bin/FlySightViewer 2>/dev/null)
-              echo "FlySightViewer RPATH: $RPATH"
+            if [ -f squashfs-root/usr/bin/flysight-viewer ]; then
+              RPATH=$(patchelf --print-rpath squashfs-root/usr/bin/flysight-viewer 2>/dev/null)
+              echo "flysight-viewer RPATH: $RPATH"
             fi
 
             BRIDGE=$(find squashfs-root/usr/share/python -name "flysight_cpp_bridge*.so" 2>/dev/null | head -1)
@@ -755,7 +755,7 @@ jobs:
             cp build/*.dmg artifacts/ 2>/dev/null || true
             # Fallback: create dmg manually if CPack didn't work
             if [ ! -f artifacts/*.dmg ]; then
-              hdiutil create -volname "FlySightViewer" -srcfolder build/install/FlySightViewer.app -ov -format UDZO artifacts/FlySightViewer-${{ matrix.platform }}-${{ matrix.arch }}.dmg 2>/dev/null || true
+              hdiutil create -volname "FlySight Viewer" -srcfolder "build/install/FlySight Viewer.app" -ov -format UDZO artifacts/FlySightViewer-${{ matrix.platform }}-${{ matrix.arch }}.dmg 2>/dev/null || true
             fi
           elif [ "${{ runner.os }}" == "Linux" ]; then
             cp build/*.AppImage artifacts/ 2>/dev/null || true

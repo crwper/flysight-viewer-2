@@ -131,7 +131,7 @@ if [ -n "${FLYSIGHT_DEBUG}" ]; then
 fi
 
 # Launch the application
-exec "${HERE}/usr/bin/FlySightViewer" "$@"
+exec "${HERE}/usr/bin/flysight-viewer" "$@"
 ]=])
 
 # =============================================================================
@@ -143,7 +143,7 @@ set(DESKTOP_CONTENT [=[[Desktop Entry]
 Type=Application
 Name=FlySight Viewer
 Comment=GPS flight data analysis and visualization
-Exec=FlySightViewer %F
+Exec=flysight-viewer %F
 Icon=FlySightViewer
 Terminal=false
 Categories=Science;DataVisualization;

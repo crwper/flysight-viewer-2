@@ -402,9 +402,9 @@ install(TARGETS FlySightViewer
 # The module must be in site-packages for Python's import system to find it
 if(APPLE)
     # macOS: Install to the app bundle's bundled Python site-packages
-    # Path: FlySight Viewer.app/Contents/Resources/python/lib/python3.XX/site-packages/
+    # Path: FlySightViewer.app/Contents/Resources/python/lib/python3.XX/site-packages/
     install(TARGETS flysight_cpp_bridge
-        LIBRARY DESTINATION "FlySight Viewer.app/Contents/Resources/python/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages"
+        LIBRARY DESTINATION "FlySightViewer.app/Contents/Resources/python/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages"
         COMPONENT Runtime
     )
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -421,7 +421,7 @@ endif()
 # Install Python SDK files to plugin directory (where PluginHost looks for it)
 # On macOS, plugins go inside the app bundle so they're included in the DMG.
 if(APPLE)
-  set(_plugins_dest "FlySight Viewer.app/Contents/Resources/python_plugins")
+  set(_plugins_dest "FlySightViewer.app/Contents/Resources/python_plugins")
 else()
   set(_plugins_dest "python_plugins")
 endif()
@@ -450,7 +450,7 @@ if(QT_VERSION_MAJOR GREATER_EQUAL 6)
   # Qt's default QT_DEPLOY_QML_DIR is "qml" (relative to install prefix),
   # which places them outside the bundle. Override it before the deploy script runs.
   if(APPLE)
-    install(CODE "set(QT_DEPLOY_QML_DIR \"FlySight Viewer.app/Contents/Resources/qml\")")
+    install(CODE "set(QT_DEPLOY_QML_DIR \"FlySightViewer.app/Contents/Resources/qml\")")
   endif()
   if(WIN32)
     install(CODE "set(QT_DEPLOY_BIN_DIR \".\")")
@@ -492,7 +492,7 @@ if(QT_VERSION_MAJOR GREATER_EQUAL 6)
         set(_plugin_dest "plugins/${_plugin_category}")
         set(_plugin_pattern "*.dll")
       elseif(APPLE)
-        set(_plugin_dest "FlySight Viewer.app/Contents/PlugIns/${_plugin_category}")
+        set(_plugin_dest "FlySightViewer.app/Contents/PlugIns/${_plugin_category}")
         set(_plugin_pattern "*.dylib")
       else()
         if(DEFINED FLYSIGHT_APPDIR_PATH)
@@ -519,7 +519,7 @@ if(QT_VERSION_MAJOR GREATER_EQUAL 6)
   # time. Manually deploy the QtMultimedia QML module so `import QtMultimedia` works.
   if(QT6_QML_DIR AND EXISTS "${QT6_QML_DIR}/QtMultimedia")
     if(APPLE)
-      set(_qtmm_qml_dest "FlySight Viewer.app/Contents/Resources/qml")
+      set(_qtmm_qml_dest "FlySightViewer.app/Contents/Resources/qml")
     elseif(WIN32)
       set(_qtmm_qml_dest "qml")
     else()
@@ -593,7 +593,7 @@ if(APPLE)
 
   # RPATH configuration for the pybind11 module
   # The module is installed to:
-  #   FlySight Viewer.app/Contents/Resources/python/lib/python3.XX/site-packages/flysight_cpp_bridge.cpython-3XX-darwin.so
+  #   FlySightViewer.app/Contents/Resources/python/lib/python3.XX/site-packages/flysight_cpp_bridge.cpython-3XX-darwin.so
   #
   # Path from module to Frameworks:
   #   site-packages/ -> python3.XX/ -> lib/ -> python/ -> Resources/ -> Contents/ -> Frameworks/
@@ -612,7 +612,6 @@ if(APPLE)
   # Set app bundle properties (MACOSX_BUNDLE itself is set earlier,
   # before install rules, so that CMake uses BUNDLE DESTINATION)
   set_target_properties(FlySightViewer PROPERTIES
-    OUTPUT_NAME "FlySight Viewer"
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.flysight.viewer"
     MACOSX_BUNDLE_BUNDLE_NAME "FlySight Viewer"
     MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
@@ -650,7 +649,7 @@ if(APPLE)
         message(WARNING \"chmod failed on rpath fixing script: \${_chmod_result}\")
       endif()
       execute_process(
-        COMMAND bash \"\${FIX_SCRIPT}\" \"\${CMAKE_INSTALL_PREFIX}/FlySight Viewer.app\"
+        COMMAND bash \"\${FIX_SCRIPT}\" \"\${CMAKE_INSTALL_PREFIX}/FlySightViewer.app\"
         RESULT_VARIABLE _fix_result
       )
       if(NOT _fix_result EQUAL 0)
@@ -696,7 +695,7 @@ if(APPLE)
 
   install(CODE "
     set(_identity \"${FLYSIGHT_CODESIGN_IDENTITY}\")
-    set(_bundle \"\${CMAKE_INSTALL_PREFIX}/FlySight Viewer.app\")
+    set(_bundle \"\${CMAKE_INSTALL_PREFIX}/FlySightViewer.app\")
 
     if(_identity STREQUAL \"-\")
       message(STATUS \"Code signing bundle (ad-hoc for development)...\")
@@ -743,12 +742,26 @@ if(APPLE)
 
     message(STATUS \"Signed \${_signed_count} Mach-O binaries, \${_fw_count} frameworks, and the app bundle\")
   " COMPONENT Runtime)
+
+  # Rename bundle for user-facing display: FlySightViewer.app -> FlySight Viewer.app
+  # This keeps the binary name space-free (FlySightViewer) while giving the bundle
+  # the human-readable name users expect in Finder and the DMG.
+  install(CODE "
+    set(_src \"\${CMAKE_INSTALL_PREFIX}/FlySightViewer.app\")
+    set(_dst \"\${CMAKE_INSTALL_PREFIX}/FlySight Viewer.app\")
+    if(EXISTS \"\${_src}\")
+      file(RENAME \"\${_src}\" \"\${_dst}\")
+      message(STATUS \"Renamed bundle: FlySightViewer.app -> FlySight Viewer.app\")
+    endif()
+  " COMPONENT Runtime)
 endif()
 
 # ─────────────────────────────── Linux AppImage Deployment
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  # Linux convention: lowercase with hyphens for the executable name
   # Set RPATH for the executable to find libraries relative to its location
   set_target_properties(FlySightViewer PROPERTIES
+    OUTPUT_NAME "flysight-viewer"
     INSTALL_RPATH "$ORIGIN/../lib"
     BUILD_WITH_INSTALL_RPATH FALSE
   )

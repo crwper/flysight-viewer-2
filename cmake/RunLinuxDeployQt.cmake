@@ -90,7 +90,7 @@ if(FLYSIGHT_USE_LINUXDEPLOYQT AND FLYSIGHT_LINUXDEPLOYQT_AVAILABLE)
 
         set(LINUXDEPLOYQT \"${LINUXDEPLOYQT_PATH}\")
         set(APPDIR \"${FLYSIGHT_APPDIR_PATH}\")
-        set(EXECUTABLE \"\${APPDIR}/usr/bin/FlySightViewer\")
+        set(EXECUTABLE \"\${APPDIR}/usr/bin/flysight-viewer\")
 
         if(NOT EXISTS \"\${EXECUTABLE}\")
             message(WARNING \"Executable not found at \${EXECUTABLE}\")

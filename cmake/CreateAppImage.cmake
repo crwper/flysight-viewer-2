@@ -156,8 +156,8 @@ if [ ! -f "${APPDIR}/FlySightViewer.desktop" ]; then
 fi
 
 # Verify executable exists
-if [ ! -x "${APPDIR}/usr/bin/FlySightViewer" ]; then
-    echo "ERROR: FlySightViewer executable not found"
+if [ ! -x "${APPDIR}/usr/bin/flysight-viewer" ]; then
+    echo "ERROR: flysight-viewer executable not found"
     exit 1
 fi
 
