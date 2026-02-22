@@ -801,7 +801,10 @@ endif()
 
 # ─────────────────────────────── packaging
 # Determine architecture for package filename
-if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+if(APPLE)
+  # CMAKE_SYSTEM_PROCESSOR is "arm64" on Apple Silicon, "x86_64" on Intel Macs
+  set(FLYSIGHT_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
+elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
   set(FLYSIGHT_ARCH "x64")
 else()
   set(FLYSIGHT_ARCH "x86")
@@ -841,13 +844,6 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "FlySight GPS Data Viewer")
 # Include LICENSE file if it exists
 if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../LICENSE")
   set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_LIST_DIR}/../LICENSE")
-endif()
-
-# macOS-specific app bundle settings
-if(APPLE)
-  set(CPACK_BUNDLE_NAME "FlySight Viewer")
-  set(CPACK_BUNDLE_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist")
-  set(CPACK_BUNDLE_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/macos/FlySightViewer.icns")
 endif()
 
 include(CPack)
