@@ -2,15 +2,14 @@
 # DeployThirdPartyMacOS.cmake
 # =============================================================================
 #
-# This module copies GTSAM, TBB, and KDDockWidgets dylibs to the app bundle's
+# This module copies GeographicLib and KDDockWidgets dylibs to the app bundle's
 # Frameworks directory and fixes their library paths using install_name_tool.
 #
 # Usage:
 #   include(DeployThirdPartyMacOS)
 #   deploy_third_party_macos(
 #       TARGET FlySightViewer
-#       TBB_ROOT "/path/to/oneTBB-install"
-#       GTSAM_ROOT "/path/to/GTSAM-install"
+#       GEOGRAPHIC_ROOT "/path/to/GeographicLib-install"
 #       KDDW_ROOT "/path/to/KDDockWidgets-install"
 #   )
 #
@@ -31,17 +30,16 @@ include_guard(GLOBAL)
 # Main function to set up third-party library deployment for macOS app bundles.
 #
 # Arguments:
-#   TARGET     - The application target name (e.g., FlySightViewer)
-#   TBB_ROOT   - Path to oneTBB install directory
-#   GTSAM_ROOT - Path to GTSAM install directory
-#   KDDW_ROOT  - Path to KDDockWidgets install directory
+#   TARGET          - The application target name (e.g., FlySightViewer)
+#   GEOGRAPHIC_ROOT - Path to GeographicLib install directory
+#   KDDW_ROOT       - Path to KDDockWidgets install directory
 #
 function(deploy_third_party_macos)
     cmake_parse_arguments(
         PARSE_ARGV 0
         ARG
         ""
-        "TARGET;TBB_ROOT;GTSAM_ROOT;KDDW_ROOT"
+        "TARGET;GEOGRAPHIC_ROOT;KDDW_ROOT"
         ""
     )
 
@@ -62,10 +60,9 @@ function(deploy_third_party_macos)
     message(STATUS "----------------------------------------")
     message(STATUS "Third-Party Deployment Configuration (macOS)")
     message(STATUS "----------------------------------------")
-    message(STATUS "  Target:     ${ARG_TARGET}")
-    message(STATUS "  TBB_ROOT:   ${ARG_TBB_ROOT}")
-    message(STATUS "  GTSAM_ROOT: ${ARG_GTSAM_ROOT}")
-    message(STATUS "  KDDW_ROOT:  ${ARG_KDDW_ROOT}")
+    message(STATUS "  Target:          ${ARG_TARGET}")
+    message(STATUS "  GEOGRAPHIC_ROOT: ${ARG_GEOGRAPHIC_ROOT}")
+    message(STATUS "  KDDW_ROOT:       ${ARG_KDDW_ROOT}")
     message(STATUS "----------------------------------------")
     message(STATUS "")
 
@@ -78,18 +75,11 @@ function(deploy_third_party_macos)
 
     set(_all_dylibs "")
 
-    # TBB dylibs
-    if(ARG_TBB_ROOT AND EXISTS "${ARG_TBB_ROOT}/lib")
-        file(GLOB _tbb_dylibs "${ARG_TBB_ROOT}/lib/*.dylib")
-        list(APPEND _all_dylibs ${_tbb_dylibs})
-        message(STATUS "Found TBB dylibs: ${_tbb_dylibs}")
-    endif()
-
-    # GTSAM dylibs
-    if(ARG_GTSAM_ROOT AND EXISTS "${ARG_GTSAM_ROOT}/lib")
-        file(GLOB _gtsam_dylibs "${ARG_GTSAM_ROOT}/lib/*.dylib")
-        list(APPEND _all_dylibs ${_gtsam_dylibs})
-        message(STATUS "Found GTSAM dylibs: ${_gtsam_dylibs}")
+    # GeographicLib dylibs
+    if(ARG_GEOGRAPHIC_ROOT AND EXISTS "${ARG_GEOGRAPHIC_ROOT}/lib")
+        file(GLOB _geographic_dylibs "${ARG_GEOGRAPHIC_ROOT}/lib/*.dylib")
+        list(APPEND _all_dylibs ${_geographic_dylibs})
+        message(STATUS "Found GeographicLib dylibs: ${_geographic_dylibs}")
     endif()
 
     # KDDockWidgets dylibs or framework
@@ -243,10 +233,6 @@ foreach(DYLIB \${ALL_DYLIBS})
     # Determine if this is in Frameworks (set ID) or elsewhere (plugin/QML)
     string(FIND \"\${DYLIB}\" \"/Frameworks/\" _is_framework)
 
-    # Note: Do NOT strip the code signature before install_name_tool.
-    # On arm64, codesign --remove-signature can corrupt __LINKEDIT.
-    # install_name_tool works on signed binaries (warns but succeeds).
-
     if(NOT _is_framework EQUAL -1)
         # Library in Frameworks - set its ID to @rpath/libname
         execute_process(
@@ -259,10 +245,8 @@ foreach(DYLIB \${ALL_DYLIBS})
         endif()
     else()
         # Plugin or QML module - add rpath to find Frameworks
-        # Calculate relative path from plugin location to Frameworks
         file(RELATIVE_PATH _rel_path \"\${DYLIB_DIR}\" \"\${FRAMEWORKS_DIR}\")
 
-        # Check if rpath already exists
         execute_process(
             COMMAND otool -l \"\${DYLIB}\"
             OUTPUT_VARIABLE _load_commands
@@ -288,20 +272,16 @@ foreach(DYLIB \${ALL_DYLIBS})
     string(REGEX MATCHALL \"[^\\n\\t ]+\\\\.dylib\" DEP_LIST \"\${_deps}\")
 
     foreach(DEP \${DEP_LIST})
-        # Skip system libraries
         if(DEP MATCHES \"^/usr/lib\" OR DEP MATCHES \"^/System/Library\")
             continue()
         endif()
 
-        # Skip @rpath, @executable_path, @loader_path references (already correct)
         if(DEP MATCHES \"^@\")
             continue()
         endif()
 
-        # Get just the filename
         get_filename_component(DEP_NAME \"\${DEP}\" NAME)
 
-        # Check if this dependency exists in our Frameworks
         if(EXISTS \"\${FRAMEWORKS_DIR}/\${DEP_NAME}\")
             execute_process(
                 COMMAND install_name_tool -change \"\${DEP}\" \"@rpath/\${DEP_NAME}\" \"\${DYLIB}\"
@@ -315,7 +295,6 @@ foreach(DYLIB \${ALL_DYLIBS})
     endforeach()
 
     # Fix framework references (Qt, KDDockWidgets, etc.) in this dylib
-    # Framework deps look like: /absolute/path/to/QtFoo.framework/Versions/A/QtFoo
     string(REGEX MATCHALL \"[^\\n\\t ]+[A-Za-z0-9_-]+\\\\.framework/[^\\n\\t ]*\" _fw_deps \"\${_deps}\")
     foreach(DEP \${_fw_deps})
         if(DEP MATCHES \"^@\" OR DEP MATCHES \"^/System/Library\" OR DEP MATCHES \"^/usr/lib\")
@@ -348,11 +327,6 @@ set(EXECUTABLE \"\${MACOS_DIR}/${_output_name}\")
 if(EXISTS \"\${EXECUTABLE}\")
     message(STATUS \"Fixing executable: \${EXECUTABLE}\")
 
-    # Note: Do NOT strip the code signature before install_name_tool.
-    # On arm64, codesign --remove-signature can corrupt __LINKEDIT.
-    # install_name_tool works on signed binaries (warns but succeeds).
-
-    # Add rpath if not present
     execute_process(
         COMMAND otool -l \"\${EXECUTABLE}\"
         OUTPUT_VARIABLE _exe_info
@@ -366,7 +340,6 @@ if(EXISTS \"\${EXECUTABLE}\")
         )
     endif()
 
-    # Get dependencies and fix paths
     execute_process(
         COMMAND otool -L \"\${EXECUTABLE}\"
         OUTPUT_VARIABLE _exe_deps
@@ -394,10 +367,6 @@ if(EXISTS \"\${EXECUTABLE}\")
         endif()
     endforeach()
 
-    # Handle framework references in executable (KDDockWidgets, Qt, etc.)
-    # Framework references look like: @rpath/Something.framework/Versions/X/Something
-    # or absolute paths to the framework binary
-
     # Handle KDDockWidgets framework
     string(REGEX MATCHALL \"[^\\n\\t ]+kddockwidgets-qt6\\\\.framework[^\\n\\t ]*\" KDDW_DEP_LIST \"\${_exe_deps}\")
     foreach(DEP \${KDDW_DEP_LIST})
@@ -420,24 +389,19 @@ if(EXISTS \"\${EXECUTABLE}\")
     endforeach()
 
     # Handle Qt framework references
-    # Qt frameworks may have absolute paths from install-qt-action
     message(STATUS \"Checking Qt framework references...\")
     string(REGEX MATCHALL \"[^\\n\\t ]+Qt[A-Za-z0-9]+\\\\.framework[^\\n\\t ]*\" QT_DEP_LIST \"\${_exe_deps}\")
 
     foreach(DEP \${QT_DEP_LIST})
-        # Skip already-correct references
         if(DEP MATCHES \"^@\")
             message(STATUS \"  Qt OK: \${DEP}\")
             continue()
         endif()
 
-        # Extract the Qt framework name (e.g., QtCore from .../QtCore.framework/...)
         string(REGEX MATCH \"Qt[A-Za-z0-9]+\" _qt_name \"\${DEP}\")
         set(_qt_framework \"\${BUNDLE_DIR}/Contents/Frameworks/\${_qt_name}.framework\")
 
         if(EXISTS \"\${_qt_framework}\")
-            # Qt is deployed - change the reference to use @rpath or @executable_path
-            # Extract the relative path within the framework (e.g., Versions/A/QtCore)
             string(REGEX REPLACE \"^.*(\${_qt_name}\\\\.framework.*)$\" \"\\\\1\" _qt_rel_path \"\${DEP}\")
 
             execute_process(
@@ -454,7 +418,6 @@ if(EXISTS \"\${EXECUTABLE}\")
     endforeach()
 
     # Handle Python framework reference
-    # Python may be referenced as a framework (e.g., MacPorts) but bundled as libpython.dylib
     string(REGEX MATCH \"[^\\n\\t ]*/Python\\\\.framework/Versions/([0-9]+\\\\.[0-9]+)/Python\" _python_dep \"\${_exe_deps}\")
     if(_python_dep AND NOT _python_dep MATCHES \"^@\")
         set(_py_ver \"\${CMAKE_MATCH_1}\")
@@ -482,10 +445,8 @@ endif()
 set(KDDW_FRAMEWORK \"\${FRAMEWORKS_DIR}/kddockwidgets-qt6.framework\")
 if(EXISTS \"\${KDDW_FRAMEWORK}\")
     message(STATUS \"Fixing KDDockWidgets framework paths\")
-    # Find the actual binary inside the framework
     file(GLOB_RECURSE KDDW_BINARIES \"\${KDDW_FRAMEWORK}/Versions/*/kddockwidgets-qt6\")
     foreach(KDDW_BIN \${KDDW_BINARIES})
-        # Fix the install name to use @rpath
         get_filename_component(KDDW_BIN_DIR \"\${KDDW_BIN}\" DIRECTORY)
         file(RELATIVE_PATH KDDW_REL_PATH \"\${FRAMEWORKS_DIR}\" \"\${KDDW_BIN}\")
 
@@ -498,7 +459,6 @@ if(EXISTS \"\${KDDW_FRAMEWORK}\")
             message(STATUS \"  Set framework id: @rpath/\${KDDW_REL_PATH}\")
         endif()
 
-        # Ad-hoc re-sign framework binary after modification
         execute_process(
             COMMAND codesign --force --sign - \"\${KDDW_BIN}\"
             ERROR_QUIET

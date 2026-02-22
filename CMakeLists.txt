@@ -49,7 +49,7 @@ endif()
 #
 # These options control which parts of the build system are active.
 #
-# FLYSIGHT_BUILD_THIRD_PARTY: Build third-party dependencies (oneTBB, GTSAM, KDDockWidgets)
+# FLYSIGHT_BUILD_THIRD_PARTY: Build third-party dependencies (GeographicLib, KDDockWidgets)
 #   - Set to OFF to use pre-built dependencies from third-party/*-install directories
 #
 # FLYSIGHT_BUILD_APP: Build the main FlySight Viewer application
@@ -82,11 +82,8 @@ endif()
 set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third-party"
     CACHE PATH "Root directory for third-party dependencies")
 
-set(ONETBB_INSTALL_DIR "${THIRD_PARTY_DIR}/oneTBB-install"
-    CACHE PATH "oneTBB installation directory")
-
-set(GTSAM_INSTALL_DIR "${THIRD_PARTY_DIR}/GTSAM-install"
-    CACHE PATH "GTSAM installation directory")
+set(GEOGRAPHIC_INSTALL_DIR "${THIRD_PARTY_DIR}/GeographicLib-install"
+    CACHE PATH "GeographicLib installation directory")
 
 set(KDDW_INSTALL_DIR "${THIRD_PARTY_DIR}/KDDockWidgets-install"
     CACHE PATH "KDDockWidgets installation directory")
@@ -97,7 +94,7 @@ set(KDDW_INSTALL_DIR "${THIRD_PARTY_DIR}/KDDockWidgets-install"
 #
 # Include the third-party build definitions if enabled.
 # The ThirdPartySuperbuild.cmake file defines ExternalProject_Add calls
-# for oneTBB, GTSAM, and KDDockWidgets.
+# for GeographicLib and KDDockWidgets.
 #
 
 if(FLYSIGHT_BUILD_THIRD_PARTY)
@@ -129,11 +126,8 @@ if(FLYSIGHT_BUILD_APP)
     # Collect third-party targets for DEPENDS clause
     set(THIRD_PARTY_TARGETS "")
     if(FLYSIGHT_BUILD_THIRD_PARTY)
-        if(TARGET ext_oneTBB)
-            list(APPEND THIRD_PARTY_TARGETS ext_oneTBB)
-        endif()
-        if(TARGET ext_GTSAM)
-            list(APPEND THIRD_PARTY_TARGETS ext_GTSAM)
+        if(TARGET ext_GeographicLib)
+            list(APPEND THIRD_PARTY_TARGETS ext_GeographicLib)
         endif()
         if(TARGET ext_KDDockWidgets)
             list(APPEND THIRD_PARTY_TARGETS ext_KDDockWidgets)
@@ -148,8 +142,7 @@ if(FLYSIGHT_BUILD_APP)
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
         -DTHIRD_PARTY_DIR=${THIRD_PARTY_DIR}
-        -DGTSAM_ROOT=${GTSAM_INSTALL_DIR}
-        -DTBB_ROOT=${ONETBB_INSTALL_DIR}
+        -DGEOGRAPHIC_ROOT=${GEOGRAPHIC_INSTALL_DIR}
         -DKDDW_ROOT=${KDDW_INSTALL_DIR}
     )
     if(CMAKE_PREFIX_PATH)
@@ -220,10 +213,9 @@ message(STATUS "  FLYSIGHT_BUILD_APP:         ${FLYSIGHT_BUILD_APP}")
 message(STATUS "  FLYSIGHT_THIRD_PARTY_ONLY:  ${FLYSIGHT_THIRD_PARTY_ONLY}")
 message(STATUS "")
 message(STATUS "Path Variables:")
-message(STATUS "  THIRD_PARTY_DIR:    ${THIRD_PARTY_DIR}")
-message(STATUS "  ONETBB_INSTALL_DIR: ${ONETBB_INSTALL_DIR}")
-message(STATUS "  GTSAM_INSTALL_DIR:  ${GTSAM_INSTALL_DIR}")
-message(STATUS "  KDDW_INSTALL_DIR:   ${KDDW_INSTALL_DIR}")
+message(STATUS "  THIRD_PARTY_DIR:       ${THIRD_PARTY_DIR}")
+message(STATUS "  GEOGRAPHIC_INSTALL_DIR: ${GEOGRAPHIC_INSTALL_DIR}")
+message(STATUS "  KDDW_INSTALL_DIR:      ${KDDW_INSTALL_DIR}")
 message(STATUS "")
 message(STATUS "========================================")
 message(STATUS "")

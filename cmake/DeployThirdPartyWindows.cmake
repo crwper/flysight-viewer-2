@@ -2,7 +2,7 @@
 # DeployThirdPartyWindows.cmake
 # =============================================================================
 #
-# This module copies third-party DLLs (GTSAM, TBB, KDDockWidgets, Boost) to the
+# This module copies third-party DLLs (GeographicLib, KDDockWidgets) to the
 # install directory so the application can locate them at runtime.
 #
 # DLLs are installed to the same directory as the executable (flat structure).
@@ -20,27 +20,26 @@ message(STATUS "Third-Party DLL Deployment Configuration")
 message(STATUS "----------------------------------------")
 
 # =============================================================================
-# TBB DLLs
+# GeographicLib DLLs
 # =============================================================================
 
-set(TBB_BIN_DIR "${TBB_ROOT}/bin")
-if(EXISTS "${TBB_BIN_DIR}")
-    message(STATUS "TBB bin directory: ${TBB_BIN_DIR}")
+set(GEOGRAPHIC_BIN_DIR "${GEOGRAPHIC_ROOT}/bin")
+if(EXISTS "${GEOGRAPHIC_BIN_DIR}")
+    message(STATUS "GeographicLib bin directory: ${GEOGRAPHIC_BIN_DIR}")
 
-    # Release DLLs
-    set(TBB_RELEASE_DLLS
-        "${TBB_BIN_DIR}/tbb12.dll"
-        "${TBB_BIN_DIR}/tbbmalloc.dll"
-    )
+    file(GLOB GEOGRAPHIC_RELEASE_DLLS "${GEOGRAPHIC_BIN_DIR}/Geographic*.dll")
+    file(GLOB GEOGRAPHIC_DEBUG_DLLS "${GEOGRAPHIC_BIN_DIR}/Geographic*_d.dll")
 
-    # Debug DLLs
-    set(TBB_DEBUG_DLLS
-        "${TBB_BIN_DIR}/tbb12_debug.dll"
-        "${TBB_BIN_DIR}/tbbmalloc_debug.dll"
-    )
+    # Filter out debug DLLs from release list
+    set(GEOGRAPHIC_RELEASE_DLLS_FILTERED)
+    foreach(dll ${GEOGRAPHIC_RELEASE_DLLS})
+        string(FIND "${dll}" "_d.dll" is_debug)
+        if(is_debug EQUAL -1)
+            list(APPEND GEOGRAPHIC_RELEASE_DLLS_FILTERED "${dll}")
+        endif()
+    endforeach()
 
-    # Install Release DLLs for non-Debug configurations
-    foreach(dll ${TBB_RELEASE_DLLS})
+    foreach(dll ${GEOGRAPHIC_RELEASE_DLLS_FILTERED})
         if(EXISTS "${dll}")
             install(FILES "${dll}"
                 DESTINATION "."
@@ -50,8 +49,7 @@ if(EXISTS "${TBB_BIN_DIR}")
         endif()
     endforeach()
 
-    # Install Debug DLLs for Debug configuration
-    foreach(dll ${TBB_DEBUG_DLLS})
+    foreach(dll ${GEOGRAPHIC_DEBUG_DLLS})
         if(EXISTS "${dll}")
             install(FILES "${dll}"
                 DESTINATION "."
@@ -61,54 +59,20 @@ if(EXISTS "${TBB_BIN_DIR}")
         endif()
     endforeach()
 else()
-    message(WARNING "TBB bin directory not found: ${TBB_BIN_DIR}")
-endif()
-
-# =============================================================================
-# GTSAM DLLs
-# =============================================================================
-
-set(GTSAM_BIN_DIR "${GTSAM_ROOT}/bin")
-if(EXISTS "${GTSAM_BIN_DIR}")
-    message(STATUS "GTSAM bin directory: ${GTSAM_BIN_DIR}")
-
-    # Release DLLs (GTSAM and its dependencies)
-    set(GTSAM_RELEASE_DLLS
-        "${GTSAM_BIN_DIR}/gtsam.dll"
-        "${GTSAM_BIN_DIR}/metis-gtsam.dll"
-        "${GTSAM_BIN_DIR}/cephes-gtsam.dll"
-    )
-
-    # Debug DLLs
-    set(GTSAM_DEBUG_DLLS
-        "${GTSAM_BIN_DIR}/gtsamDebug.dll"
-        "${GTSAM_BIN_DIR}/metis-gtsamDebug.dll"
-        "${GTSAM_BIN_DIR}/cephes-gtsamDebug.dll"
-    )
-
-    # Install Release DLLs
-    foreach(dll ${GTSAM_RELEASE_DLLS})
-        if(EXISTS "${dll}")
+    # GeographicLib may install DLLs to lib/ instead of bin/ on some configurations
+    set(GEOGRAPHIC_LIB_DIR "${GEOGRAPHIC_ROOT}/lib")
+    file(GLOB GEOGRAPHIC_LIB_DLLS "${GEOGRAPHIC_LIB_DIR}/Geographic*.dll")
+    if(GEOGRAPHIC_LIB_DLLS)
+        message(STATUS "GeographicLib DLLs found in lib directory: ${GEOGRAPHIC_LIB_DIR}")
+        foreach(dll ${GEOGRAPHIC_LIB_DLLS})
             install(FILES "${dll}"
                 DESTINATION "."
-                CONFIGURATIONS Release RelWithDebInfo MinSizeRel
             )
-            message(STATUS "  [Release] ${dll}")
-        endif()
-    endforeach()
-
-    # Install Debug DLLs
-    foreach(dll ${GTSAM_DEBUG_DLLS})
-        if(EXISTS "${dll}")
-            install(FILES "${dll}"
-                DESTINATION "."
-                CONFIGURATIONS Debug
-            )
-            message(STATUS "  [Debug] ${dll}")
-        endif()
-    endforeach()
-else()
-    message(WARNING "GTSAM bin directory not found: ${GTSAM_BIN_DIR}")
+            message(STATUS "  ${dll}")
+        endforeach()
+    else()
+        message(WARNING "GeographicLib bin directory not found: ${GEOGRAPHIC_BIN_DIR}")
+    endif()
 endif()
 
 # =============================================================================
@@ -167,73 +131,6 @@ else()
             message(STATUS "  ${_f}")
         endforeach()
     endif()
-endif()
-
-# =============================================================================
-# Boost DLLs
-# =============================================================================
-
-# Boost DLLs are typically in ${BOOST_LIBRARYDIR}
-# The naming convention varies based on compiler and settings
-# Common patterns: boost_<lib>-vc143-mt-x64-1_87.dll
-
-if(DEFINED BOOST_LIBRARYDIR AND EXISTS "${BOOST_LIBRARYDIR}")
-    message(STATUS "Boost library directory: ${BOOST_LIBRARYDIR}")
-
-    # Find Boost DLLs by pattern
-    # The exact naming depends on the Boost build configuration
-    file(GLOB BOOST_RELEASE_DLLS
-        "${BOOST_LIBRARYDIR}/boost_serialization-*.dll"
-        "${BOOST_LIBRARYDIR}/boost_timer-*.dll"
-        "${BOOST_LIBRARYDIR}/boost_chrono-*.dll"
-        "${BOOST_LIBRARYDIR}/boost_system-*.dll"
-    )
-
-    # Filter out debug DLLs (typically have -gd- in the name)
-    set(BOOST_RELEASE_DLLS_FILTERED)
-    foreach(dll ${BOOST_RELEASE_DLLS})
-        string(FIND "${dll}" "-gd-" is_debug)
-        if(is_debug EQUAL -1)
-            list(APPEND BOOST_RELEASE_DLLS_FILTERED "${dll}")
-        endif()
-    endforeach()
-
-    # Find Debug DLLs (have -gd- in the name)
-    file(GLOB BOOST_DEBUG_DLLS
-        "${BOOST_LIBRARYDIR}/boost_serialization-*-gd-*.dll"
-        "${BOOST_LIBRARYDIR}/boost_timer-*-gd-*.dll"
-        "${BOOST_LIBRARYDIR}/boost_chrono-*-gd-*.dll"
-        "${BOOST_LIBRARYDIR}/boost_system-*-gd-*.dll"
-    )
-
-    # Install Release DLLs
-    foreach(dll ${BOOST_RELEASE_DLLS_FILTERED})
-        if(EXISTS "${dll}")
-            install(FILES "${dll}"
-                DESTINATION "."
-                CONFIGURATIONS Release RelWithDebInfo MinSizeRel
-            )
-            message(STATUS "  [Release] ${dll}")
-        endif()
-    endforeach()
-
-    # Install Debug DLLs
-    foreach(dll ${BOOST_DEBUG_DLLS})
-        if(EXISTS "${dll}")
-            install(FILES "${dll}"
-                DESTINATION "."
-                CONFIGURATIONS Debug
-            )
-            message(STATUS "  [Debug] ${dll}")
-        endif()
-    endforeach()
-
-    if(NOT BOOST_RELEASE_DLLS_FILTERED AND NOT BOOST_DEBUG_DLLS)
-        message(STATUS "  No Boost DLLs found - Boost may be built as static libraries")
-    endif()
-else()
-    message(STATUS "Boost library directory not found or BOOST_LIBRARYDIR not set")
-    message(STATUS "  Boost DLLs will not be bundled (Boost may be static)")
 endif()
 
 message(STATUS "----------------------------------------")

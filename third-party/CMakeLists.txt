@@ -6,8 +6,6 @@
 # dependencies without involving the root superbuild. It reuses the
 # ExternalProject definitions from cmake/ThirdPartySuperbuild.cmake.
 #
-# This is equivalent to the old BUILD.BAT script but in portable CMake form.
-#
 # Usage:
 #   cd third-party
 #   cmake -G "Visual Studio 17 2022" -A x64 -B build -S .
@@ -17,8 +15,7 @@
 # Clean:
 #   cmake --build build --target clean-all
 #   cmake --build build --target clean-third-party
-#   cmake --build build --target clean-oneTBB
-#   cmake --build build --target clean-GTSAM
+#   cmake --build build --target clean-GeographicLib
 #   cmake --build build --target clean-KDDockWidgets
 #
 # =============================================================================
@@ -38,17 +35,14 @@ include(ExternalProject)
 # When running from third-party/, CMAKE_CURRENT_SOURCE_DIR IS the third-party
 # directory, so paths are relative to here.
 #
-# These paths match the existing directory structure created by BUILD.BAT.
+# These paths match the existing directory structure.
 #
 
 set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
     CACHE PATH "Root directory for third-party dependencies")
 
-set(ONETBB_INSTALL_DIR "${THIRD_PARTY_DIR}/oneTBB-install"
-    CACHE PATH "oneTBB installation directory")
-
-set(GTSAM_INSTALL_DIR "${THIRD_PARTY_DIR}/GTSAM-install"
-    CACHE PATH "GTSAM installation directory")
+set(GEOGRAPHIC_INSTALL_DIR "${THIRD_PARTY_DIR}/GeographicLib-install"
+    CACHE PATH "GeographicLib installation directory")
 
 set(KDDW_INSTALL_DIR "${THIRD_PARTY_DIR}/KDDockWidgets-install"
     CACHE PATH "KDDockWidgets installation directory")
@@ -59,7 +53,7 @@ set(KDDW_INSTALL_DIR "${THIRD_PARTY_DIR}/KDDockWidgets-install"
 #
 # Reuse ExternalProject definitions from the parent cmake/ directory.
 # We set FLYSIGHT_CMAKE_DIR so ThirdPartySuperbuild.cmake can find
-# PatchGTSAM.cmake correctly.
+# helper scripts correctly.
 #
 
 # Tell ThirdPartySuperbuild.cmake where to find cmake/ directory
@@ -105,20 +99,17 @@ if(CMAKE_GENERATOR_PLATFORM)
 endif()
 message(STATUS "")
 message(STATUS "Install Directories:")
-message(STATUS "  oneTBB:        ${ONETBB_INSTALL_DIR}")
-message(STATUS "  GTSAM:         ${GTSAM_INSTALL_DIR}")
+message(STATUS "  GeographicLib: ${GEOGRAPHIC_INSTALL_DIR}")
 message(STATUS "  KDDockWidgets: ${KDDW_INSTALL_DIR}")
 message(STATUS "")
 message(STATUS "Build Targets:")
-message(STATUS "  ext_oneTBB        - Build Intel TBB")
-message(STATUS "  ext_GTSAM         - Build GTSAM (depends on ext_oneTBB)")
+message(STATUS "  ext_GeographicLib - Build GeographicLib")
 message(STATUS "  ext_KDDockWidgets - Build KDDockWidgets")
 message(STATUS "")
 message(STATUS "Clean Targets:")
 message(STATUS "  clean-all           - Clean all third-party (alias for clean-third-party)")
 message(STATUS "  clean-third-party   - Clean all third-party builds and installs")
-message(STATUS "  clean-oneTBB        - Clean only oneTBB")
-message(STATUS "  clean-GTSAM         - Clean only GTSAM")
+message(STATUS "  clean-GeographicLib - Clean only GeographicLib")
 message(STATUS "  clean-KDDockWidgets - Clean only KDDockWidgets")
 message(STATUS "")
 message(STATUS "Usage:")

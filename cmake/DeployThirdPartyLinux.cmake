@@ -2,7 +2,7 @@
 # DeployThirdPartyLinux.cmake
 # =============================================================================
 #
-# Copies GTSAM, TBB, and KDDockWidgets shared libraries to the AppDir's lib
+# Copies GeographicLib and KDDockWidgets shared libraries to the AppDir's lib
 # directory and ensures proper rpath configuration for Linux deployment.
 #
 # This module:
@@ -31,52 +31,38 @@ if(NOT DEFINED THIRD_PARTY_DIR)
     set(THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third-party")
 endif()
 
-set(LINUX_TBB_ROOT "${THIRD_PARTY_DIR}/oneTBB-install" CACHE PATH "oneTBB install prefix")
-set(LINUX_GTSAM_ROOT "${THIRD_PARTY_DIR}/GTSAM-install" CACHE PATH "GTSAM install prefix")
+set(LINUX_GEOGRAPHIC_ROOT "${THIRD_PARTY_DIR}/GeographicLib-install" CACHE PATH "GeographicLib install prefix")
 set(LINUX_KDDW_ROOT "${THIRD_PARTY_DIR}/KDDockWidgets-install" CACHE PATH "KDDockWidgets install prefix")
 
 # =============================================================================
-# Helper function to copy shared libraries preserving symlinks
-# =============================================================================
-
-# This function is implemented as install(CODE) to run at install time
-# because the libraries may not exist at configure time (if third-party
-# hasn't been built yet)
-
-# =============================================================================
-# Install TBB Libraries
+# Install GeographicLib Libraries
 # =============================================================================
 
 install(CODE "
-    message(STATUS \"Installing TBB shared libraries...\")
+    message(STATUS \"Installing GeographicLib shared libraries...\")
 
-    set(TBB_LIB_DIR \"${LINUX_TBB_ROOT}/lib\")
+    set(GEOGRAPHIC_LIB_DIR \"${LINUX_GEOGRAPHIC_ROOT}/lib\")
     set(DEST_LIB_DIR \"${FLYSIGHT_APPDIR_USR}/lib\")
 
     file(MAKE_DIRECTORY \"\${DEST_LIB_DIR}\")
 
-    if(EXISTS \"\${TBB_LIB_DIR}\")
-        # Find all TBB shared libraries (libtbb.so*, libtbbmalloc.so*, etc.)
-        file(GLOB TBB_LIBS
-            \"\${TBB_LIB_DIR}/libtbb.so*\"
-            \"\${TBB_LIB_DIR}/libtbbmalloc.so*\"
-            \"\${TBB_LIB_DIR}/libtbbmalloc_proxy.so*\"
-        )
+    if(EXISTS \"\${GEOGRAPHIC_LIB_DIR}\")
+        file(GLOB GEOGRAPHIC_LIBS \"\${GEOGRAPHIC_LIB_DIR}/libGeographic*.so*\")
 
         # Separate real files from symlinks
-        set(TBB_REAL_LIBS \"\")
-        set(TBB_SYMLINKS \"\")
-        foreach(lib \${TBB_LIBS})
+        set(GEO_REAL_LIBS \"\")
+        set(GEO_SYMLINKS \"\")
+        foreach(lib \${GEOGRAPHIC_LIBS})
             if(IS_SYMLINK \"\${lib}\")
-                list(APPEND TBB_SYMLINKS \"\${lib}\")
+                list(APPEND GEO_SYMLINKS \"\${lib}\")
             else()
-                list(APPEND TBB_REAL_LIBS \"\${lib}\")
+                list(APPEND GEO_REAL_LIBS \"\${lib}\")
             endif()
         endforeach()
 
         # Copy real files first and set RPATH on them
         find_program(PATCHELF_EXE patchelf)
-        foreach(lib \${TBB_REAL_LIBS})
+        foreach(lib \${GEO_REAL_LIBS})
             get_filename_component(libname \"\${lib}\" NAME)
             execute_process(
                 COMMAND cp \"\${lib}\" \"\${DEST_LIB_DIR}/\"
@@ -84,8 +70,6 @@ install(CODE "
             )
             if(cp_result EQUAL 0)
                 message(STATUS \"  Copied: \${libname}\")
-
-                # Set RPATH on the library itself so it can find other TBB libs
                 if(PATCHELF_EXE)
                     execute_process(
                         COMMAND \"\${PATCHELF_EXE}\" --set-rpath \"\\\$ORIGIN\" \"\${DEST_LIB_DIR}/\${libname}\"
@@ -98,7 +82,7 @@ install(CODE "
         endforeach()
 
         # Copy symlinks preserving link structure
-        foreach(lib \${TBB_SYMLINKS})
+        foreach(lib \${GEO_SYMLINKS})
             get_filename_component(libname \"\${lib}\" NAME)
             execute_process(
                 COMMAND cp -P \"\${lib}\" \"\${DEST_LIB_DIR}/\"
@@ -109,56 +93,11 @@ install(CODE "
             endif()
         endforeach()
 
-        # Count copied files
-        file(GLOB COPIED_TBB \"\${DEST_LIB_DIR}/libtbb*.so*\")
-        list(LENGTH COPIED_TBB tbb_count)
-        message(STATUS \"TBB: Installed \${tbb_count} library files\")
+        file(GLOB COPIED_GEO \"\${DEST_LIB_DIR}/libGeographic*.so*\")
+        list(LENGTH COPIED_GEO geo_count)
+        message(STATUS \"GeographicLib: Installed \${geo_count} library files\")
     else()
-        message(WARNING \"TBB library directory not found: \${TBB_LIB_DIR}\")
-    endif()
-")
-
-# =============================================================================
-# Install GTSAM Libraries
-# =============================================================================
-
-install(CODE "
-    message(STATUS \"Installing GTSAM shared libraries...\")
-
-    set(GTSAM_LIB_DIR \"${LINUX_GTSAM_ROOT}/lib\")
-    set(DEST_LIB_DIR \"${FLYSIGHT_APPDIR_USR}/lib\")
-
-    if(EXISTS \"\${GTSAM_LIB_DIR}\")
-        # Find all GTSAM shared libraries
-        file(GLOB GTSAM_LIBS
-            \"\${GTSAM_LIB_DIR}/libgtsam.so*\"
-            \"\${GTSAM_LIB_DIR}/libgtsam_unstable.so*\"
-            \"\${GTSAM_LIB_DIR}/libmetis-gtsam.so*\"
-            \"\${GTSAM_LIB_DIR}/libcephes-gtsam.so*\"
-        )
-
-        # Also include GeographicLib if built with GTSAM
-        file(GLOB GEOGRAPHIC_LIBS \"\${GTSAM_LIB_DIR}/libGeographic*.so*\")
-        list(APPEND GTSAM_LIBS \${GEOGRAPHIC_LIBS})
-
-        foreach(lib \${GTSAM_LIBS})
-            get_filename_component(libname \"\${lib}\" NAME)
-            execute_process(
-                COMMAND cp -P \"\${lib}\" \"\${DEST_LIB_DIR}/\"
-                RESULT_VARIABLE cp_result
-            )
-            if(cp_result EQUAL 0)
-                message(STATUS \"  Copied: \${libname}\")
-            else()
-                message(WARNING \"  Failed to copy: \${libname}\")
-            endif()
-        endforeach()
-
-        file(GLOB COPIED_GTSAM \"\${DEST_LIB_DIR}/libgtsam*.so*\" \"\${DEST_LIB_DIR}/libmetis*.so*\" \"\${DEST_LIB_DIR}/libcephes*.so*\" \"\${DEST_LIB_DIR}/libGeographic*.so*\")
-        list(LENGTH COPIED_GTSAM gtsam_count)
-        message(STATUS \"GTSAM: Installed \${gtsam_count} library files\")
-    else()
-        message(WARNING \"GTSAM library directory not found: \${GTSAM_LIB_DIR}\")
+        message(WARNING \"GeographicLib library directory not found: \${GEOGRAPHIC_LIB_DIR}\")
     endif()
 ")
 
@@ -185,11 +124,9 @@ install(CODE "
 
     if(KDDW_SEARCH_DIR)
         # Find KDDockWidgets shared libraries
-        # Library name is libkddockwidgets-qt6.so.X.Y.Z with symlinks
         file(GLOB KDDW_LIBS \"\${KDDW_SEARCH_DIR}/libkddockwidgets-qt6.so*\")
 
         if(NOT KDDW_LIBS)
-            # Fallback to more general pattern in case naming differs
             file(GLOB KDDW_LIBS \"\${KDDW_SEARCH_DIR}/libkddockwidgets*.so*\")
         endif()
 
@@ -224,62 +161,8 @@ install(CODE "
 ")
 
 # =============================================================================
-# Install Boost Libraries (if dynamically linked)
-# =============================================================================
-
-install(CODE "
-    message(STATUS \"Checking for Boost shared libraries...\")
-
-    # Boost libraries that GTSAM might need
-    set(BOOST_LIBS_NEEDED
-        \"serialization\"
-        \"timer\"
-        \"chrono\"
-        \"system\"
-    )
-
-    set(DEST_LIB_DIR \"${FLYSIGHT_APPDIR_USR}/lib\")
-
-    # Common Boost library paths
-    set(BOOST_LIB_PATHS
-        \"/usr/lib/x86_64-linux-gnu\"
-        \"/usr/lib64\"
-        \"/usr/lib\"
-        \"/usr/local/lib\"
-    )
-
-    foreach(boost_lib \${BOOST_LIBS_NEEDED})
-        set(found FALSE)
-        foreach(lib_path \${BOOST_LIB_PATHS})
-            file(GLOB BOOST_SO \"\${lib_path}/libboost_\${boost_lib}.so*\")
-            if(BOOST_SO)
-                foreach(lib \${BOOST_SO})
-                    get_filename_component(libname \"\${lib}\" NAME)
-                    if(NOT EXISTS \"\${DEST_LIB_DIR}/\${libname}\")
-                        execute_process(
-                            COMMAND cp -P \"\${lib}\" \"\${DEST_LIB_DIR}/\"
-                            RESULT_VARIABLE cp_result
-                        )
-                        if(cp_result EQUAL 0)
-                            message(STATUS \"  Copied Boost library: \${libname}\")
-                            set(found TRUE)
-                        endif()
-                    endif()
-                endforeach()
-                if(found)
-                    break()
-                endif()
-            endif()
-        endforeach()
-    endforeach()
-")
-
-# =============================================================================
 # Verify and Set RPATH Configuration
 # =============================================================================
-# The main executable needs RPATH $ORIGIN/../lib to find libraries in usr/lib/
-# The pybind11 bridge module is in usr/share/python/lib/pythonX.X/site-packages/
-# so it needs RPATH $ORIGIN/../../../../lib to reach usr/lib/
 
 install(CODE "
     message(STATUS \"Setting RPATH on executables...\")
@@ -288,7 +171,6 @@ install(CODE "
     set(EXPECTED_RPATH \"\\\$ORIGIN/../lib\")
     set(BRIDGE_RPATH \"\\\$ORIGIN/../../../../lib\")
 
-    # patchelf should be installed by Phase 1 (apt-get install patchelf)
     find_program(PATCHELF_EXE patchelf REQUIRED)
     if(NOT PATCHELF_EXE)
         message(FATAL_ERROR \"patchelf not found! Install with: apt-get install patchelf\")
@@ -305,7 +187,6 @@ install(CODE "
         )
         if(patchelf_result EQUAL 0)
             message(STATUS \"  Set RPATH on FlySightViewer: \${EXPECTED_RPATH}\")
-            # Verify
             execute_process(
                 COMMAND \"\${PATCHELF_EXE}\" --print-rpath \"\${EXECUTABLE}\"
                 OUTPUT_VARIABLE verified_rpath
@@ -319,9 +200,7 @@ install(CODE "
         message(WARNING \"  Executable not found: \${EXECUTABLE}\")
     endif()
 
-    # Set RPATH on pybind11 bridge module (in site-packages, deeper path)
-    # Bridge module is at: usr/share/python/lib/pythonX.X/site-packages/flysight_cpp_bridge*.so
-    # Relative path to usr/lib/ is: ../../../../lib
+    # Set RPATH on pybind11 bridge module
     file(GLOB BRIDGE_FILES \"${FLYSIGHT_APPDIR_USR}/share/python/lib/python*/site-packages/flysight_cpp_bridge*.so\")
     foreach(bridge \${BRIDGE_FILES})
         execute_process(
@@ -332,7 +211,6 @@ install(CODE "
         if(patchelf_result EQUAL 0)
             get_filename_component(bridge_name \"\${bridge}\" NAME)
             message(STATUS \"  Set RPATH on \${bridge_name}: \${BRIDGE_RPATH}\")
-            # Verify
             execute_process(
                 COMMAND \"\${PATCHELF_EXE}\" --print-rpath \"\${bridge}\"
                 OUTPUT_VARIABLE verified_bridge_rpath
@@ -352,18 +230,13 @@ install(CODE "
 # =============================================================================
 # Verify Library Symlinks
 # =============================================================================
-# Critical for versioned libraries like libtbb.so.12 -> libtbb.so.12.15
-# The cp -P flag preserves symlinks during copying
 
 install(CODE "
     message(STATUS \"Verifying library symlinks...\")
 
     set(LIB_DIR \"${FLYSIGHT_APPDIR_USR}/lib\")
 
-    # Check for expected symlink patterns
     set(EXPECTED_SYMLINKS
-        \"libtbb.so\"
-        \"libgtsam.so\"
         \"libkddockwidgets-qt6.so\"
         \"libGeographic.so\"
     )
@@ -371,7 +244,6 @@ install(CODE "
     foreach(lib \${EXPECTED_SYMLINKS})
         set(lib_path \"\${LIB_DIR}/\${lib}\")
         if(EXISTS \"\${lib_path}\")
-            # Check if it's a symlink
             execute_process(
                 COMMAND readlink \"\${lib_path}\"
                 OUTPUT_VARIABLE link_target
@@ -384,7 +256,6 @@ install(CODE "
                 message(STATUS \"  \${lib} (not a symlink - may be OK)\")
             endif()
         else()
-            # Check for versioned name
             file(GLOB versioned_lib \"\${LIB_DIR}/\${lib}.*\")
             if(versioned_lib)
                 list(GET versioned_lib 0 first_versioned)
@@ -404,7 +275,6 @@ install(CODE "
 # =============================================================================
 
 message(STATUS "DeployThirdPartyLinux.cmake: Third-party library deployment configured")
-message(STATUS "  TBB from: ${LINUX_TBB_ROOT}")
-message(STATUS "  GTSAM from: ${LINUX_GTSAM_ROOT}")
+message(STATUS "  GeographicLib from: ${LINUX_GEOGRAPHIC_ROOT}")
 message(STATUS "  KDDockWidgets from: ${LINUX_KDDW_ROOT}")
 message(STATUS "  Target: ${FLYSIGHT_APPDIR_USR}/lib")

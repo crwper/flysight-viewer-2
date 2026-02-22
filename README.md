@@ -96,7 +96,7 @@ This is forwarded automatically to third-party and application sub-builds.
 
 ### Boost Components
 
-Required Boost components: serialization, timer, chrono, system.
+Required Boost components: header-only (boost::geometry).
 
 If Boost is not found automatically, set `BOOST_ROOT`:
 
@@ -132,7 +132,7 @@ These flags are forwarded automatically to sub-builds.
 
 ### Full Build (Third-Party + Application)
 
-This is the default build mode that builds all third-party dependencies (oneTBB, GTSAM, KDDockWidgets) and the main application.
+This is the default build mode that builds all third-party dependencies (GeographicLib, KDDockWidgets) and the main application.
 
 **Windows:**
 
@@ -207,7 +207,7 @@ cmake --build build
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `FLYSIGHT_BUILD_THIRD_PARTY` | `ON` | Build third-party dependencies (oneTBB, GTSAM, KDDockWidgets) |
+| `FLYSIGHT_BUILD_THIRD_PARTY` | `ON` | Build third-party dependencies (GeographicLib, KDDockWidgets) |
 | `FLYSIGHT_BUILD_APP` | `ON` | Build the main FlySight Viewer application |
 | `FLYSIGHT_THIRD_PARTY_ONLY` | `OFF` | Build only third-party dependencies (automatically disables app build) |
 | `GOOGLE_MAPS_API_KEY` | (none) | Google Maps JavaScript API key for the map view |
@@ -217,8 +217,7 @@ cmake --build build
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `THIRD_PARTY_DIR` | `<project>/third-party` | Root directory for third-party dependencies |
-| `ONETBB_INSTALL_DIR` | `<third-party>/oneTBB-install` | oneTBB installation directory |
-| `GTSAM_INSTALL_DIR` | `<third-party>/GTSAM-install` | GTSAM installation directory |
+| `GEOGRAPHIC_INSTALL_DIR` | `<third-party>/GeographicLib-install` | GeographicLib installation directory |
 | `KDDW_INSTALL_DIR` | `<third-party>/KDDockWidgets-install` | KDDockWidgets installation directory |
 | `BOOST_ROOT` | Platform-dependent | Boost root directory |
 
@@ -228,8 +227,7 @@ After a successful build:
 
 | Component | Install Directory |
 |-----------|-------------------|
-| oneTBB | `third-party/oneTBB-install/` |
-| GTSAM | `third-party/GTSAM-install/` |
+| GeographicLib | `third-party/GeographicLib-install/` |
 | KDDockWidgets | `third-party/KDDockWidgets-install/` |
 | Application | `build/` (executables in build root) |
 
@@ -240,8 +238,7 @@ After a successful build:
 Clean individual third-party components:
 
 ```bash
-cmake --build build --target clean-oneTBB
-cmake --build build --target clean-GTSAM
+cmake --build build --target clean-GeographicLib
 cmake --build build --target clean-KDDockWidgets
 cmake --build build --target clean-third-party   # all third-party
 ```
@@ -256,8 +253,7 @@ For a complete reset, delete the build and install directories:
 
 ```powershell
 Remove-Item -Recurse -Force build
-Remove-Item -Recurse -Force third-party\oneTBB-build, third-party\oneTBB-install
-Remove-Item -Recurse -Force third-party\gtsam-build, third-party\GTSAM-install
+Remove-Item -Recurse -Force third-party\GeographicLib-build, third-party\GeographicLib-install
 Remove-Item -Recurse -Force third-party\KDDockWidgets-build, third-party\KDDockWidgets-install
 ```
 
@@ -265,15 +261,14 @@ Remove-Item -Recurse -Force third-party\KDDockWidgets-build, third-party\KDDockW
 
 ```bash
 rm -rf build
-rm -rf third-party/{oneTBB,gtsam,GTSAM,KDDockWidgets}-{build,install}
+rm -rf third-party/{GeographicLib,KDDockWidgets}-{build,install}
 ```
 
 ### Clean Target Reference
 
 | Target | Description |
 |--------|-------------|
-| `clean-oneTBB` | Removes `third-party/oneTBB-build` and `third-party/oneTBB-install` |
-| `clean-GTSAM` | Removes `third-party/gtsam-build` and `third-party/GTSAM-install` |
+| `clean-GeographicLib` | Removes `third-party/GeographicLib-build` and `third-party/GeographicLib-install` |
 | `clean-KDDockWidgets` | Removes `third-party/KDDockWidgets-build` and `third-party/KDDockWidgets-install` |
 | `clean-third-party` | Cleans all third-party components |
 
@@ -284,15 +279,14 @@ flysight-viewer-2/
 ├── CMakeLists.txt                         # Root superbuild configuration
 ├── README.md                              # This file
 ├── cmake/
-│   ├── ThirdPartySuperbuild.cmake         # ExternalProject definitions for oneTBB, GTSAM, KDDockWidgets
-│   ├── PatchGTSAM.cmake                   # Patches GeographicLib to fix Windows build issue
+│   ├── ThirdPartySuperbuild.cmake         # ExternalProject definitions for GeographicLib, KDDockWidgets
 │   ├── BoostDiscovery.cmake               # Cross-platform Boost discovery
 │   ├── QtPathDiscovery.cmake              # Finds Qt plugin/QML directories
 │   ├── GenerateIcon.cmake                 # Application icon generation
 │   ├── BundlePythonWindows.cmake          # Downloads/installs Python embeddable package
 │   ├── BundlePythonMacOS.cmake            # Downloads/installs python-build-standalone
 │   ├── BundlePythonLinux.cmake            # Downloads/installs python-build-standalone
-│   ├── DeployThirdPartyWindows.cmake      # Copies TBB/GTSAM/KDDW/Boost DLLs
+│   ├── DeployThirdPartyWindows.cmake      # Copies GeographicLib/KDDW DLLs
 │   ├── DeployThirdPartyMacOS.cmake        # Copies dylibs to Frameworks, fixes paths
 │   ├── DeployThirdPartyLinux.cmake        # Copies .so files to AppDir, sets RPATH
 │   ├── CreateAppDir.cmake                 # Creates Linux AppDir structure with AppRun
@@ -304,14 +298,11 @@ flysight-viewer-2/
 │   └── CMakeLists.txt                     # Main application build configuration
 ├── third-party/
 │   ├── CMakeLists.txt                     # Standalone third-party build
-│   ├── oneTBB/                            # Intel TBB submodule
-│   ├── gtsam/                             # GTSAM submodule
+│   ├── GeographicLib/                     # GeographicLib source
 │   ├── KDDockWidgets/                     # KDDockWidgets submodule
-│   ├── Eigen/                             # Eigen headers
 │   ├── QCustomPlot/                       # QCustomPlot library
 │   └── pybind11/                          # pybind11 submodule
-├── third-party/oneTBB-install/            # [Build artifact] oneTBB installation
-├── third-party/GTSAM-install/             # [Build artifact] GTSAM installation
+├── third-party/GeographicLib-install/     # [Build artifact] GeographicLib installation
 ├── third-party/KDDockWidgets-install/     # [Build artifact] KDDockWidgets installation
 └── build/                                 # [Build artifact] CMake build directory
 ```
@@ -328,8 +319,7 @@ FlySight Viewer deploys as a self-contained application with a bundled Python in
 |---------|---------|-------|-------|
 | Qt libraries & plugins | `qt_generate_deploy_app_script` | `qt_generate_deploy_app_script` | `qt_generate_deploy_app_script` |
 | map.html (Google Maps) | Installed to `resources/` | Installed to `Resources/resources/` | Installed to `usr/resources/` |
-| Third-party libs (TBB, GTSAM, KDDW) | DLLs copied to app root | dylibs copied to `Frameworks/` | `.so` files copied to `usr/lib/` |
-| Boost | DLLs copied (if dynamic) | N/A (static via Homebrew) | `.so` files copied |
+| Third-party libs (GeographicLib, KDDW) | DLLs copied to app root | dylibs copied to `Frameworks/` | `.so` files copied to `usr/lib/` |
 | Python runtime | Embeddable package downloaded | python-build-standalone downloaded | python-build-standalone downloaded |
 | Library path fixups | N/A (flat DLL layout) | `install_name_tool` (automatic) | `patchelf` (automatic) |
 | `qt.conf` | Generated in app root | Generated in `Resources/` | Generated in `usr/bin/` |
@@ -438,7 +428,7 @@ FlySightViewer/
 ├── FlySightViewer.exe
 ├── flysight_cpp_bridge.pyd
 ├── Qt6Core.dll, Qt6Widgets.dll, ...
-├── tbb12.dll, gtsam.dll, ...
+├── Geographic.dll, ...
 ├── qt.conf
 ├── plugins/
 │   ├── platforms/
@@ -461,7 +451,7 @@ FlySightViewer.app/
     ├── MacOS/FlySightViewer
     ├── Frameworks/
     │   ├── QtCore.framework, ...
-    │   ├── libtbb.12.dylib, libgtsam.4.dylib, ...
+    │   ├── libGeographic.dylib, ...
     │   ├── libkddockwidgets-qt6.3.dylib
     │   └── libpython3.XX.dylib
     ├── PlugIns/
@@ -490,7 +480,7 @@ FlySightViewer.AppDir/
     │   ├── FlySightViewer
     │   └── qt.conf
     ├── lib/
-    │   ├── libQt6*.so.*, libtbb.so.*, libgtsam.so.*, ...
+    │   ├── libQt6*.so.*, libGeographic.so.*, ...
     │   └── libkddockwidgets-qt6.so.*
     ├── plugins/
     │   ├── platforms/
@@ -517,22 +507,7 @@ FlySightViewer.AppDir/
 
 ## Troubleshooting
 
-### 1. GTSAM GeographicLib/js error
-
-**Symptom:** Build fails with errors related to `gtsam/3rdparty/GeographicLib/js`.
-
-**Cause:** GTSAM includes GeographicLib which has a `js` subdirectory that fails to build on Windows.
-
-**Solution:** The CMake build system automatically patches this file via `cmake/PatchGTSAM.cmake`. If you encounter this error, ensure:
-- The `cmake/PatchGTSAM.cmake` file exists
-- The patch script has write access to `third-party/gtsam/3rdparty/GeographicLib/CMakeLists.txt`
-
-To manually apply the patch:
-```bash
-cmake -DGTSAM_SOURCE_DIR=third-party/gtsam -P cmake/PatchGTSAM.cmake
-```
-
-### 2. Qt not found
+### 1. Qt not found
 
 **Symptom:** CMake error: `Could not find a package configuration file provided by "Qt6"` or a Qt6 sub-module like `Qt6QuickControls2`.
 
@@ -553,16 +528,15 @@ cmake -DGTSAM_SOURCE_DIR=third-party/gtsam -P cmake/PatchGTSAM.cmake
   cmake ... -DCMAKE_PREFIX_PATH="$HOME/Qt/6.7.3/gcc_64"
   ```
 
-### 3. Boost not found
+### 2. Boost not found
 
 **Symptom:** CMake error: `Could not find a configuration file for package "Boost"`.
 
 **Solution:**
-- Verify Boost is installed with the required components (serialization, timer, chrono, system)
+- Verify Boost is installed (header-only usage for boost::geometry)
 - Set `BOOST_ROOT` as shown in [Prerequisites > Boost Components](#boost-components)
-- On Windows, also set `BOOST_LIBRARYDIR` if the compiled `.lib` files are not in the default location
 
-### 4. Python development headers not found
+### 3. Python development headers not found
 
 **Symptom:** CMake error: `Could not find a package configuration file provided by "Python"` or missing `Python.h`.
 
@@ -575,7 +549,7 @@ cmake -DGTSAM_SOURCE_DIR=third-party/gtsam -P cmake/PatchGTSAM.cmake
   cmake ... -DPython_ROOT_DIR="/path/to/python"
   ```
 
-### 4a. Python bundling download fails
+### 3a. Python bundling download fails
 
 **Symptom:** CMake error: `Failed to download after 3 attempts` when downloading from `python-build-standalone`.
 
@@ -585,20 +559,7 @@ cmake -DGTSAM_SOURCE_DIR=third-party/gtsam -P cmake/PatchGTSAM.cmake
 - Install a modern Python (3.10+) via MacPorts or Homebrew
 - Point CMake at it with `-DPython_ROOT_DIR` and `-DPython_EXECUTABLE` (see [Prerequisites > Python](#python))
 
-### 5. TBB configuration fails for GTSAM
-
-**Symptom:** GTSAM build fails with TBB-related errors.
-
-**Solution:**
-- Ensure oneTBB was built successfully before GTSAM
-- Verify `third-party/oneTBB-install/lib/cmake/TBB/` exists
-- If rebuilding, clean GTSAM and rebuild:
-  ```bash
-  cmake --build build --target clean-GTSAM
-  cmake --build build --config Release
-  ```
-
-### 6. KDDockWidgets Qt6 not found
+### 4. KDDockWidgets Qt6 not found
 
 **Symptom:** KDDockWidgets build fails with Qt6 not found errors.
 
@@ -607,17 +568,14 @@ cmake -DGTSAM_SOURCE_DIR=third-party/gtsam -P cmake/PatchGTSAM.cmake
 - The KDDockWidgets build uses `-DKDDockWidgets_QT6=ON` to enable Qt6 support
 - Set `CMAKE_PREFIX_PATH` if Qt is not in a standard location
 
-### 7. Build takes too long
-
-**Symptom:** Third-party builds (especially GTSAM) take a very long time.
+### 5. Build takes too long
 
 **Solution:**
-- GTSAM is a large library; initial builds can take 30+ minutes
 - Use Ninja for faster builds: `-G Ninja`
 - Use parallel builds: `cmake --build build --parallel`
 - After initial build, use `-DFLYSIGHT_BUILD_THIRD_PARTY=OFF` to skip rebuilding dependencies
 
-### 8. Resetting Application Preferences (macOS)
+### 6. Resetting Application Preferences (macOS)
 
 To reset all stored preferences for FlySight Viewer on macOS:
 
@@ -625,9 +583,9 @@ To reset all stored preferences for FlySight Viewer on macOS:
 defaults delete com.flysight.Viewer
 ```
 
-### 9. Visual Studio shows many projects
+### 7. Visual Studio shows many projects
 
-**Symptom:** The Visual Studio solution contains many projects (oneTBB, GTSAM, KDDockWidgets targets).
+**Symptom:** The Visual Studio solution contains many projects (GeographicLib, KDDockWidgets targets).
 
 **Explanation:** This is expected behavior for a superbuild. The solution includes ExternalProject targets for third-party dependencies, the main application targets, and clean targets.
 

@@ -28,7 +28,6 @@
 #include "preferences/preferencesmanager.h"
 #include "preferences/preferencekeys.h"
 #include "sessiondata.h"
-#include "imugnssekf.h"
 #include "plotviewsettingsmodel.h"
 #include "plotmodel.h"
 #include "markermodel.h"
@@ -752,21 +751,6 @@ void MainWindow::registerBuiltInPlots()
         {"GNSS time", "Time of week", "s", QColor::fromHsl(0, 0, 64), "TIME", "tow", "time"},
         {"GNSS time", "Week number", "", QColor::fromHsl(0, 0, 128), "TIME", "week", "count"},
 
-        // Category: Sensor fusion
-        {"Sensor fusion", "North position", "m", QColor::fromHsl(240 - group_a, 255, 128), SessionKeys::ImuGnssEkf, "posN", "distance"},
-        {"Sensor fusion", "East position", "m", QColor::fromHsl(240, 255, 128), SessionKeys::ImuGnssEkf, "posE", "distance"},
-        {"Sensor fusion", "Down position", "m", QColor::fromHsl(240 + group_a, 255, 128), SessionKeys::ImuGnssEkf, "posD", "distance"},
-
-        {"Sensor fusion", "North velocity", "m/s", QColor::fromHsl(180 - group_a, 255, 128), SessionKeys::ImuGnssEkf, "velN", "speed"},
-        {"Sensor fusion", "East velocity", "m/s", QColor::fromHsl(180, 255, 128), SessionKeys::ImuGnssEkf, "velE", "speed"},
-        {"Sensor fusion", "Down velocity", "m/s", QColor::fromHsl(180 + group_a, 255, 128), SessionKeys::ImuGnssEkf, "velD", "speed"},
-
-        {"Sensor fusion", "Horizontal acceleration", "g", Qt::magenta, SessionKeys::ImuGnssEkf, "accH", "acceleration"},
-        {"Sensor fusion", "Vertical acceleration", "g", Qt::cyan, SessionKeys::ImuGnssEkf, "accD", "acceleration"},
-
-        {"Sensor fusion", "X rotation", "deg", QColor::fromHsl(120 - group_a, 255, 128), SessionKeys::ImuGnssEkf, "roll", "angle"},
-        {"Sensor fusion", "Y rotation", "deg", QColor::fromHsl(120, 255, 128), SessionKeys::ImuGnssEkf, "pitch", "angle"},
-        {"Sensor fusion", "Z rotation", "deg", QColor::fromHsl(120 + group_a, 255, 128), SessionKeys::ImuGnssEkf, "yaw", "angle"},
     };
 
     for (auto &pv : defaults)

@@ -22,8 +22,8 @@ endif()
 # =============================================================================
 #
 # Third-party path variables (defined once, cached, can be overridden):
-#   THIRD_PARTY_DIR, EIGEN_DIR, QCUSTOMPLOT_ROOT, QCUSTOMPLOT_DIR,
-#   GTSAM_ROOT, TBB_ROOT, KDDW_ROOT, BOOST_ROOT, BOOST_LIBRARYDIR
+#   THIRD_PARTY_DIR, QCUSTOMPLOT_ROOT, QCUSTOMPLOT_DIR,
+#   GEOGRAPHIC_ROOT, KDDW_ROOT, BOOST_ROOT, BOOST_LIBRARYDIR
 #
 # Build configuration variables:
 #   GOOGLE_MAPS_API_KEY  - Google Maps JavaScript API key (CACHE STRING)
@@ -47,11 +47,9 @@ endif()
 set(THIRD_PARTY_DIR "${CMAKE_CURRENT_LIST_DIR}/../third-party"
     CACHE PATH "Path to third-party dependencies")
 
-set(EIGEN_DIR      "${THIRD_PARTY_DIR}/Eigen"                 CACHE PATH "Eigen include dir")
 set(QCUSTOMPLOT_ROOT "${THIRD_PARTY_DIR}/QCustomPlot"         CACHE PATH "QCustomPlot root")
 set(QCUSTOMPLOT_DIR  "${QCUSTOMPLOT_ROOT}/QCustomPlot"        CACHE PATH "QCustomPlot sources dir")
-set(GTSAM_ROOT     "${THIRD_PARTY_DIR}/GTSAM-install"         CACHE PATH "GTSAM install prefix")
-set(TBB_ROOT       "${THIRD_PARTY_DIR}/oneTBB-install"        CACHE PATH "oneTBB install prefix")
+set(GEOGRAPHIC_ROOT  "${THIRD_PARTY_DIR}/GeographicLib-install" CACHE PATH "GeographicLib install prefix")
 set(KDDW_ROOT      "${THIRD_PARTY_DIR}/KDDockWidgets-install" CACHE PATH "KDDockWidgets install prefix")
 
 # Google Maps API key for the embedded map view
@@ -195,192 +193,18 @@ target_include_directories(qcustomplot
 )
 target_link_libraries(qcustomplot PUBLIC Qt${QT_VERSION_MAJOR}::Widgets)
 
-# Header-only includes bundled into one interface target
-add_library(flysight_headers INTERFACE)
-target_include_directories(flysight_headers INTERFACE
-  "${EIGEN_DIR}"
-)
+# GeographicLib (prebuilt by superbuild)
+find_package(GeographicLib REQUIRED
+    PATHS "${GEOGRAPHIC_ROOT}/lib/cmake/GeographicLib"
+    NO_DEFAULT_PATH)
+message(STATUS "GeographicLib found: ${GeographicLib_VERSION}")
+message(STATUS "  Libraries: ${GeographicLib_LIBRARIES}")
 
-# Prebuilt GTSAM bundle (interface target that chooses libs by config)
-add_library(flysight_gtsam INTERFACE)
-target_include_directories(flysight_gtsam INTERFACE "${GTSAM_ROOT}/include")
-
-set(_GTSAM_LIB_DIR "${GTSAM_ROOT}/lib")
-
-# Find GTSAM libraries using CMake's find_library for cross-platform support
-# Use NAMES to handle potential library naming variations across platforms
-find_library(GTSAM_CEPHES_RELEASE
-    NAMES cephes-gtsam
-    PATHS "${_GTSAM_LIB_DIR}"
-    NO_DEFAULT_PATH REQUIRED)
-
-find_library(GTSAM_MAIN_RELEASE
-    NAMES gtsam
-    PATHS "${_GTSAM_LIB_DIR}"
-    NO_DEFAULT_PATH REQUIRED)
-
-find_library(GTSAM_METIS_RELEASE
-    NAMES metis-gtsam
-    PATHS "${_GTSAM_LIB_DIR}"
-    NO_DEFAULT_PATH REQUIRED)
-
-find_library(GTSAM_GEOGRAPHIC_RELEASE
-    NAMES Geographic
-    PATHS "${_GTSAM_LIB_DIR}"
-    NO_DEFAULT_PATH REQUIRED)
-
-# Diagnostic output for GTSAM library discovery
-message(STATUS "GTSAM library discovery:")
-message(STATUS "  GTSAM_CEPHES_RELEASE:     ${GTSAM_CEPHES_RELEASE}")
-message(STATUS "  GTSAM_MAIN_RELEASE:       ${GTSAM_MAIN_RELEASE}")
-message(STATUS "  GTSAM_METIS_RELEASE:      ${GTSAM_METIS_RELEASE}")
-message(STATUS "  GTSAM_GEOGRAPHIC_RELEASE: ${GTSAM_GEOGRAPHIC_RELEASE}")
-
-find_library(GTSAM_CEPHES_DEBUG cephes-gtsamDebug PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH)
-find_library(GTSAM_MAIN_DEBUG gtsamDebug PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH)
-find_library(GTSAM_METIS_DEBUG metis-gtsamDebug PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH)
-find_library(GTSAM_GEOGRAPHIC_DEBUG Geographic_d PATHS "${_GTSAM_LIB_DIR}" NO_DEFAULT_PATH)
-
-# Fall back to release libs if debug not found
-if(NOT GTSAM_CEPHES_DEBUG)
-  set(GTSAM_CEPHES_DEBUG "${GTSAM_CEPHES_RELEASE}")
-endif()
-if(NOT GTSAM_MAIN_DEBUG)
-  set(GTSAM_MAIN_DEBUG "${GTSAM_MAIN_RELEASE}")
-endif()
-if(NOT GTSAM_METIS_DEBUG)
-  set(GTSAM_METIS_DEBUG "${GTSAM_METIS_RELEASE}")
-endif()
-if(NOT GTSAM_GEOGRAPHIC_DEBUG)
-  set(GTSAM_GEOGRAPHIC_DEBUG "${GTSAM_GEOGRAPHIC_RELEASE}")
-endif()
-
-# GTSAM library linking order is important on Unix:
-# - gtsam (main) references metis-gtsam, cephes-gtsam, Geographic
-# - List gtsam first, then dependencies it needs
-target_link_libraries(flysight_gtsam INTERFACE
-  $<$<CONFIG:Debug>:${GTSAM_MAIN_DEBUG}>
-  $<$<CONFIG:Debug>:${GTSAM_METIS_DEBUG}>
-  $<$<CONFIG:Debug>:${GTSAM_CEPHES_DEBUG}>
-  $<$<CONFIG:Debug>:${GTSAM_GEOGRAPHIC_DEBUG}>
-
-  $<$<NOT:$<CONFIG:Debug>>:${GTSAM_MAIN_RELEASE}>
-  $<$<NOT:$<CONFIG:Debug>>:${GTSAM_METIS_RELEASE}>
-  $<$<NOT:$<CONFIG:Debug>>:${GTSAM_CEPHES_RELEASE}>
-  $<$<NOT:$<CONFIG:Debug>>:${GTSAM_GEOGRAPHIC_RELEASE}>
-)
-
-# GTSAM uses Boost headers and may trigger Boost.Serialization autolink.
-# Link explicitly so MSVC resolves the library reliably.
-target_link_libraries(flysight_gtsam INTERFACE
-  Boost::serialization
-  Boost::timer
-  Boost::chrono
-  Boost::system
-)
-
-# Prebuilt oneTBB bundle
-# First, try to find TBB via its installed CMake config (preferred method)
-set(TBB_DIR "${TBB_ROOT}/lib/cmake/TBB" CACHE PATH "TBB CMake config directory")
-
-find_package(TBB CONFIG QUIET HINTS "${TBB_DIR}")
-
-if(TBB_FOUND)
-    message(STATUS "Found TBB via CMake config at: ${TBB_DIR}")
-    # TBB exports TBB::tbb and TBB::tbbmalloc targets
-    add_library(flysight_tbb INTERFACE)
-    target_link_libraries(flysight_tbb INTERFACE TBB::tbb TBB::tbbmalloc)
-
-    # Store TBB library directory for RPATH configuration
-    if(NOT WIN32)
-        get_target_property(_tbb_lib_location TBB::tbb IMPORTED_LOCATION_RELEASE)
-        if(NOT _tbb_lib_location)
-            get_target_property(_tbb_lib_location TBB::tbb IMPORTED_LOCATION)
-        endif()
-        if(_tbb_lib_location)
-            get_filename_component(_TBB_LIB_DIR "${_tbb_lib_location}" DIRECTORY)
-            set(_TBB_LIB_DIR "${_TBB_LIB_DIR}" CACHE INTERNAL "TBB library directory for RPATH")
-        endif()
-    endif()
-else()
-    # Fallback to manual find_library for Windows or if config not found
-    message(STATUS "TBB CMake config not found, using manual library discovery")
-
-    add_library(flysight_tbb INTERFACE)
-    target_include_directories(flysight_tbb INTERFACE "${TBB_ROOT}/include")
-
-    set(_TBB_LIB_DIR "${TBB_ROOT}/lib")
-
-    # Platform-specific library search
-    if(WIN32)
-        find_library(TBB_MAIN_RELEASE tbb PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
-        find_library(TBB_MALLOC_RELEASE tbbmalloc PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
-        find_library(TBB_MAIN_DEBUG tbb_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
-        find_library(TBB_MALLOC_DEBUG tbbmalloc_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
-        find_library(TBB_12_RELEASE tbb12 PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH REQUIRED)
-        find_library(TBB_12_DEBUG tbb12_debug PATHS "${_TBB_LIB_DIR}" NO_DEFAULT_PATH)
-
-        # Fall back to release libs if debug not found
-        if(NOT TBB_MAIN_DEBUG)
-            set(TBB_MAIN_DEBUG "${TBB_MAIN_RELEASE}")
-        endif()
-        if(NOT TBB_12_DEBUG)
-            set(TBB_12_DEBUG "${TBB_12_RELEASE}")
-        endif()
-        if(NOT TBB_MALLOC_DEBUG)
-            set(TBB_MALLOC_DEBUG "${TBB_MALLOC_RELEASE}")
-        endif()
-
-        target_link_libraries(flysight_tbb INTERFACE
-            $<$<CONFIG:Debug>:${TBB_MAIN_DEBUG}>
-            $<$<CONFIG:Debug>:${TBB_MALLOC_DEBUG}>
-            $<$<CONFIG:Debug>:${TBB_12_DEBUG}>
-            $<$<NOT:$<CONFIG:Debug>>:${TBB_MAIN_RELEASE}>
-            $<$<NOT:$<CONFIG:Debug>>:${TBB_MALLOC_RELEASE}>
-            $<$<NOT:$<CONFIG:Debug>>:${TBB_12_RELEASE}>
-        )
-    else()
-        # macOS and Linux: search for shared libraries with platform naming
-        find_library(TBB_MAIN_RELEASE
-            NAMES tbb libtbb.so.12 libtbb.12.dylib
-            PATHS "${_TBB_LIB_DIR}"
-            NO_DEFAULT_PATH REQUIRED)
-        find_library(TBB_MALLOC_RELEASE
-            NAMES tbbmalloc libtbbmalloc.so.12 libtbbmalloc.12.dylib
-            PATHS "${_TBB_LIB_DIR}"
-            NO_DEFAULT_PATH REQUIRED)
-
-        target_link_libraries(flysight_tbb INTERFACE
-            ${TBB_MAIN_RELEASE}
-            ${TBB_MALLOC_RELEASE}
-        )
-    endif()
-endif()
-
-# Set build RPATH to include TBB library directory on Unix
-# This allows the executable to find TBB at runtime during development
-if(NOT WIN32 AND DEFINED _TBB_LIB_DIR)
-    list(APPEND CMAKE_BUILD_RPATH "${_TBB_LIB_DIR}")
-    message(STATUS "Added TBB library directory to BUILD_RPATH: ${_TBB_LIB_DIR}")
-endif()
-
-# Boost (need Serialization; use imported targets, no link_directories)
+# Boost (header-only; boost::geometry used by simplification calculations)
 # BOOST_ROOT and BOOST_LIBRARYDIR are set by cmake/BoostDiscovery.cmake with
-# platform-appropriate defaults. BOOST_LIBRARYDIR is only set on Windows;
-# on Unix systems, FindBoost handles multiarch library paths automatically.
+# platform-appropriate defaults.
 
-set(Boost_USE_STATIC_LIBS OFF)
-set(Boost_USE_MULTITHREADED ON)
-set(Boost_USE_STATIC_RUNTIME OFF)
-
-find_package(Boost REQUIRED COMPONENTS serialization timer chrono system)
-
-# Disable Boost auto-linking on MSVC - CMake handles linking via Boost::* targets
-# This prevents LNK1104 errors when using dynamic Boost libraries, as auto-linking
-# defaults to static library names (libboost_*.lib) instead of import libs (boost_*.lib)
-if(MSVC)
-  add_compile_definitions(BOOST_ALL_NO_LIB)
-endif()
+find_package(Boost REQUIRED)
 
 # KDDockWidgets (KDDW)
 find_package(KDDockWidgets-qt6 CONFIG REQUIRED)
@@ -437,7 +261,6 @@ set(PROJECT_SOURCES
   graphinfo.h
   pluginhost.h               pluginhost.cpp
   plotregistry.cpp           plotregistry.h
-  imugnssekf.h               imugnssekf.cpp
   python_output_redirector.h
   plotmodel.cpp              plotmodel.h
   cursormodel.cpp            cursormodel.h
@@ -475,7 +298,6 @@ set(PROJECT_SOURCES
   calculations/humcalculations.cpp            calculations/humcalculations.h
   calculations/vbatcalculations.cpp           calculations/vbatcalculations.h
   calculations/timecalculations.cpp           calculations/timecalculations.h
-  calculations/sensorfusioncalculations.cpp   calculations/sensorfusioncalculations.h
   calculations/simplificationcalculations.cpp calculations/simplificationcalculations.h
   resources.qrc
 )
@@ -506,10 +328,8 @@ qt_add_resources(FlySightViewer map_resource
 
 target_link_libraries(FlySightViewer PRIVATE
   flysight_model
-  flysight_headers
   qcustomplot
-  flysight_gtsam
-  flysight_tbb
+  ${GeographicLib_LIBRARIES}
 
   KDAB::kddockwidgets
 
@@ -539,7 +359,6 @@ pybind11_add_module(flysight_cpp_bridge
 
 target_link_libraries(flysight_cpp_bridge PRIVATE
   flysight_model
-  flysight_headers
   Qt${QT_VERSION_MAJOR}::Core
 )
 
@@ -731,7 +550,7 @@ if(WIN32)
   # Bundle Python embeddable package
   include("${FLYSIGHT_CMAKE_DIR}/BundlePythonWindows.cmake")
 
-  # Deploy third-party DLLs (TBB, GTSAM, KDDockWidgets, Boost)
+  # Deploy third-party DLLs (GeographicLib, KDDockWidgets, Boost)
   include("${FLYSIGHT_CMAKE_DIR}/DeployThirdPartyWindows.cmake")
 endif()
 
@@ -808,13 +627,12 @@ if(APPLE)
     bundle_python_macos(TARGET FlySightViewer)
   endif()
 
-  # Deploy third-party libraries (TBB, GTSAM, KDDockWidgets)
+  # Deploy third-party libraries (GeographicLib, KDDockWidgets)
   include("${FLYSIGHT_CMAKE_DIR}/DeployThirdPartyMacOS.cmake" OPTIONAL)
   if(COMMAND deploy_third_party_macos)
     deploy_third_party_macos(
       TARGET FlySightViewer
-      TBB_ROOT "${TBB_ROOT}"
-      GTSAM_ROOT "${GTSAM_ROOT}"
+      GEOGRAPHIC_ROOT "${GEOGRAPHIC_ROOT}"
       KDDW_ROOT "${KDDW_ROOT}"
     )
   endif()

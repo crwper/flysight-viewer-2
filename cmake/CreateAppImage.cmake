@@ -174,7 +174,7 @@ echo "--- Verifying library dependencies ---"
 LIB_DIR="${APPDIR}/usr/lib"
 
 # Check third-party libraries
-for lib in libtbb libgtsam libkddockwidgets libGeographic; do
+for lib in libkddockwidgets libGeographic; do
     found=$(find "${LIB_DIR}" -name "${lib}*.so*" 2>/dev/null | head -1)
     if [ -n "$found" ]; then
         echo "  Found: $(basename $found)"

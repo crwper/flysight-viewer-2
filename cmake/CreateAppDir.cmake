@@ -96,7 +96,7 @@ if [ -n "${FLYSIGHT_DEBUG}" ]; then
     ls -la "${HERE}/usr/lib/" 2>/dev/null | head -20
     echo ""
     echo "=== Checking critical libraries ==="
-    for lib in libtbb libgtsam libkddockwidgets libGeographic; do
+    for lib in libkddockwidgets libGeographic; do
         found=$(find "${HERE}/usr/lib" -name "${lib}*.so*" 2>/dev/null | head -1)
         if [ -n "$found" ]; then
             echo "  $lib: $(basename $found)"

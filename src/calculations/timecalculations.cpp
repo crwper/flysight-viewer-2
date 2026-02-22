@@ -148,7 +148,7 @@ void Calculations::registerTimeCalculations()
     };
 
     // Register for all sensors
-    QStringList all_sensors = {"GNSS", "BARO", "HUM", "MAG", "IMU", "TIME", "VBAT", SessionKeys::ImuGnssEkf};
+    QStringList all_sensors = {"GNSS", "BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
     for (const QString &sens : all_sensors) {
         SessionData::registerCalculatedMeasurement(
             sens, SessionKeys::TimeFromExit,

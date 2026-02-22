@@ -7,7 +7,6 @@
 #include "humcalculations.h"
 #include "vbatcalculations.h"
 #include "timecalculations.h"
-#include "sensorfusioncalculations.h"
 #include "simplificationcalculations.h"
 
 using namespace FlySight;
@@ -27,6 +26,5 @@ void CalculatedValueRegistry::registerBuiltInCalculations() {
     Calculations::registerHumCalculations();
     Calculations::registerVbatCalculations();
     Calculations::registerTimeCalculations();
-    Calculations::registerSensorfusionCalculations();
     Calculations::registerSimplificationCalculations();
 }

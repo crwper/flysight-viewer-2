@@ -98,7 +98,7 @@ git submodule update --init --recursive
 
 ### Build Third-Party Dependencies
 
-The first build requires building third-party dependencies (oneTBB, GTSAM, KDDockWidgets):
+The first build requires building third-party dependencies (GeographicLib, KDDockWidgets):
 
 ```bash
 # Configure the superbuild
@@ -121,8 +121,7 @@ cmake -G Ninja -B build -S src \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=build/install \
     -DTHIRD_PARTY_DIR="$(pwd)/third-party" \
-    -DGTSAM_ROOT="$(pwd)/third-party/GTSAM-install" \
-    -DTBB_ROOT="$(pwd)/third-party/oneTBB-install" \
+    -DGEOGRAPHIC_ROOT="$(pwd)/third-party/GeographicLib-install" \
     -DKDDW_ROOT="$(pwd)/third-party/KDDockWidgets-install"
 
 # Build

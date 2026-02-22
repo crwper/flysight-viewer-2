@@ -225,7 +225,7 @@ diagnose_bundle() {
 
         log_subsection "Critical Libraries Check"
 
-        local critical_libs=("libgtsam" "libmetis-gtsam" "libcephes-gtsam" "libGeographic" "libtbb" "libpython")
+        local critical_libs=("libGeographic" "libpython")
         for lib in "${critical_libs[@]}"; do
             local found
             found=$(find "$frameworks_dir" -name "${lib}*.dylib" ! -type l 2>/dev/null | head -1)

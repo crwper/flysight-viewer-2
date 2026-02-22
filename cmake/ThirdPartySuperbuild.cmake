@@ -2,18 +2,16 @@
 # ThirdPartySuperbuild.cmake
 # =============================================================================
 #
-# This file defines ExternalProject targets for the three major third-party
-# dependencies: oneTBB, GTSAM, and KDDockWidgets. It implements a superbuild
-# pattern that builds these libraries in the correct order with proper
-# dependency handling.
+# This file defines ExternalProject targets for the third-party dependencies:
+# GeographicLib and KDDockWidgets. It implements a superbuild pattern that
+# builds these libraries with proper dependency handling.
 #
 # This replaces the Windows-specific BUILD.BAT with a portable, cross-platform
 # CMake solution.
 #
 # Build Order and Dependencies:
-#   1. oneTBB     - No dependencies, builds first
-#   2. GTSAM      - Depends on oneTBB (for TBB integration)
-#   3. KDDockWidgets - Independent, can build in parallel with GTSAM
+#   1. GeographicLib  - No dependencies
+#   2. KDDockWidgets  - No dependencies, can build in parallel
 #
 # Each library is built in the configuration specified by CMAKE_BUILD_TYPE.
 # For local development requiring both Debug and Release, run the build twice
@@ -39,41 +37,18 @@ get_property(_is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 # project's platform and an explicit -A argument are passed.
 
 # =============================================================================
-# Boost Discovery for GTSAM
-# =============================================================================
-#
-# GTSAM requires Boost for building. Include the cross-platform Boost discovery
-# module to get the correct BOOST_ROOT for the current platform.
-#
-
-# Determine the path to BoostDiscovery.cmake
-if(DEFINED FLYSIGHT_CMAKE_DIR)
-    set(_BOOST_DISCOVERY_PATH "${FLYSIGHT_CMAKE_DIR}/BoostDiscovery.cmake")
-else()
-    set(_BOOST_DISCOVERY_PATH "${CMAKE_CURRENT_LIST_DIR}/BoostDiscovery.cmake")
-endif()
-
-if(EXISTS "${_BOOST_DISCOVERY_PATH}")
-    include("${_BOOST_DISCOVERY_PATH}")
-else()
-    message(WARNING "BoostDiscovery.cmake not found at ${_BOOST_DISCOVERY_PATH}")
-    message(WARNING "GTSAM build may fail to find Boost.")
-endif()
-
-# =============================================================================
 # Source Directory Variables
 # =============================================================================
 #
-# Define paths to the third-party source directories (submodules).
+# Define paths to the third-party source directories.
 # These use THIRD_PARTY_DIR which is defined in the root CMakeLists.txt.
 #
 
-set(ONETBB_SOURCE_DIR "${THIRD_PARTY_DIR}/oneTBB")
-set(GTSAM_SOURCE_DIR "${THIRD_PARTY_DIR}/gtsam")
+set(GEOGRAPHIC_SOURCE_DIR "${THIRD_PARTY_DIR}/GeographicLib")
 set(KDDW_SOURCE_DIR "${THIRD_PARTY_DIR}/KDDockWidgets")
 
 # Verify source directories exist
-foreach(_src_dir ONETBB_SOURCE_DIR GTSAM_SOURCE_DIR KDDW_SOURCE_DIR)
+foreach(_src_dir GEOGRAPHIC_SOURCE_DIR KDDW_SOURCE_DIR)
     if(NOT EXISTS "${${_src_dir}}")
         message(WARNING "Third-party source directory not found: ${${_src_dir}}")
         message(WARNING "Please ensure git submodules are initialized: git submodule update --init --recursive")
@@ -81,112 +56,41 @@ foreach(_src_dir ONETBB_SOURCE_DIR GTSAM_SOURCE_DIR KDDW_SOURCE_DIR)
 endforeach()
 
 # =============================================================================
-# ext_oneTBB - Intel Threading Building Blocks
+# ext_GeographicLib - Geographic coordinate conversions
 # =============================================================================
 #
-# oneTBB provides parallel algorithms and data structures used by GTSAM.
-# We build it as a shared library (BUILD_SHARED_LIBS=ON) because:
-#   1. oneTBB explicitly warns against static builds (see oneTBB/CMakeLists.txt:145)
-#   2. Shared builds avoid issues with TBB's thread-local storage
+# GeographicLib provides geodesic computations and coordinate conversions
+# (e.g., WGS84 to local Cartesian) used by the path simplification system.
 #
 # Key options:
-#   - BUILD_SHARED_LIBS=ON  : Build as shared library (recommended by TBB)
-#   - TBB_TEST=OFF          : Skip test builds
-#   - TBB_EXAMPLES=OFF      : Skip example builds
-#   - TBB_STRICT=OFF        : Disable warnings-as-errors to avoid build failures
+#   - BUILD_SHARED_LIBS=ON     : Build as shared library
+#   - GEOGRAPHICLIB_LIB_TYPE=SHARED : Explicit shared library type
+#   - BUILD_BOTH_LIBS=OFF      : Only build one library type
+#   - BUILD_DOCUMENTATION=OFF  : Skip documentation
+#   - BUILD_MANPAGES=OFF       : Skip man pages
+#   - BUILD_TOOLS=OFF          : Skip command-line tools
+#   - BUILD_TESTING=OFF        : Skip tests
 #
 
-ExternalProject_Add(ext_oneTBB
-    SOURCE_DIR "${ONETBB_SOURCE_DIR}"
-    BINARY_DIR "${THIRD_PARTY_DIR}/oneTBB-build"
-    INSTALL_DIR "${ONETBB_INSTALL_DIR}"
+ExternalProject_Add(ext_GeographicLib
+    SOURCE_DIR "${GEOGRAPHIC_SOURCE_DIR}"
+    BINARY_DIR "${THIRD_PARTY_DIR}/GeographicLib-build"
+    INSTALL_DIR "${GEOGRAPHIC_INSTALL_DIR}"
     CMAKE_GENERATOR "${CMAKE_GENERATOR}"
     CMAKE_GENERATOR_PLATFORM "${CMAKE_GENERATOR_PLATFORM}"
     CMAKE_ARGS
         -DBUILD_SHARED_LIBS=ON
-        -DTBB_TEST=OFF
-        -DTBB_EXAMPLES=OFF
-        -DTBB_STRICT=OFF
+        -DGEOGRAPHICLIB_LIB_TYPE=SHARED
+        -DBUILD_BOTH_LIBS=OFF
+        -DBUILD_DOCUMENTATION=OFF
+        -DBUILD_MANPAGES=OFF
+        -DBUILD_TOOLS=OFF
+        -DBUILD_TESTING=OFF
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
     UPDATE_COMMAND ""
     PATCH_COMMAND ""
-)
-
-# =============================================================================
-# ext_GTSAM - Georgia Tech Smoothing and Mapping
-# =============================================================================
-#
-# GTSAM is a factor graph optimization library used for GPS trajectory smoothing.
-# It integrates with TBB for parallel computations.
-#
-# Key options:
-#   - GTSAM_INSTALL_GEOGRAPHICLIB=ON : Install bundled GeographicLib
-#   - GTSAM_BUILD_EXAMPLES_ALWAYS=OFF : Skip examples
-#   - GTSAM_BUILD_TESTS=OFF          : Skip tests
-#   - GTSAM_WITH_TBB=ON              : Enable TBB integration
-#   - TBB_DIR                        : Path to oneTBB's CMake config
-#
-# PATCH_COMMAND: Invokes PatchGTSAM.cmake to comment out the problematic
-#   'add_subdirectory (js)' line in GeographicLib's CMakeLists.txt, which
-#   causes build failures on Windows.
-#
-
-# Ensure ONETBB_INSTALL_DIR is defined (fallback for standalone superbuild invocation)
-if(NOT DEFINED ONETBB_INSTALL_DIR)
-    set(ONETBB_INSTALL_DIR "${THIRD_PARTY_DIR}/oneTBB-install")
-endif()
-
-# Path to TBB's CMake configuration directory
-set(TBB_CMAKE_DIR "${ONETBB_INSTALL_DIR}/lib/cmake/TBB")
-message(STATUS "GTSAM will use TBB from: ${TBB_CMAKE_DIR}")
-
-# Configure the patch command for GTSAM
-# The patch script comments out the js subdirectory in GeographicLib
-# When included from third-party/CMakeLists.txt, FLYSIGHT_CMAKE_DIR points to cmake/
-# When included from root CMakeLists.txt, we use CMAKE_CURRENT_SOURCE_DIR/cmake/
-if(DEFINED FLYSIGHT_CMAKE_DIR)
-    set(_GTSAM_PATCH_SCRIPT "${FLYSIGHT_CMAKE_DIR}/PatchGTSAM.cmake")
-else()
-    set(_GTSAM_PATCH_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PatchGTSAM.cmake")
-endif()
-if(EXISTS "${_GTSAM_PATCH_SCRIPT}")
-    set(_GTSAM_PATCH_COMMAND ${CMAKE_COMMAND} -DGTSAM_SOURCE_DIR=${GTSAM_SOURCE_DIR} -P "${_GTSAM_PATCH_SCRIPT}")
-else()
-    message(WARNING "PatchGTSAM.cmake not found at ${_GTSAM_PATCH_SCRIPT}")
-    message(WARNING "GTSAM build may fail due to GeographicLib js subdirectory issue.")
-    set(_GTSAM_PATCH_COMMAND "")
-endif()
-
-# Build Boost hints for GTSAM
-# BOOST_ROOT is set by BoostDiscovery.cmake included above
-set(_GTSAM_BOOST_ARGS "-DBOOST_ROOT=${BOOST_ROOT}")
-if(BOOST_LIBRARYDIR)
-    list(APPEND _GTSAM_BOOST_ARGS "-DBOOST_LIBRARYDIR=${BOOST_LIBRARYDIR}")
-endif()
-# Allow GTSAM to find system Boost if BOOST_ROOT points to a system location
-list(APPEND _GTSAM_BOOST_ARGS "-DBoost_NO_SYSTEM_PATHS=OFF")
-
-ExternalProject_Add(ext_GTSAM
-    SOURCE_DIR "${GTSAM_SOURCE_DIR}"
-    BINARY_DIR "${THIRD_PARTY_DIR}/gtsam-build"
-    INSTALL_DIR "${GTSAM_INSTALL_DIR}"
-    DEPENDS ext_oneTBB
-    CMAKE_GENERATOR "${CMAKE_GENERATOR}"
-    CMAKE_GENERATOR_PLATFORM "${CMAKE_GENERATOR_PLATFORM}"
-    CMAKE_ARGS
-        -DGTSAM_INSTALL_GEOGRAPHICLIB=ON
-        -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF
-        -DGTSAM_BUILD_TESTS=OFF
-        -DGTSAM_WITH_TBB=ON
-        -DTBB_DIR=${TBB_CMAKE_DIR}
-        ${_GTSAM_BOOST_ARGS}
-        # Enable PIC for static library components (required on Linux for shared library linking)
-        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-        -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
-    PATCH_COMMAND ${_GTSAM_PATCH_COMMAND}
-    UPDATE_COMMAND ""
 )
 
 # =============================================================================
@@ -241,22 +145,15 @@ ExternalProject_Add(ext_KDDockWidgets
 # These replicate the functionality of CLEAN.BAT in a cross-platform way.
 #
 # Usage:
-#   cmake --build build --target clean-oneTBB
-#   cmake --build build --target clean-GTSAM
+#   cmake --build build --target clean-GeographicLib
 #   cmake --build build --target clean-KDDockWidgets
 #   cmake --build build --target clean-third-party   (cleans all)
 #
 
-add_custom_target(clean-oneTBB
-    COMMAND ${CMAKE_COMMAND} -E remove_directory "${THIRD_PARTY_DIR}/oneTBB-build"
-    COMMAND ${CMAKE_COMMAND} -E remove_directory "${ONETBB_INSTALL_DIR}"
-    COMMENT "Cleaning oneTBB build and install directories..."
-)
-
-add_custom_target(clean-GTSAM
-    COMMAND ${CMAKE_COMMAND} -E remove_directory "${THIRD_PARTY_DIR}/gtsam-build"
-    COMMAND ${CMAKE_COMMAND} -E remove_directory "${GTSAM_INSTALL_DIR}"
-    COMMENT "Cleaning GTSAM build and install directories..."
+add_custom_target(clean-GeographicLib
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${THIRD_PARTY_DIR}/GeographicLib-build"
+    COMMAND ${CMAKE_COMMAND} -E remove_directory "${GEOGRAPHIC_INSTALL_DIR}"
+    COMMENT "Cleaning GeographicLib build and install directories..."
 )
 
 add_custom_target(clean-KDDockWidgets
@@ -266,7 +163,7 @@ add_custom_target(clean-KDDockWidgets
 )
 
 add_custom_target(clean-third-party
-    DEPENDS clean-oneTBB clean-GTSAM clean-KDDockWidgets
+    DEPENDS clean-GeographicLib clean-KDDockWidgets
     COMMENT "Cleaning all third-party build and install directories..."
 )
 
@@ -283,21 +180,18 @@ message(STATUS "Third-Party Superbuild Configuration")
 message(STATUS "----------------------------------------")
 message(STATUS "")
 message(STATUS "ExternalProject Targets:")
-message(STATUS "  ext_oneTBB        -> ${ONETBB_INSTALL_DIR}")
-message(STATUS "  ext_GTSAM         -> ${GTSAM_INSTALL_DIR}")
+message(STATUS "  ext_GeographicLib -> ${GEOGRAPHIC_INSTALL_DIR}")
 message(STATUS "  ext_KDDockWidgets -> ${KDDW_INSTALL_DIR}")
 message(STATUS "")
 message(STATUS "Dependency Graph:")
-message(STATUS "  ext_oneTBB       : (no dependencies)")
-message(STATUS "  ext_GTSAM        : depends on ext_oneTBB")
+message(STATUS "  ext_GeographicLib : (no dependencies)")
 message(STATUS "  ext_KDDockWidgets: (no dependencies)")
 message(STATUS "")
 message(STATUS "Build Order:")
-message(STATUS "  1. ext_oneTBB (and ext_KDDockWidgets in parallel)")
-message(STATUS "  2. ext_GTSAM (after ext_oneTBB completes)")
+message(STATUS "  1. ext_GeographicLib and ext_KDDockWidgets (in parallel)")
 message(STATUS "")
 message(STATUS "Clean Targets Available:")
-message(STATUS "  clean-oneTBB, clean-GTSAM, clean-KDDockWidgets, clean-third-party")
+message(STATUS "  clean-GeographicLib, clean-KDDockWidgets, clean-third-party")
 message(STATUS "")
 message(STATUS "----------------------------------------")
 message(STATUS "")

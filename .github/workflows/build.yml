@@ -89,8 +89,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            third-party/oneTBB-install
-            third-party/GTSAM-install
+            third-party/GeographicLib-install
             third-party/KDDockWidgets-install
           key: third-party-${{ matrix.os }}-${{ steps.cache-key.outputs.hash }}
           restore-keys: |
@@ -298,7 +297,7 @@ jobs:
           cmake --build build-third-party --parallel
 
       # =========================================================================
-      # Task 5.4/6.6: Verify Third-Party Installations (TBB, GTSAM, KDDockWidgets)
+      # Task 5.4/6.6: Verify Third-Party Installations (GeographicLib, KDDockWidgets)
       # =========================================================================
       - name: Verify third-party installations
         shell: bash
@@ -306,72 +305,23 @@ jobs:
           echo "=== Verifying Third-Party Builds ==="
 
           # ------------------------------------------------------------------
-          # Check TBB
+          # Check GeographicLib
           # ------------------------------------------------------------------
           echo ""
-          echo "--- TBB Libraries ---"
-          TBB_ROOT="${GITHUB_WORKSPACE}/third-party/oneTBB-install"
-          if [ -d "$TBB_ROOT/lib" ]; then
-            ls -la "$TBB_ROOT/lib/" || echo "TBB lib directory listing failed"
+          echo "--- GeographicLib Libraries ---"
+          GEOGRAPHIC_ROOT="${GITHUB_WORKSPACE}/third-party/GeographicLib-install"
+          if [ -d "$GEOGRAPHIC_ROOT/lib" ]; then
+            ls -la "$GEOGRAPHIC_ROOT/lib/" || echo "GeographicLib lib directory listing failed"
           else
-            echo "WARNING: TBB lib directory not found at $TBB_ROOT/lib"
+            echo "WARNING: GeographicLib lib directory not found at $GEOGRAPHIC_ROOT/lib"
           fi
 
           echo ""
-          echo "--- TBB CMake Config ---"
-          if [ -d "$TBB_ROOT/lib/cmake/TBB" ]; then
-            ls "$TBB_ROOT/lib/cmake/TBB/" || echo "TBB CMake config listing failed"
-          else
-            echo "WARNING: TBB CMake config not found at $TBB_ROOT/lib/cmake/TBB"
-          fi
-
-          # ------------------------------------------------------------------
-          # Check GTSAM
-          # ------------------------------------------------------------------
-          echo ""
-          echo "--- GTSAM Libraries ---"
-          GTSAM_ROOT="${GITHUB_WORKSPACE}/third-party/GTSAM-install"
-          if [ -d "$GTSAM_ROOT/lib" ]; then
-            ls -la "$GTSAM_ROOT/lib/" || echo "GTSAM lib directory listing failed"
-          else
-            echo "WARNING: GTSAM lib directory not found at $GTSAM_ROOT/lib"
-          fi
-
-          # Verify expected GTSAM libraries exist
-          echo ""
-          echo "--- GTSAM Library Verification ---"
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            for lib in gtsam.lib metis-gtsam.lib cephes-gtsam.lib Geographic.lib; do
-              if [ -f "$GTSAM_ROOT/lib/$lib" ]; then
-                echo "Found: $lib"
-              else
-                echo "MISSING: $lib"
-              fi
-            done
-          else
-            # macOS uses .dylib, Linux uses .so
-            for lib in libgtsam libmetis-gtsam libcephes-gtsam libGeographic; do
-              found=$(find "$GTSAM_ROOT/lib" -name "${lib}.*" 2>/dev/null | head -1)
-              if [ -n "$found" ]; then
-                echo "Found: $(basename $found)"
-              else
-                echo "MISSING: ${lib}"
-              fi
-            done
-          fi
-
-          # Check GTSAM includes
-          echo ""
-          echo "--- GTSAM Headers ---"
-          if [ -d "$GTSAM_ROOT/include/gtsam" ]; then
-            echo "GTSAM headers found"
-          else
-            echo "WARNING: GTSAM headers MISSING at $GTSAM_ROOT/include/gtsam"
-          fi
-          if [ -d "$GTSAM_ROOT/include/GeographicLib" ]; then
+          echo "--- GeographicLib Headers ---"
+          if [ -d "$GEOGRAPHIC_ROOT/include/GeographicLib" ]; then
             echo "GeographicLib headers found"
           else
-            echo "WARNING: GeographicLib headers MISSING at $GTSAM_ROOT/include/GeographicLib"
+            echo "WARNING: GeographicLib headers MISSING at $GEOGRAPHIC_ROOT/include/GeographicLib"
           fi
 
           # ------------------------------------------------------------------
@@ -415,9 +365,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=build/install \
             -DTHIRD_PARTY_DIR="${GITHUB_WORKSPACE}/third-party" \
-            -DGTSAM_ROOT="${GITHUB_WORKSPACE}/third-party/GTSAM-install" \
-            -DTBB_ROOT="${GITHUB_WORKSPACE}/third-party/oneTBB-install" \
-            -DTBB_DIR="${GITHUB_WORKSPACE}/third-party/oneTBB-install/lib/cmake/TBB" \
+            -DGEOGRAPHIC_ROOT="${GITHUB_WORKSPACE}/third-party/GeographicLib-install" \
             -DKDDW_ROOT="${GITHUB_WORKSPACE}/third-party/KDDockWidgets-install" \
             ${PYTHON_ROOT_DIR:+-DPython_ROOT_DIR="$PYTHON_ROOT_DIR"} \
             ${QT6_INSTALL_PREFIX:+-DQT6_INSTALL_PREFIX="$QT6_INSTALL_PREFIX"} \
@@ -542,7 +490,7 @@ jobs:
 
           echo ""
           echo "--- Checking Third-Party Libraries ---"
-          for lib in libgtsam libmetis-gtsam libcephes-gtsam libGeographic libtbb; do
+          for lib in libGeographic; do
             found=$(find "$FRAMEWORKS_DIR" -name "${lib}*.dylib" ! -type l 2>/dev/null | head -1)
             if [ -n "$found" ]; then
               echo "Found: $(basename "$found")"
@@ -617,7 +565,7 @@ jobs:
 
           echo ""
           echo "--- Third-Party Libraries ---"
-          for lib in libtbb libgtsam libmetis-gtsam libcephes-gtsam libGeographic libkddockwidgets; do
+          for lib in libGeographic libkddockwidgets; do
             found=$(find "$APPDIR/usr/lib" -name "${lib}*.so*" 2>/dev/null | head -1)
             if [ -n "$found" ]; then
               echo "  $lib: $(basename $found)"
@@ -671,65 +619,6 @@ jobs:
 
           echo ""
           echo "=== Verification Complete ==="
-
-      # =========================================================================
-      # Phase 4: TBB Runtime Verification
-      # =========================================================================
-      - name: Verify TBB deployment (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          echo "=== Verifying TBB libraries in macOS bundle ==="
-          FRAMEWORKS_DIR="build/install/FlySightViewer.app/Contents/Frameworks"
-
-          # Check for TBB libraries
-          if ls "$FRAMEWORKS_DIR"/libtbb*.dylib 1>/dev/null 2>&1; then
-            echo "TBB libraries found:"
-            ls -la "$FRAMEWORKS_DIR"/libtbb*.dylib
-          else
-            echo "WARNING: TBB libraries not found in Frameworks directory"
-          fi
-
-          # Verify library IDs use @rpath
-          echo ""
-          echo "=== Checking TBB library IDs ==="
-          for lib in "$FRAMEWORKS_DIR"/libtbb*.dylib; do
-            if [ -f "$lib" ] && [ ! -L "$lib" ]; then
-              echo "Library: $(basename $lib)"
-              otool -D "$lib" | tail -1
-            fi
-          done
-
-          # Check executable dependencies
-          echo ""
-          echo "=== Checking executable TBB dependencies ==="
-          otool -L build/install/FlySightViewer.app/Contents/MacOS/FlySightViewer | grep -i tbb || echo "No TBB references found in executable"
-
-      - name: Verify TBB deployment (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          echo "=== Verifying TBB libraries in Linux AppDir ==="
-          LIB_DIR="build/install/FlySightViewer.AppDir/usr/lib"
-
-          # Check for TBB libraries
-          if ls "$LIB_DIR"/libtbb*.so* 1>/dev/null 2>&1; then
-            echo "TBB libraries found:"
-            ls -la "$LIB_DIR"/libtbb*.so*
-          else
-            echo "WARNING: TBB libraries not found in AppDir lib directory"
-          fi
-
-          # Check executable can find TBB
-          echo ""
-          echo "=== Checking executable TBB dependencies ==="
-          EXECUTABLE="build/install/FlySightViewer.AppDir/usr/bin/FlySightViewer"
-          if [ -f "$EXECUTABLE" ]; then
-            # Set library path temporarily to check if linking works
-            LD_LIBRARY_PATH="$LIB_DIR:$LD_LIBRARY_PATH" ldd "$EXECUTABLE" 2>&1 | grep -i tbb || echo "No TBB references found"
-          else
-            echo "WARNING: Executable not found at $EXECUTABLE"
-          fi
 
       # =========================================================================
       # Task 4.7: Linux AppImage Creation

@@ -9,17 +9,6 @@
 #include <vector>
 #include <cmath>
 
-// --- FIX FOR GTSAM LINKING ERROR ---
-// When GTSAM is built with TBB support, it uses tbb::tbb_allocator for its
-// FastVector types (including std::vector<size_t>). To avoid linker errors
-// (LNK2019) when this file uses std::vector<size_t> and indirectly pulls in
-// GTSAM's exported symbols, we must import the TBB-allocated version.
-#ifdef _MSC_VER
-#include <tbb/tbb_allocator.h>
-template class __declspec(dllimport) std::vector<size_t, tbb::tbb_allocator<size_t>>;
-#endif
-// -----------------------------------
-
 using namespace FlySight;
 
 void Calculations::registerSimplificationCalculations()

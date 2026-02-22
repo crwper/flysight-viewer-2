@@ -141,7 +141,7 @@ fix_versioned_dylibs() {
            [[ "$dylib_name" =~ ^lib.*\.[0-9]+\.[0-9]+\.[0-9]+\.dylib$ ]]; then
             log_info "  Found versioned: $dylib_name"
 
-            # Extract base name (e.g., libtbb from libtbb.12.dylib)
+            # Extract base name (e.g., libfoo from libfoo.12.dylib)
             local base_name
             base_name=$(echo "$dylib_name" | sed -E 's/\.[0-9]+(\.[0-9]+)*\.dylib$/.dylib/')
 
