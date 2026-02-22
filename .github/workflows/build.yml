@@ -214,7 +214,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
-          modules: qtwebengine qtwebchannel qtmultimedia qtpositioning
+          modules: qtwebengine qtwebchannel qtmultimedia qtpositioning qtserialport qtquick3d qtvirtualkeyboard
           cache: true
 
       # =========================================================================
@@ -437,6 +437,35 @@ jobs:
             cat build/install/qt.conf
           else
             echo "WARNING: qt.conf not found"
+          fi
+
+          echo ""
+          echo "=== Checking critical DLLs ==="
+          MISSING=0
+          for dll in kddockwidgets-qt6.dll vcruntime140.dll msvcp140.dll; do
+            if [ -f "build/install/$dll" ]; then
+              echo "OK: $dll"
+            else
+              echo "ERROR: $dll MISSING"
+              MISSING=1
+            fi
+          done
+          # GeographicLib DLL name varies by version
+          if ls build/install/Geographic*.dll 1>/dev/null 2>&1; then
+            echo "OK: GeographicLib DLL found"
+          else
+            echo "ERROR: GeographicLib DLL MISSING"
+            MISSING=1
+          fi
+          # vc_redist.x64.exe should NOT be present (we use app-local DLLs instead)
+          if ls build/install/vc_redist*.exe 1>/dev/null 2>&1; then
+            echo "WARNING: vc_redist installer found (should not be bundled)"
+          fi
+          if [ $MISSING -ne 0 ]; then
+            echo ""
+            echo "FATAL: Missing critical files in install directory"
+            ls -la build/install/
+            exit 1
           fi
 
       # =========================================================================
@@ -746,11 +775,9 @@ jobs:
           mkdir -p artifacts
 
           if [ "${{ runner.os }}" == "Windows" ]; then
-            cp build/*.zip artifacts/ 2>/dev/null || true
-            # Fallback: create zip manually if CPack didn't work
-            if [ ! -f artifacts/*.zip ]; then
-              cd build/install && zip -r ../../artifacts/FlySightViewer-${{ matrix.platform }}-${{ matrix.arch }}.zip . && cd ../..
-            fi
+            # CI artifact: copy install directory so users get a single folder
+            # (upload-artifact wraps in one zip -> unzip -> FlySightViewer/ -> files)
+            cp -r build/install artifacts/FlySightViewer
           elif [ "${{ runner.os }}" == "macOS" ]; then
             cp build/*.dmg artifacts/ 2>/dev/null || true
             # Fallback: create dmg manually if CPack didn't work
@@ -768,10 +795,29 @@ jobs:
       # Task 4.9: Implement Artifact Upload
       # =========================================================================
       - name: Upload artifacts
+        if: runner.os != 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: FlySightViewer-${{ matrix.platform }}-${{ matrix.arch }}
           path: artifacts/*
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload artifacts (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlySightViewer-${{ matrix.platform }}-${{ matrix.arch }}
+          path: artifacts/FlySightViewer/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload release package (Windows)
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlySightViewer-${{ matrix.platform }}-${{ matrix.arch }}-release
+          path: build/*.zip
           retention-days: 30
           if-no-files-found: warn
 
@@ -785,9 +831,17 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
-      - name: Download all artifacts
+      - name: Download release artifacts (Windows)
         uses: actions/download-artifact@v4
         with:
+          pattern: "*-release"
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Download release artifacts (non-Windows)
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "FlySightViewer-{macOS,Linux}-*"
           path: release-artifacts
           merge-multiple: true
 

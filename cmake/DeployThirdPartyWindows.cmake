@@ -43,7 +43,6 @@ if(EXISTS "${GEOGRAPHIC_BIN_DIR}")
         if(EXISTS "${dll}")
             install(FILES "${dll}"
                 DESTINATION "."
-                CONFIGURATIONS Release RelWithDebInfo MinSizeRel
             )
             message(STATUS "  [Release] ${dll}")
         endif()
@@ -53,7 +52,6 @@ if(EXISTS "${GEOGRAPHIC_BIN_DIR}")
         if(EXISTS "${dll}")
             install(FILES "${dll}"
                 DESTINATION "."
-                CONFIGURATIONS Debug
             )
             message(STATUS "  [Debug] ${dll}")
         endif()
@@ -71,7 +69,9 @@ else()
             message(STATUS "  ${dll}")
         endforeach()
     else()
-        message(WARNING "GeographicLib bin directory not found: ${GEOGRAPHIC_BIN_DIR}")
+        message(FATAL_ERROR "GeographicLib bin directory not found: ${GEOGRAPHIC_BIN_DIR}\n"
+                "GEOGRAPHIC_ROOT is set to: ${GEOGRAPHIC_ROOT}\n"
+                "Ensure GeographicLib was built with BUILD_SHARED_LIBS=ON")
     endif()
 endif()
 
@@ -93,7 +93,6 @@ if(EXISTS "${KDDW_BIN_DIR}")
     if(EXISTS "${KDDW_RELEASE_DLL}")
         install(FILES "${KDDW_RELEASE_DLL}"
             DESTINATION "."
-            CONFIGURATIONS Release RelWithDebInfo MinSizeRel
         )
         message(STATUS "  [Release] ${KDDW_RELEASE_DLL}")
     endif()
@@ -103,16 +102,13 @@ if(EXISTS "${KDDW_BIN_DIR}")
     if(EXISTS "${KDDW_DEBUG_DLL}")
         install(FILES "${KDDW_DEBUG_DLL}"
             DESTINATION "."
-            CONFIGURATIONS Debug
         )
         message(STATUS "  [Debug] ${KDDW_DEBUG_DLL}")
     endif()
 
     # Verify at least one DLL was found
     if(NOT EXISTS "${KDDW_RELEASE_DLL}" AND NOT EXISTS "${KDDW_DEBUG_DLL}")
-        message(WARNING "KDDockWidgets DLL not found in ${KDDW_BIN_DIR}")
-        message(STATUS "Expected: ${KDDW_RELEASE_DLL} or ${KDDW_DEBUG_DLL}")
-        # List what's actually in the bin directory
+        # List what's actually in the bin directory for diagnostics
         file(GLOB _kddw_files "${KDDW_BIN_DIR}/*")
         if(_kddw_files)
             message(STATUS "Available files in ${KDDW_BIN_DIR}:")
@@ -120,10 +116,10 @@ if(EXISTS "${KDDW_BIN_DIR}")
                 message(STATUS "  ${_f}")
             endforeach()
         endif()
+        message(FATAL_ERROR "KDDockWidgets DLL not found in ${KDDW_BIN_DIR}\n"
+                "Expected: ${KDDW_RELEASE_DLL} or ${KDDW_DEBUG_DLL}")
     endif()
 else()
-    message(WARNING "KDDockWidgets bin directory not found: ${KDDW_BIN_DIR}")
-    message(STATUS "KDDW_ROOT is set to: ${KDDW_ROOT}")
     if(EXISTS "${KDDW_ROOT}")
         message(STATUS "Contents of KDDW_ROOT:")
         file(GLOB _kddw_root_contents "${KDDW_ROOT}/*")
@@ -131,6 +127,8 @@ else()
             message(STATUS "  ${_f}")
         endforeach()
     endif()
+    message(FATAL_ERROR "KDDockWidgets bin directory not found: ${KDDW_BIN_DIR}\n"
+            "KDDW_ROOT is set to: ${KDDW_ROOT}")
 endif()
 
 message(STATUS "----------------------------------------")
