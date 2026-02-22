@@ -693,12 +693,26 @@ if(APPLE)
     "macOS code signing identity. Use '-' for ad-hoc (development) or 'Developer ID Application: ...' for distribution."
   )
 
+  set(FLYSIGHT_CODESIGN_ENTITLEMENTS "" CACHE FILEPATH
+    "Path to entitlements plist for macOS code signing. Only used with distribution signing (non-ad-hoc)."
+  )
+
   # Determine signing flags at configure time
   if(FLYSIGHT_CODESIGN_IDENTITY STREQUAL "-")
     set(_codesign_flags "--force --sign -")
+    set(_codesign_entitlements_flags "")
     set(_codesign_mode "ad-hoc (development)")
   else()
     set(_codesign_flags "--force --sign \"${FLYSIGHT_CODESIGN_IDENTITY}\" --timestamp --options runtime")
+    if(FLYSIGHT_CODESIGN_ENTITLEMENTS AND EXISTS "${FLYSIGHT_CODESIGN_ENTITLEMENTS}")
+      set(_codesign_entitlements_flags "--entitlements \"${FLYSIGHT_CODESIGN_ENTITLEMENTS}\"")
+      message(STATUS "macOS entitlements: ${FLYSIGHT_CODESIGN_ENTITLEMENTS}")
+    else()
+      set(_codesign_entitlements_flags "")
+      if(NOT FLYSIGHT_CODESIGN_ENTITLEMENTS STREQUAL "")
+        message(WARNING "Entitlements file not found: ${FLYSIGHT_CODESIGN_ENTITLEMENTS}")
+      endif()
+    endif()
     set(_codesign_mode "distribution (${FLYSIGHT_CODESIGN_IDENTITY})")
   endif()
 
@@ -706,14 +720,21 @@ if(APPLE)
 
   install(CODE "
     set(_identity \"${FLYSIGHT_CODESIGN_IDENTITY}\")
+    set(_entitlements_file \"${FLYSIGHT_CODESIGN_ENTITLEMENTS}\")
     set(_bundle \"\${CMAKE_INSTALL_PREFIX}/FlySightViewer.app\")
 
     if(_identity STREQUAL \"-\")
       message(STATUS \"Code signing bundle (ad-hoc for development)...\")
       set(_sign_cmd codesign --force --sign -)
+      set(_sign_cmd_with_entitlements codesign --force --sign -)
     else()
       message(STATUS \"Code signing bundle (distribution: \${_identity})...\")
       set(_sign_cmd codesign --force --sign \"\${_identity}\" --timestamp --options runtime)
+      if(_entitlements_file AND EXISTS \"\${_entitlements_file}\")
+        set(_sign_cmd_with_entitlements codesign --force --sign \"\${_identity}\" --timestamp --options runtime --entitlements \"\${_entitlements_file}\")
+      else()
+        set(_sign_cmd_with_entitlements \${_sign_cmd})
+      endif()
     endif()
 
     # Find all regular files in the bundle
@@ -725,6 +746,7 @@ if(APPLE)
     string(REPLACE \"\\n\" \";\" _all_files \"\${_all_files}\")
 
     # Step 1: Sign each Mach-O binary (detected by content, not extension)
+    # Individual binaries get the base signing command (no entitlements)
     set(_signed_count 0)
     foreach(_file \${_all_files})
       execute_process(
@@ -741,15 +763,32 @@ if(APPLE)
       endif()
     endforeach()
 
-    # Step 2: Sign .framework bundles (Apple requires frameworks signed as bundles)
+    # Step 2: Sign the QtWebEngineProcess helper app with its own entitlements
+    # Qt ships a separate entitlements file for the helper process
+    set(_qtwe_helper \"\${_bundle}/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app\")
+    set(_qtwe_entitlements \"\${_qtwe_helper}/Contents/Resources/QtWebEngineProcess.entitlements\")
+    if(EXISTS \"\${_qtwe_helper}\" AND EXISTS \"\${_qtwe_entitlements}\")
+      if(NOT _identity STREQUAL \"-\")
+        execute_process(
+          COMMAND codesign --force --sign \"\${_identity}\" --timestamp --options runtime --entitlements \"\${_qtwe_entitlements}\" \"\${_qtwe_helper}\"
+          ERROR_QUIET
+        )
+        message(STATUS \"Signed QtWebEngineProcess.app with its own entitlements\")
+      else()
+        execute_process(COMMAND codesign --force --sign - \"\${_qtwe_helper}\" ERROR_QUIET)
+      endif()
+    endif()
+
+    # Step 3: Sign .framework bundles (Apple requires frameworks signed as bundles)
     file(GLOB _frameworks \"\${_bundle}/Contents/Frameworks/*.framework\")
     list(LENGTH _frameworks _fw_count)
     foreach(_fw \${_frameworks})
       execute_process(COMMAND \${_sign_cmd} \"\${_fw}\" ERROR_QUIET)
     endforeach()
 
-    # Step 3: Sign the top-level app bundle last (inside-out order)
-    execute_process(COMMAND \${_sign_cmd} \"\${_bundle}\" ERROR_QUIET)
+    # Step 4: Sign the top-level app bundle last (inside-out order)
+    # The top-level bundle signing uses entitlements (for the main executable)
+    execute_process(COMMAND \${_sign_cmd_with_entitlements} \"\${_bundle}\" ERROR_QUIET)
 
     message(STATUS \"Signed \${_signed_count} Mach-O binaries, \${_fw_count} frameworks, and the app bundle\")
   " COMPONENT Runtime)

@@ -23,6 +23,7 @@ A desktop application for viewing and analyzing FlySight GPS data with advanced 
   - [macOS Deployment](#macos-deployment)
   - [Linux Deployment](#linux-deployment)
   - [CI/CD](#cicd)
+  - [macOS Code Signing (CI/CD)](#macos-code-signing-cicd)
   - [Package Structures](#package-structures)
   - [Deployment Tips](#deployment-tips)
 - [Troubleshooting](#troubleshooting)
@@ -418,6 +419,51 @@ GitHub Actions (`.github/workflows/build.yml`) automates the full pipeline on al
 3. Runs `cmake --install` to trigger all deployment logic
 4. Packages with CPack (ZIP on Windows, DMG on macOS, AppImage on Linux)
 5. Uploads artifacts and creates GitHub Releases on version tags
+
+### macOS Code Signing (CI/CD)
+
+The CI workflow automatically signs macOS builds with a Developer ID certificate when the required secrets are configured. Without secrets (e.g. forks, PRs from external contributors), builds fall back to ad-hoc signing.
+
+To set up code signing, you need a Developer ID Application certificate installed on your Mac:
+
+**1. Find your signing identity:**
+
+```bash
+security find-identity -v -p codesigning
+```
+
+Look for the line containing `Developer ID Application: Your Name (XXXXXXXXXX)`. The full string is your signing identity, and the 10-character code in parentheses is your team ID.
+
+**2. Export the certificate as a .p12 file:**
+
+Open **Keychain Access** (Applications > Utilities), find your "Developer ID Application" certificate, right-click it, and choose **Export**. Save as `.p12` format and set a strong password.
+
+**3. Base64-encode the .p12 file:**
+
+```bash
+base64 -i Certificates.p12 | pbcopy
+```
+
+This copies the base64 string to your clipboard.
+
+**4. Generate an app-specific password for notarization:**
+
+Go to [appleid.apple.com](https://appleid.apple.com) > Sign-In and Security > App-Specific Passwords, and generate a new password for "FlySight Notarization" (or similar).
+
+**5. Configure GitHub secrets:**
+
+In your repository, go to **Settings > Secrets and variables > Actions** and add these secrets:
+
+| Secret | Value |
+|--------|-------|
+| `MACOS_CERTIFICATE_P12_BASE64` | The base64 string from step 3 |
+| `MACOS_CERTIFICATE_PASSWORD` | The password you set when exporting the .p12 |
+| `MACOS_CODESIGN_IDENTITY` | Full identity, e.g. `Developer ID Application: Your Name (XXXXXXXXXX)` |
+| `MACOS_NOTARIZATION_APPLE_ID` | Your Apple ID email address |
+| `MACOS_NOTARIZATION_PASSWORD` | The app-specific password from step 4 |
+| `MACOS_NOTARIZATION_TEAM_ID` | Your 10-character team ID from step 1 |
+
+Once configured, all macOS CI builds will be distribution-signed, and tag builds (`v*`) will additionally be notarized and stapled so end users can run the app without Gatekeeper warnings.
 
 ### Package Structures
 

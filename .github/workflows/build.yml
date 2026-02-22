@@ -156,6 +156,70 @@ jobs:
           fi
 
       # =========================================================================
+      # macOS Code Signing: Import Certificate
+      # =========================================================================
+      - name: Import code signing certificate (macOS)
+        if: runner.os == 'macOS'
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_CERTIFICATE_P12_BASE64" ]; then
+            echo "No signing certificate available, skipping"
+            exit 0
+          fi
+
+          # Create a temporary keychain
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Decode and import certificate
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          echo "$MACOS_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security import "$CERT_PATH" \
+            -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          # Remove the decoded certificate file
+          rm -f "$CERT_PATH"
+
+          # Set key partition list to allow codesign access without UI prompt
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Add the temporary keychain to the search list (prepend so it's found first)
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+          # Export keychain path for cleanup step
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+
+          # Verify the identity is available
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
+          echo "Certificate imported successfully"
+
+      - name: Set code signing environment (macOS)
+        if: runner.os == 'macOS'
+        env:
+          MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+        run: |
+          if [ -n "$MACOS_CODESIGN_IDENTITY" ]; then
+            echo "FLYSIGHT_CODESIGN_IDENTITY=$MACOS_CODESIGN_IDENTITY" >> $GITHUB_ENV
+            echo "Code signing: distribution"
+          else
+            echo "FLYSIGHT_CODESIGN_IDENTITY=-" >> $GITHUB_ENV
+            echo "Code signing: ad-hoc (secrets not available)"
+          fi
+
+      # =========================================================================
       # Task 4.3: Platform-Specific Dependency Installation - Linux
       # =========================================================================
       - name: Install dependencies (Linux)
@@ -371,7 +435,9 @@ jobs:
             ${QT6_INSTALL_PREFIX:+-DQT6_INSTALL_PREFIX="$QT6_INSTALL_PREFIX"} \
             ${BOOST_ROOT:+-DBOOST_ROOT="$BOOST_ROOT"} \
             ${BOOST_LIBRARYDIR:+-DBOOST_LIBRARYDIR="$BOOST_LIBRARYDIR"} \
-            ${GOOGLE_MAPS_API_KEY:+-DGOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY"}
+            ${GOOGLE_MAPS_API_KEY:+-DGOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY"} \
+            -DFLYSIGHT_CODESIGN_IDENTITY="${FLYSIGHT_CODESIGN_IDENTITY:--}" \
+            -DFLYSIGHT_CODESIGN_ENTITLEMENTS="${GITHUB_WORKSPACE}/src/FlySightViewer.entitlements"
 
       # =========================================================================
       # Task 3.5: Verify Boost Discovery
@@ -576,6 +642,49 @@ jobs:
           echo ""
           echo "=== macOS Verification Complete ==="
 
+      - name: Verify code signing (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          BUNDLE="build/install/FlySight Viewer.app"
+
+          echo "=== Code Signing Verification ==="
+
+          # Check signing status
+          codesign --verify --deep --strict --verbose=2 "$BUNDLE" 2>&1 || true
+
+          # Display signing info
+          echo ""
+          echo "--- Signing Info ---"
+          codesign --display --verbose=4 "$BUNDLE" 2>&1 | head -20
+
+          # Check entitlements on the main executable
+          echo ""
+          echo "--- Entitlements ---"
+          codesign --display --entitlements - "$BUNDLE" 2>&1 || true
+
+          # Check QtWebEngineProcess signing
+          QTWE_HELPER="$BUNDLE/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app"
+          if [ -d "$QTWE_HELPER" ]; then
+            echo ""
+            echo "--- QtWebEngineProcess Signing ---"
+            codesign --display --entitlements - "$QTWE_HELPER" 2>&1 || true
+          fi
+
+          # Verify distribution signature strictly
+          if [ "$FLYSIGHT_CODESIGN_IDENTITY" != "-" ] && [ -n "$FLYSIGHT_CODESIGN_IDENTITY" ]; then
+            echo ""
+            echo "--- Verifying distribution signature ---"
+            if codesign --verify --deep --strict "$BUNDLE" 2>&1; then
+              echo "Distribution signature: VALID"
+            else
+              echo "ERROR: Distribution signature verification FAILED"
+              exit 1
+            fi
+          fi
+
+          echo ""
+          echo "=== Code Signing Verification Complete ==="
+
       - name: Verify deployment output (Linux)
         if: runner.os == 'Linux'
         shell: bash
@@ -773,6 +882,59 @@ jobs:
           echo "=== CPack output ==="
           ls -la *.dmg || true
 
+      - name: Sign DMG (macOS)
+        if: runner.os == 'macOS' && env.FLYSIGHT_CODESIGN_IDENTITY != '-' && env.FLYSIGHT_CODESIGN_IDENTITY != ''
+        run: |
+          DMG=$(find build -maxdepth 1 -name "*.dmg" | head -1)
+          if [ -n "$DMG" ]; then
+            echo "Signing DMG: $DMG"
+            codesign --force --sign "$FLYSIGHT_CODESIGN_IDENTITY" --timestamp "$DMG"
+            codesign --verify --verbose "$DMG"
+            echo "DMG signed successfully"
+          else
+            echo "WARNING: No DMG found to sign"
+          fi
+
+      - name: Notarize DMG (macOS)
+        if: >-
+          runner.os == 'macOS'
+          && startsWith(github.ref, 'refs/tags/v')
+          && env.FLYSIGHT_CODESIGN_IDENTITY != '-'
+          && env.FLYSIGHT_CODESIGN_IDENTITY != ''
+        env:
+          MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
+          MACOS_NOTARIZATION_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+          MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
+        run: |
+          DMG=$(find build -maxdepth 1 -name "*.dmg" | head -1)
+          if [ -z "$DMG" ]; then
+            echo "ERROR: No DMG found for notarization"
+            exit 1
+          fi
+
+          echo "=== Submitting DMG for notarization ==="
+          echo "DMG: $DMG"
+
+          # Submit to Apple's notary service
+          xcrun notarytool submit "$DMG" \
+            --apple-id "$MACOS_NOTARIZATION_APPLE_ID" \
+            --password "$MACOS_NOTARIZATION_PASSWORD" \
+            --team-id "$MACOS_NOTARIZATION_TEAM_ID" \
+            --wait \
+            --timeout 30m
+
+          echo ""
+          echo "=== Stapling notarization ticket ==="
+          xcrun stapler staple "$DMG"
+
+          echo ""
+          echo "=== Verifying notarization ==="
+          xcrun stapler validate "$DMG"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG" || true
+
+          echo ""
+          echo "=== Notarization complete ==="
+
       # =========================================================================
       # Task 4.8: Collect Artifacts
       # =========================================================================
@@ -827,6 +989,16 @@ jobs:
           path: build/*.zip
           retention-days: 30
           if-no-files-found: warn
+
+      # =========================================================================
+      # macOS Code Signing: Cleanup
+      # =========================================================================
+      - name: Cleanup keychain (macOS)
+        if: always() && runner.os == 'macOS' && env.KEYCHAIN_PATH != ''
+        run: |
+          echo "Cleaning up signing keychain..."
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          echo "Keychain cleanup complete"
 
   # ===========================================================================
   # Task 4.10: Release Publishing Job
