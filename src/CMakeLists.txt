@@ -405,7 +405,6 @@ if(APPLE)
     # Path: FlySightViewer.app/Contents/Resources/python/lib/python3.XX/site-packages/
     install(TARGETS flysight_cpp_bridge
         LIBRARY DESTINATION "FlySightViewer.app/Contents/Resources/python/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/site-packages"
-        COMPONENT Runtime
     )
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Linux: Installation handled via CreateAppDir.cmake with correct Python version path
@@ -669,7 +668,7 @@ if(APPLE)
     else()
       message(STATUS \"Skipping rpath fix (script not found)\")
     endif()
-  " COMPONENT Runtime)
+  ")
 
   # ─────────────────────────────── Code signing
   # After all path-fixing scripts have run, sign every Mach-O binary in the
@@ -791,7 +790,7 @@ if(APPLE)
     execute_process(COMMAND \${_sign_cmd_with_entitlements} \"\${_bundle}\" ERROR_QUIET)
 
     message(STATUS \"Signed \${_signed_count} Mach-O binaries, \${_fw_count} frameworks, and the app bundle\")
-  " COMPONENT Runtime)
+  ")
 
   # Rename bundle for user-facing display: FlySightViewer.app -> FlySight Viewer.app
   # This keeps the binary name space-free (FlySightViewer) while giving the bundle
@@ -803,7 +802,7 @@ if(APPLE)
       file(RENAME \"\${_src}\" \"\${_dst}\")
       message(STATUS \"Renamed bundle: FlySightViewer.app -> FlySight Viewer.app\")
     endif()
-  " COMPONENT Runtime)
+  ")
 endif()
 
 # ─────────────────────────────── Linux AppImage Deployment

@@ -128,7 +128,6 @@ function(deploy_third_party_macos)
         install(
             FILES "${_dylib}"
             DESTINATION "${_bundle_name}/Contents/Frameworks"
-            COMPONENT Runtime
         )
     endforeach()
 
@@ -167,7 +166,7 @@ message(STATUS \"Creating library symlinks in \${FRAMEWORKS_DIR}\")
 ${_symlink_commands}
 message(STATUS \"Symlink creation complete\")
 ")
-        install(SCRIPT "${_create_symlinks_script}" COMPONENT Runtime)
+        install(SCRIPT "${_create_symlinks_script}")
     endif()
 
     # =======================================================================
@@ -181,7 +180,6 @@ message(STATUS \"Symlink creation complete\")
         install(
             DIRECTORY "${_kddw_framework_dir}"
             DESTINATION "${_bundle_name}/Contents/Frameworks"
-            COMPONENT Runtime
             USE_SOURCE_PERMISSIONS
         )
     endif()
@@ -468,7 +466,7 @@ endif()
 
 message(STATUS \"Third-party library path fixing complete\")
 ")
-    install(SCRIPT "${_fix_paths_script}" COMPONENT Runtime)
+    install(SCRIPT "${_fix_paths_script}")
 
 endfunction()
 
@@ -512,6 +510,5 @@ function(copy_dylib_to_bundle target dylib_path)
     install(
         FILES "${dylib_path}"
         DESTINATION "${_output_name}.app/Contents/Frameworks"
-        COMPONENT Runtime
     )
 endfunction()

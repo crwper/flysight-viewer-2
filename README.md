@@ -381,8 +381,8 @@ cmake --build build
 cmake --install build --prefix dist
 
 # 3. Create DMG
-hdiutil create -volname "FlySightViewer" \
-  -srcfolder dist/FlySightViewer.app \
+hdiutil create -volname "FlySight Viewer" \
+  -srcfolder "dist/FlySight Viewer.app" \
   -ov -format UDZO FlySightViewer.dmg
 
 # 4. Notarize

@@ -11,7 +11,6 @@
 #   bundle_python_macos(
 #       TARGET FlySightViewer
 #       PYTHON_VERSION "3.13"
-#       INSTALL_COMPONENT "Runtime"
 #   )
 #
 # This module:
@@ -99,14 +98,13 @@ set(NUMPY_VERSION "" CACHE STRING "Specific NumPy version to install (empty for 
 # Arguments:
 #   TARGET          - The application target name (e.g., FlySightViewer)
 #   PYTHON_VERSION  - Optional: Python version to bundle (default: 3.13)
-#   INSTALL_COMPONENT - Optional: Install component name (default: Runtime)
 #
 function(bundle_python_macos)
     cmake_parse_arguments(
         PARSE_ARGV 0
         ARG
         ""
-        "TARGET;PYTHON_VERSION;INSTALL_COMPONENT"
+        "TARGET;PYTHON_VERSION"
         ""
     )
 
@@ -125,10 +123,6 @@ function(bundle_python_macos)
 
     if(NOT ARG_PYTHON_VERSION)
         set(ARG_PYTHON_VERSION "3.13")
-    endif()
-
-    if(NOT ARG_INSTALL_COMPONENT)
-        set(ARG_INSTALL_COMPONENT "Runtime")
     endif()
 
     # Determine architecture
@@ -253,7 +247,7 @@ function(bundle_python_macos)
     install(
         DIRECTORY "${_extract_dir}/"
         DESTINATION "${_bundle_name}/Contents/Resources/python"
-        COMPONENT ${ARG_INSTALL_COMPONENT}
+
         USE_SOURCE_PERMISSIONS
         PATTERN "*.pyc" EXCLUDE
         PATTERN "__pycache__" EXCLUDE
@@ -269,7 +263,7 @@ function(bundle_python_macos)
     install(
         FILES "${_extract_dir}/lib/libpython${CMAKE_MATCH_1}.${CMAKE_MATCH_2}.dylib"
         DESTINATION "${_bundle_name}/Contents/Frameworks"
-        COMPONENT ${ARG_INSTALL_COMPONENT}
+
     )
 
     # Also copy the symlink (libpython3.dylib -> libpython3.XX.dylib)
@@ -277,7 +271,7 @@ function(bundle_python_macos)
         install(
             FILES "${_extract_dir}/lib/libpython3.dylib"
             DESTINATION "${_bundle_name}/Contents/Frameworks"
-            COMPONENT ${ARG_INSTALL_COMPONENT}
+    
         )
     endif()
 
@@ -366,7 +360,7 @@ endforeach()
 
 message(STATUS \"libpython fixing complete\")
 ")
-    install(SCRIPT "${_fix_libpython_script}" COMPONENT ${ARG_INSTALL_COMPONENT})
+    install(SCRIPT "${_fix_libpython_script}")
 
     # =======================================================================
     # Install NumPy using pip at install time
@@ -434,7 +428,7 @@ else()
     message(STATUS \"NumPy installed successfully\")
 endif()
 ")
-    install(SCRIPT "${_install_numpy_script}" COMPONENT ${ARG_INSTALL_COMPONENT})
+    install(SCRIPT "${_install_numpy_script}")
 
     # =======================================================================
     # Install Python SDK files to site-packages
@@ -445,7 +439,7 @@ endif()
         install(
             FILES "${CMAKE_CURRENT_SOURCE_DIR}/../plugins/flysight_plugin_sdk.py"
             DESTINATION "${_bundle_name}/Contents/Resources/python/lib/python${CMAKE_MATCH_1}.${CMAKE_MATCH_2}/site-packages"
-            COMPONENT ${ARG_INSTALL_COMPONENT}
+    
         )
     endif()
 
@@ -454,7 +448,7 @@ endif()
         install(
             DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../python_src/"
             DESTINATION "${_bundle_name}/Contents/Resources/python/lib/python${CMAKE_MATCH_1}.${CMAKE_MATCH_2}/site-packages"
-            COMPONENT ${ARG_INSTALL_COMPONENT}
+    
             PATTERN "*.pyc" EXCLUDE
             PATTERN "__pycache__" EXCLUDE
         )
@@ -509,7 +503,7 @@ endif()
 
 message(STATUS \"Python bundle verification complete\")
 ")
-    install(SCRIPT "${_verify_python_script}" COMPONENT ${ARG_INSTALL_COMPONENT})
+    install(SCRIPT "${_verify_python_script}")
 
     # =======================================================================
     # Store Python paths for other modules to use
