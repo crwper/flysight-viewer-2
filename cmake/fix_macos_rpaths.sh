@@ -61,6 +61,12 @@ log_section() {
 # Check if a path is a system library that should be skipped
 is_system_library() {
     local path="$1"
+    # Python.framework under /Library/Frameworks is a third-party install
+    # (e.g., python.org installer) that needs @rpath rewriting to the
+    # bundled libpython dylib — do not treat it as a system library.
+    if [[ "$path" == */Python.framework/* ]]; then
+        return 1  # false - needs rewriting
+    fi
     if [[ "$path" == /usr/lib/* ]] || \
        [[ "$path" == /System/Library/* ]] || \
        [[ "$path" == /Library/Frameworks/* ]] || \

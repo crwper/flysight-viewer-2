@@ -417,8 +417,10 @@ if(EXISTS \"\${EXECUTABLE}\")
 
     # Handle Python framework reference
     string(REGEX MATCH \"[^\\n\\t ]*/Python\\\\.framework/Versions/([0-9]+\\\\.[0-9]+)/Python\" _python_dep \"\${_exe_deps}\")
+    # Save CMAKE_MATCH_1 immediately — the MATCHES operator in the if()
+    # below clears CMAKE_MATCH variables even when the match fails (CMake 3.10+).
+    set(_py_ver \"\${CMAKE_MATCH_1}\")
     if(_python_dep AND NOT _python_dep MATCHES \"^@\")
-        set(_py_ver \"\${CMAKE_MATCH_1}\")
         set(_py_dylib_name \"libpython\${_py_ver}.dylib\")
         if(EXISTS \"\${FRAMEWORKS_DIR}/\${_py_dylib_name}\")
             execute_process(
