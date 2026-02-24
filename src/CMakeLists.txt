@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.18)
 
-project(FlySightViewer VERSION 0.1 LANGUAGES CXX)
+project(FlySightViewer VERSION 0.0.0 LANGUAGES CXX)
+
+# Detect version from Git tags (overrides PROJECT_VERSION set above)
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/GitVersion.cmake")
 
 # ─────────────────────────────── global settings
 set(CMAKE_AUTOUIC ON)

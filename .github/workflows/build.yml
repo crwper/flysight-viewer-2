@@ -420,10 +420,25 @@ jobs:
       # =========================================================================
       # Task 4.6: Configure CMake Build Steps - Main Application
       # =========================================================================
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ github.ref }}"
+            VERSION="${VERSION#refs/tags/v}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Detected version from tag: $VERSION"
+          else
+            echo "version=" >> $GITHUB_OUTPUT
+            echo "No version tag detected (will use git describe fallback)"
+          fi
+
       - name: Configure main application
         shell: bash
         env:
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          FLYSIGHT_VERSION: ${{ steps.version.outputs.version }}
         run: |
           # Configure the main application build
           # Use src/ directory directly since we have pre-built third-party deps
@@ -438,6 +453,7 @@ jobs:
             ${BOOST_ROOT:+-DBOOST_ROOT="$BOOST_ROOT"} \
             ${BOOST_LIBRARYDIR:+-DBOOST_LIBRARYDIR="$BOOST_LIBRARYDIR"} \
             ${GOOGLE_MAPS_API_KEY:+-DGOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY"} \
+            ${FLYSIGHT_VERSION:+-DFLYSIGHT_VERSION_OVERRIDE="$FLYSIGHT_VERSION"} \
             -DFLYSIGHT_CODESIGN_IDENTITY="${FLYSIGHT_CODESIGN_IDENTITY:--}" \
             -DFLYSIGHT_CODESIGN_ENTITLEMENTS="${GITHUB_WORKSPACE}/src/FlySightViewer.entitlements"
 
