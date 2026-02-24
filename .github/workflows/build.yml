@@ -26,9 +26,17 @@ on:
       - '**'
   workflow_dispatch:
 
-# Cancel redundant builds for the same branch/PR
+# Cancel redundant builds for the same branch/PR.
+# Uses SHA for push events so that a simultaneous branch + tag push
+# (e.g., `git push origin master v2026.02.0`) lands in one group and
+# the tag build cancels the redundant branch build.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: >-
+    ${{ github.workflow }}-${{
+      github.event_name == 'pull_request'
+        && github.head_ref
+        || github.sha
+    }}
   cancel-in-progress: true
 
 env:
