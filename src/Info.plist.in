@@ -32,7 +32,7 @@
 
     <!-- Info string -->
     <key>CFBundleGetInfoString</key>
-    <string>${MACOSX_BUNDLE_BUNDLE_NAME} ${MACOSX_BUNDLE_SHORT_VERSION_STRING}, GPS Flight Data Analysis</string>
+    <string>${MACOSX_BUNDLE_BUNDLE_NAME} ${MACOSX_BUNDLE_SHORT_VERSION_STRING}, Data analysis and visualization for FlySight</string>
 
     <!-- High resolution support -->
     <key>NSHighResolutionCapable</key>

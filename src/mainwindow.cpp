@@ -11,6 +11,7 @@
 #include <QCloseEvent>
 #include <kddockwidgets/LayoutSaver.h>
 
+#include "version.h"
 #include "dataimporter.h"
 #include "dependencykey.h"
 #include "pluginhost.h"
@@ -659,6 +660,15 @@ void MainWindow::on_action_Preferences_triggered()
 void MainWindow::on_action_Exit_triggered()
 {
     close();  // Close the main window
+}
+
+void MainWindow::on_action_About_triggered()
+{
+    QMessageBox::about(this, tr("About FlySight Viewer"),
+        tr("<h3>FlySight Viewer %1</h3>"
+           "<p>Data analysis and visualization for FlySight</p>"
+           "<p><a href=\"https://flysight.ca\">flysight.ca</a></p>")
+        .arg(QStringLiteral(FLYSIGHT_VERSION)));
 }
 
 void MainWindow::onPlotWidgetToolChanged(PlotWidget::Tool t)

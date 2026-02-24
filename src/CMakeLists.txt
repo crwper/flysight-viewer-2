@@ -5,6 +5,13 @@ project(FlySightViewer VERSION 0.0.0 LANGUAGES CXX)
 # Detect version from Git tags (overrides PROJECT_VERSION set above)
 include("${CMAKE_CURRENT_LIST_DIR}/../cmake/GitVersion.cmake")
 
+# ─────────────────────────────── version header
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/version.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/version.h"
+    @ONLY
+)
+
 # ─────────────────────────────── global settings
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -320,6 +327,9 @@ if(QT_VERSION_MAJOR GREATER_EQUAL 6)
 else()
   add_executable(FlySightViewer WIN32 ${PROJECT_SOURCES})
 endif()
+
+# Make the generated version.h header available
+target_include_directories(FlySightViewer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
 # Embed configured map.html as a Qt resource so QWebEngineView can load it via
 # qrc://, avoiding file:// origin restrictions on macOS.

@@ -142,7 +142,7 @@ exec "${HERE}/usr/bin/flysight-viewer" "$@"
 set(DESKTOP_CONTENT [=[[Desktop Entry]
 Type=Application
 Name=FlySight Viewer
-Comment=GPS flight data analysis and visualization
+Comment=Data analysis and visualization for FlySight
 Exec=flysight-viewer %F
 Icon=FlySightViewer
 Terminal=false

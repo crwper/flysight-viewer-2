@@ -67,11 +67,18 @@
      <string>&amp;Window</string>
     </property>
    </widget>
+   <widget class="QMenu" name="menu_Help">
+    <property name="title">
+     <string>&amp;Help</string>
+    </property>
+    <addaction name="action_About"/>
+   </widget>
    <addaction name="menu_File"/>
    <addaction name="menuPlots"/>
    <addaction name="menu_Tools"/>
    <addaction name="menuTrack"/>
    <addaction name="menuWindow"/>
+   <addaction name="menu_Help"/>
   </widget>
   <action name="action_Import">
    <property name="text">
@@ -200,6 +207,11 @@
    </property>
    <property name="shortcut">
     <string>M</string>
+   </property>
+  </action>
+  <action name="action_About">
+   <property name="text">
+    <string>&amp;About FlySight Viewer</string>
    </property>
   </action>
  </widget>
