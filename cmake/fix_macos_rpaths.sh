@@ -15,7 +15,8 @@
 #   3. Fixes the main executable
 #   4. Fixes Python extension modules (.so files)
 #   5. Fixes Qt plugins and QML modules
-#   6. Skips system libraries (/usr/lib, /System/Library)
+#   6. Fixes bare install names (no path prefix) in all dylibs bundle-wide
+#   7. Skips system libraries (/usr/lib, /System/Library)
 #
 # This script is idempotent - it can be run multiple times safely.
 #
@@ -549,7 +550,34 @@ main() {
     fix_qt_plugins "$bundle_path" "$frameworks_dir"
 
     # =======================================================================
-    # Step 6: Verify the bundle
+    # Step 6: Fix bare install names in all dylibs
+    # =======================================================================
+    # Some bundled libraries (e.g., Tcl extensions in Python) have bare
+    # install names (just the filename, no @rpath/@loader_path prefix).
+    # When the app uses the disable-library-validation entitlement,
+    # Gatekeeper performs enhanced Mach-O scanning and rejects apps
+    # containing dylibs with bare install names.
+
+    log_section "Fixing Bare Install Names"
+
+    while IFS= read -r -d '' dylib; do
+        # Skip symlinks
+        [[ -L "$dylib" ]] && continue
+
+        # Get the library's install name (LC_ID_DYLIB)
+        local install_name
+        install_name=$(otool -D "$dylib" 2>/dev/null | tail -1)
+
+        # Check if the install name is bare (no path separator)
+        if [[ -n "$install_name" ]] && [[ "$install_name" != */* ]]; then
+            log_info "  Fixing bare ID: $install_name in $(basename "$dylib")"
+            run_install_name_tool -id "@loader_path/$install_name" "$dylib"
+            ((FIXED_COUNT++)) || true
+        fi
+    done < <(find "$bundle_path" -name "*.dylib" -print0 2>/dev/null)
+
+    # =======================================================================
+    # Step 7: Verify the bundle
     # =======================================================================
     # Note: Ad-hoc signing is handled by the CMake install pipeline
     # (final signing pass in src/CMakeLists.txt) — not by this script.
@@ -557,6 +585,7 @@ main() {
     log_section "Verifying Bundle"
 
     # Check for any remaining absolute paths to third-party libraries
+    # and bare install names (no path prefix)
     local issues=0
 
     while IFS= read -r -d '' file; do
@@ -569,6 +598,12 @@ main() {
             # Check for non-system absolute paths
             if [[ "$dep" == /* ]] && ! is_system_library "$dep"; then
                 log_warn "Potential issue in $(basename "$file"): $dep"
+                ((issues++)) || true
+            fi
+
+            # Check for bare install names (no path separator)
+            if [[ "$dep" != */* ]] && [[ "$dep" == *.dylib ]]; then
+                log_warn "Bare install name in $(basename "$file"): $dep"
                 ((issues++)) || true
             fi
         done <<< "$deps"
