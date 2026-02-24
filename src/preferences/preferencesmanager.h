@@ -56,7 +56,7 @@ signals:
     void preferenceChanged(const QString &key, const QVariant &value);
 
 private:
-    PreferencesManager() : m_settings("FlySight", "Viewer 2") {}
+    PreferencesManager() : m_settings() {}
 
     QSettings m_settings;
     QMap<QString, Preference> m_preferences;

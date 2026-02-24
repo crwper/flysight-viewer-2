@@ -48,7 +48,7 @@ MainWindow::MainWindow(QWidget *parent)
               KDDockWidgets::MainWindowOption_ManualInit
           },
           parent)
-    , m_settings(new QSettings("FlySight", "Viewer", this))
+    , m_settings(new QSettings(this))
     , m_plotViewSettingsModel(new PlotViewSettingsModel(m_settings, this))
     , m_cursorModel(new CursorModel(this))
     , ui(new Ui::MainWindow)

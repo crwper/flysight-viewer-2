@@ -12,6 +12,11 @@ int main(int argc, char *argv[]) {
 #endif
 
     QApplication app(argc, argv);
+
+    QCoreApplication::setOrganizationName("FlySight");
+    QCoreApplication::setOrganizationDomain("flysight.ca");
+    QCoreApplication::setApplicationName("FlySightViewer");
+
 #ifndef Q_OS_MACOS
     app.setWindowIcon(QIcon(":/resources/icons/FlySightViewer.png"));
 #endif
