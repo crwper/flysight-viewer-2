@@ -668,7 +668,7 @@ void MainWindow::on_action_About_triggered()
         tr("<h3>FlySight Viewer %1</h3>"
            "<p>Data analysis and visualization for FlySight</p>"
            "<p><a href=\"https://flysight.ca\">flysight.ca</a></p>")
-        .arg(QStringLiteral(FLYSIGHT_VERSION)));
+        .arg(QStringLiteral(FLYSIGHT_VERSION_STRING)));
 }
 
 void MainWindow::onPlotWidgetToolChanged(PlotWidget::Tool t)

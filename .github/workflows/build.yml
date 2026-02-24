@@ -429,10 +429,20 @@ jobs:
             VERSION="${VERSION#refs/tags/v}"
             echo "version=$VERSION" >> $GITHUB_OUTPUT
             echo "Detected version from tag: $VERSION"
+            # Tagged build: display version matches clean version
+            echo "FLYSIGHT_VERSION_DISPLAY=$VERSION" >> $GITHUB_ENV
           else
             echo "version=" >> $GITHUB_OUTPUT
             echo "No version tag detected (will use git describe fallback)"
+            # Non-tagged build: compute display version from git describe
+            DISPLAY=$(git describe --tags --match "v[0-9]*" 2>/dev/null | sed 's/^v//' || true)
+            if [ -z "$DISPLAY" ]; then
+              SHORT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+              DISPLAY="0.0.0-g${SHORT_HASH}"
+            fi
+            echo "FLYSIGHT_VERSION_DISPLAY=$DISPLAY" >> $GITHUB_ENV
           fi
+          echo "Display version: $FLYSIGHT_VERSION_DISPLAY"
 
       - name: Configure main application
         shell: bash
@@ -807,8 +817,8 @@ jobs:
             # Create AppImage
             APPDIR="build/install/FlySightViewer.AppDir"
             if [ -d "$APPDIR" ]; then
-              ./appimagetool "$APPDIR" "FlySightViewer-${{ matrix.arch }}.AppImage"
-              mv "FlySightViewer-${{ matrix.arch }}.AppImage" build/
+              ./appimagetool "$APPDIR" "FlySightViewer-${FLYSIGHT_VERSION_DISPLAY}-Linux-${{ matrix.arch }}.AppImage"
+              mv "FlySightViewer-${FLYSIGHT_VERSION_DISPLAY}-Linux-${{ matrix.arch }}.AppImage" build/
             else
               echo "ERROR: AppDir not found at $APPDIR"
               exit 1
@@ -969,7 +979,7 @@ jobs:
             cp build/*.dmg artifacts/ 2>/dev/null || true
             # Fallback: create dmg manually if CPack didn't work
             if [ ! -f artifacts/*.dmg ]; then
-              hdiutil create -volname "FlySight Viewer" -srcfolder "build/install/FlySight Viewer.app" -ov -format UDZO artifacts/FlySightViewer-${{ matrix.platform }}-${{ matrix.arch }}.dmg 2>/dev/null || true
+              hdiutil create -volname "FlySight Viewer ${FLYSIGHT_VERSION_DISPLAY}" -srcfolder "build/install/FlySight Viewer.app" -ov -format UDZO artifacts/FlySightViewer-${FLYSIGHT_VERSION_DISPLAY}-${{ matrix.platform }}-${{ matrix.arch }}.dmg 2>/dev/null || true
             fi
           elif [ "${{ runner.os }}" == "Linux" ]; then
             cp build/*.AppImage artifacts/ 2>/dev/null || true

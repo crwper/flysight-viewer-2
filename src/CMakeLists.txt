@@ -880,7 +880,7 @@ if(APPLE)
   # Use DMG on macOS for a professional installer experience
   set(CPACK_GENERATOR DragNDrop)
   set(CPACK_DMG_FORMAT UDZO)  # Compressed DMG
-  set(CPACK_DMG_VOLUME_NAME "FlySight Viewer ${PROJECT_VERSION}")
+  set(CPACK_DMG_VOLUME_NAME "FlySight Viewer ${FLYSIGHT_VERSION_DISPLAY}")
   # Don't include top-level directory for DMG (app bundle goes directly in DMG)
   set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
 else()
@@ -891,7 +891,7 @@ endif()
 
 set(CPACK_PACKAGE_NAME "FlySightViewer")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_FILE_NAME "FlySightViewer-${PROJECT_VERSION}-${FLYSIGHT_PLATFORM}-${FLYSIGHT_ARCH}")
+set(CPACK_PACKAGE_FILE_NAME "FlySightViewer-${FLYSIGHT_VERSION_DISPLAY}-${FLYSIGHT_PLATFORM}-${FLYSIGHT_ARCH}")
 set(CPACK_PACKAGE_VENDOR "FlySight")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "FlySight GPS Data Viewer")
 
