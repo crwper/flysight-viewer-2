@@ -721,66 +721,6 @@ jobs:
           echo ""
           echo "=== Code Signing Verification Complete ==="
 
-      # =========================================================================
-      # macOS App Notarization: Staple ticket before DMG creation
-      # =========================================================================
-      - name: Notarize and staple app bundle (macOS)
-        if: >-
-          runner.os == 'macOS'
-          && startsWith(github.ref, 'refs/tags/v')
-          && env.FLYSIGHT_CODESIGN_IDENTITY != '-'
-          && env.FLYSIGHT_CODESIGN_IDENTITY != ''
-        env:
-          MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
-          MACOS_NOTARIZATION_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
-          MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          APP_BUNDLE="build/install/FlySight Viewer.app"
-          APP_ZIP="$RUNNER_TEMP/FlySightViewer-app.zip"
-
-          echo "=== Notarizing app bundle ==="
-          echo "App bundle: $APP_BUNDLE"
-
-          # Create zip for notarization submission (ditto required by Apple)
-          echo ""
-          echo "--- Creating submission archive ---"
-          ditto -c -k --keepParent "$APP_BUNDLE" "$APP_ZIP"
-          echo "Archive size: $(ls -lh "$APP_ZIP" | awk '{print $5}')"
-
-          # Submit to Apple's notary service
-          echo ""
-          echo "--- Submitting to notary service ---"
-          xcrun notarytool submit "$APP_ZIP" \
-            --apple-id "$MACOS_NOTARIZATION_APPLE_ID" \
-            --password "$MACOS_NOTARIZATION_PASSWORD" \
-            --team-id "$MACOS_NOTARIZATION_TEAM_ID" \
-            --wait \
-            --timeout 30m
-
-          # Staple the notarization ticket to the .app bundle
-          echo ""
-          echo "--- Stapling notarization ticket ---"
-          xcrun stapler staple "$APP_BUNDLE"
-
-          # Validate the stapled ticket
-          echo ""
-          echo "--- Validating stapled ticket ---"
-          xcrun stapler validate "$APP_BUNDLE"
-
-          # Gatekeeper assessment
-          echo ""
-          echo "--- Gatekeeper assessment ---"
-          spctl --assess --type execute --verbose=4 "$APP_BUNDLE"
-
-          # Clean up temporary zip
-          rm -f "$APP_ZIP"
-
-          echo ""
-          echo "=== App bundle notarization complete ==="
-
       - name: Verify deployment output (Linux)
         if: runner.os == 'Linux'
         shell: bash
@@ -969,6 +909,89 @@ jobs:
           echo "=== CPack output ==="
           ls -la *.dmg || true
 
+      # =========================================================================
+      # macOS App Notarization: Notarize the .app from CPack's staging dir,
+      # then rebuild the DMG so it contains the stapled .app.
+      # (CPack re-runs cmake --install into a fresh staging directory, so any
+      # ticket stapled before CPack is lost. We must notarize after CPack.)
+      # =========================================================================
+      - name: Notarize app and rebuild DMG (macOS)
+        if: >-
+          runner.os == 'macOS'
+          && startsWith(github.ref, 'refs/tags/v')
+          && env.FLYSIGHT_CODESIGN_IDENTITY != '-'
+          && env.FLYSIGHT_CODESIGN_IDENTITY != ''
+        env:
+          MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
+          MACOS_NOTARIZATION_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+          MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Find the .app in CPack's staging directory
+          APP_BUNDLE=$(find build/_CPack_Packages -name "*.app" -type d -maxdepth 4 | head -1)
+          if [ -z "$APP_BUNDLE" ]; then
+            echo "ERROR: No .app found in CPack staging directory"
+            exit 1
+          fi
+          STAGING_DIR=$(dirname "$APP_BUNDLE")
+
+          echo "=== Notarizing app bundle ==="
+          echo "App bundle: $APP_BUNDLE"
+          echo "Staging dir: $STAGING_DIR"
+
+          # Create zip for notarization submission (ditto required by Apple)
+          APP_ZIP="$RUNNER_TEMP/FlySightViewer-app.zip"
+          echo ""
+          echo "--- Creating submission archive ---"
+          ditto -c -k --keepParent "$APP_BUNDLE" "$APP_ZIP"
+          echo "Archive size: $(ls -lh "$APP_ZIP" | awk '{print $5}')"
+
+          # Submit to Apple's notary service
+          echo ""
+          echo "--- Submitting to notary service ---"
+          xcrun notarytool submit "$APP_ZIP" \
+            --apple-id "$MACOS_NOTARIZATION_APPLE_ID" \
+            --password "$MACOS_NOTARIZATION_PASSWORD" \
+            --team-id "$MACOS_NOTARIZATION_TEAM_ID" \
+            --wait \
+            --timeout 30m
+
+          # Staple the notarization ticket to the .app
+          echo ""
+          echo "--- Stapling notarization ticket ---"
+          xcrun stapler staple "$APP_BUNDLE"
+
+          # Validate
+          echo ""
+          echo "--- Validating stapled ticket ---"
+          xcrun stapler validate "$APP_BUNDLE"
+          spctl --assess --type execute --verbose=4 "$APP_BUNDLE"
+
+          # Clean up zip
+          rm -f "$APP_ZIP"
+
+          # Rebuild DMG from staging directory so it contains the stapled .app
+          DMG=$(find build -maxdepth 1 -name "*.dmg" | head -1)
+          if [ -z "$DMG" ]; then
+            echo "ERROR: No DMG found to replace"
+            exit 1
+          fi
+
+          echo ""
+          echo "--- Rebuilding DMG with stapled app ---"
+          rm -f "$DMG"
+          hdiutil create \
+            -volname "FlySight Viewer ${FLYSIGHT_VERSION_DISPLAY}" \
+            -srcfolder "$STAGING_DIR" \
+            -ov -format UDZO \
+            "$DMG"
+          echo "DMG rebuilt: $DMG ($(ls -lh "$DMG" | awk '{print $5}'))"
+
+          echo ""
+          echo "=== App bundle notarization complete ==="
+
       - name: Sign DMG (macOS)
         if: runner.os == 'macOS' && env.FLYSIGHT_CODESIGN_IDENTITY != '-' && env.FLYSIGHT_CODESIGN_IDENTITY != ''
         run: |
@@ -1108,7 +1131,7 @@ jobs:
             # Create a ZIP with FlySightViewer/ as the top-level folder
             cp -r build/install artifacts/FlySightViewer
             cd artifacts
-            zip -r "FlySightViewer-${FLYSIGHT_VERSION_DISPLAY}-Windows-${{ matrix.arch }}.zip" FlySightViewer/
+            7z a -r "FlySightViewer-${FLYSIGHT_VERSION_DISPLAY}-Windows-${{ matrix.arch }}.zip" FlySightViewer/
             rm -rf FlySightViewer
             cd ..
           elif [ "${{ runner.os }}" == "macOS" ]; then
