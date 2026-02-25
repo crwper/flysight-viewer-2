@@ -721,6 +721,66 @@ jobs:
           echo ""
           echo "=== Code Signing Verification Complete ==="
 
+      # =========================================================================
+      # macOS App Notarization: Staple ticket before DMG creation
+      # =========================================================================
+      - name: Notarize and staple app bundle (macOS)
+        if: >-
+          runner.os == 'macOS'
+          && startsWith(github.ref, 'refs/tags/v')
+          && env.FLYSIGHT_CODESIGN_IDENTITY != '-'
+          && env.FLYSIGHT_CODESIGN_IDENTITY != ''
+        env:
+          MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
+          MACOS_NOTARIZATION_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+          MACOS_NOTARIZATION_TEAM_ID: ${{ secrets.MACOS_NOTARIZATION_TEAM_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP_BUNDLE="build/install/FlySight Viewer.app"
+          APP_ZIP="$RUNNER_TEMP/FlySightViewer-app.zip"
+
+          echo "=== Notarizing app bundle ==="
+          echo "App bundle: $APP_BUNDLE"
+
+          # Create zip for notarization submission (ditto required by Apple)
+          echo ""
+          echo "--- Creating submission archive ---"
+          ditto -c -k --keepParent "$APP_BUNDLE" "$APP_ZIP"
+          echo "Archive size: $(ls -lh "$APP_ZIP" | awk '{print $5}')"
+
+          # Submit to Apple's notary service
+          echo ""
+          echo "--- Submitting to notary service ---"
+          xcrun notarytool submit "$APP_ZIP" \
+            --apple-id "$MACOS_NOTARIZATION_APPLE_ID" \
+            --password "$MACOS_NOTARIZATION_PASSWORD" \
+            --team-id "$MACOS_NOTARIZATION_TEAM_ID" \
+            --wait \
+            --timeout 30m
+
+          # Staple the notarization ticket to the .app bundle
+          echo ""
+          echo "--- Stapling notarization ticket ---"
+          xcrun stapler staple "$APP_BUNDLE"
+
+          # Validate the stapled ticket
+          echo ""
+          echo "--- Validating stapled ticket ---"
+          xcrun stapler validate "$APP_BUNDLE"
+
+          # Gatekeeper assessment
+          echo ""
+          echo "--- Gatekeeper assessment ---"
+          spctl --assess --type execute --verbose=4 "$APP_BUNDLE"
+
+          # Clean up temporary zip
+          rm -f "$APP_ZIP"
+
+          echo ""
+          echo "=== App bundle notarization complete ==="
+
       - name: Verify deployment output (Linux)
         if: runner.os == 'Linux'
         shell: bash
@@ -961,6 +1021,80 @@ jobs:
 
           echo ""
           echo "=== Notarization complete ==="
+
+      # =========================================================================
+      # macOS Gatekeeper Smoke Test: Verify end-to-end notarization
+      # =========================================================================
+      - name: Gatekeeper smoke test (macOS)
+        if: >-
+          runner.os == 'macOS'
+          && startsWith(github.ref, 'refs/tags/v')
+          && env.FLYSIGHT_CODESIGN_IDENTITY != '-'
+          && env.FLYSIGHT_CODESIGN_IDENTITY != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "=== Gatekeeper Smoke Test ==="
+          echo "Simulates: download DMG -> copy .app to Applications -> launch"
+
+          # Find the DMG
+          DMG=$(find build -maxdepth 1 -name "*.dmg" | head -1)
+          if [ -z "$DMG" ]; then
+            echo "ERROR: No DMG found for smoke test"
+            exit 1
+          fi
+          echo "DMG: $DMG"
+
+          # Set up temp directories
+          SMOKE_DIR="$RUNNER_TEMP/gatekeeper-smoke-test"
+          MOUNT_POINT="$SMOKE_DIR/dmg-mount"
+          mkdir -p "$MOUNT_POINT"
+
+          # Mount DMG
+          echo ""
+          echo "--- Mounting DMG ---"
+          hdiutil attach "$DMG" -readonly -mountpoint "$MOUNT_POINT" -nobrowse
+
+          # Copy .app out (simulates user dragging to /Applications)
+          echo ""
+          echo "--- Extracting .app from DMG ---"
+          APP_SRC=$(find "$MOUNT_POINT" -maxdepth 1 -name "*.app" -type d | head -1)
+          if [ -z "$APP_SRC" ]; then
+            echo "ERROR: No .app found in mounted DMG"
+            hdiutil detach "$MOUNT_POINT" -force || true
+            exit 1
+          fi
+          APP_NAME=$(basename "$APP_SRC")
+          ditto "$APP_SRC" "$SMOKE_DIR/$APP_NAME"
+
+          # Detach DMG
+          hdiutil detach "$MOUNT_POINT" -force
+
+          # Add quarantine attribute (simulates browser download)
+          echo ""
+          echo "--- Adding quarantine attribute ---"
+          xattr -w com.apple.quarantine \
+            "0083;$(printf '%x' "$(date +%s)");Safari;$(uuidgen)" \
+            "$SMOKE_DIR/$APP_NAME"
+
+          # Gatekeeper assessment
+          echo ""
+          echo "--- Gatekeeper assessment (spctl --type execute) ---"
+          spctl --assess --type execute --verbose=4 "$SMOKE_DIR/$APP_NAME"
+          echo "PASSED: Gatekeeper accepts the app"
+
+          # Verify stapled ticket survived DMG round-trip
+          echo ""
+          echo "--- Verifying stapled notarization ticket ---"
+          xcrun stapler validate "$SMOKE_DIR/$APP_NAME"
+          echo "PASSED: Stapled ticket is present"
+
+          # Clean up
+          rm -rf "$SMOKE_DIR"
+
+          echo ""
+          echo "=== Gatekeeper Smoke Test PASSED ==="
 
       # =========================================================================
       # Task 4.8: Collect Artifacts
