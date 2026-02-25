@@ -47,3 +47,6 @@ third-party/GeographicLib-build/
 third-party/GeographicLib-install/
 third-party/KDDockWidgets-build/
 third-party/KDDockWidgets-install/
+
+# Claude Code files
+.claude/
