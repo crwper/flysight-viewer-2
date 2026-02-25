@@ -901,15 +901,6 @@ jobs:
       # =========================================================================
       # Task 4.8: Implement Artifact Packaging
       # =========================================================================
-      - name: Package with CPack (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        working-directory: build
-        run: |
-          cpack -G ZIP -C Release
-          echo "=== CPack output ==="
-          ls -la *.zip || true
-
       - name: Package with CPack (macOS)
         if: runner.os == 'macOS'
         working-directory: build
@@ -980,9 +971,12 @@ jobs:
           mkdir -p artifacts
 
           if [ "${{ runner.os }}" == "Windows" ]; then
-            # CI artifact: copy install directory so users get a single folder
-            # (upload-artifact wraps in one zip -> unzip -> FlySightViewer/ -> files)
+            # Create a ZIP with FlySightViewer/ as the top-level folder
             cp -r build/install artifacts/FlySightViewer
+            cd artifacts
+            zip -r "FlySightViewer-${FLYSIGHT_VERSION_DISPLAY}-Windows-${{ matrix.arch }}.zip" FlySightViewer/
+            rm -rf FlySightViewer
+            cd ..
           elif [ "${{ runner.os }}" == "macOS" ]; then
             cp build/*.dmg artifacts/ 2>/dev/null || true
             # Fallback: create dmg manually if CPack didn't work
@@ -1000,29 +994,10 @@ jobs:
       # Task 4.9: Implement Artifact Upload
       # =========================================================================
       - name: Upload artifacts
-        if: runner.os != 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: FlySightViewer-${{ matrix.platform }}-${{ matrix.arch }}
           path: artifacts/*
-          retention-days: 30
-          if-no-files-found: warn
-
-      - name: Upload artifacts (Windows)
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: FlySightViewer-${{ matrix.platform }}-${{ matrix.arch }}
-          path: artifacts/
-          retention-days: 30
-          if-no-files-found: warn
-
-      - name: Upload release package (Windows)
-        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
-        uses: actions/upload-artifact@v4
-        with:
-          name: FlySightViewer-${{ matrix.platform }}-${{ matrix.arch }}-release
-          path: build/*.zip
           retention-days: 30
           if-no-files-found: warn
 
@@ -1046,17 +1021,10 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
-      - name: Download release artifacts (Windows)
+      - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: "*-release"
-          path: release-artifacts
-          merge-multiple: true
-
-      - name: Download release artifacts (non-Windows)
-        uses: actions/download-artifact@v4
-        with:
-          pattern: "FlySightViewer-{macOS,Linux}-*"
+          pattern: "FlySightViewer-*"
           path: release-artifacts
           merge-multiple: true
 
