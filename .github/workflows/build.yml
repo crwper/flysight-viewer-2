@@ -61,7 +61,7 @@ jobs:
             platform: Windows
             arch: x64
             artifact_ext: zip
-          - os: macos-14
+          - os: macos-15
             platform: macOS
             arch: arm64
             artifact_ext: dmg
@@ -1101,6 +1101,17 @@ jobs:
             "0083;$(printf '%x' "$(date +%s)");Safari;$(uuidgen)" \
             "$SMOKE_DIR/$APP_NAME"
 
+          # Deep code signature verification
+          echo ""
+          echo "--- Deep code signature verification ---"
+          codesign --verify --deep --strict --verbose=4 "$SMOKE_DIR/$APP_NAME"
+          echo "PASSED: Deep code signature verification"
+
+          # CDHash diagnostic logging (for future debugging)
+          echo ""
+          echo "--- Code signature details ---"
+          codesign -dvvv "$SMOKE_DIR/$APP_NAME" 2>&1 | grep -E "CDHash|Signature|Authority|TeamIdentifier" || true
+
           # Gatekeeper assessment
           echo ""
           echo "--- Gatekeeper assessment (spctl --type execute) ---"
@@ -1112,6 +1123,22 @@ jobs:
           echo "--- Verifying stapled notarization ticket ---"
           xcrun stapler validate "$SMOKE_DIR/$APP_NAME"
           echo "PASSED: Stapled ticket is present"
+
+          # Real app launch test (exercises full Gatekeeper flow)
+          echo ""
+          echo "--- Real app launch test (full Gatekeeper flow) ---"
+          PROC_NAME=$(defaults read "$SMOKE_DIR/$APP_NAME/Contents/Info.plist" CFBundleExecutable)
+          echo "Launching $PROC_NAME..."
+          open -g "$SMOKE_DIR/$APP_NAME" &
+          sleep 5
+          if pgrep -x "$PROC_NAME" > /dev/null 2>&1; then
+            echo "PASSED: App launched successfully under Gatekeeper"
+            killall "$PROC_NAME" 2>/dev/null || true
+          else
+            echo "FAILED: App did not launch (likely blocked by Gatekeeper)"
+            log show --predicate 'subsystem == "com.apple.security.syspolicy"' --last 30s --style compact 2>/dev/null || true
+            exit 1
+          fi
 
           # Clean up
           rm -rf "$SMOKE_DIR"
