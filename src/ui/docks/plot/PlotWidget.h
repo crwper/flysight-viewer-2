@@ -227,6 +227,7 @@ private:
     QCPItemText *m_dragBubble = nullptr;
     QString      m_dragSessionId;
     QString      m_dragAttributeKey;
+    double       m_dragXCoordOffset = 0.0;  // x-axis offset between click point and bubble anchor
 };
 
 } // namespace FlySight

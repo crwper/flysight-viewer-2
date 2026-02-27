@@ -1615,13 +1615,19 @@ bool PlotWidget::handleBubblePress(QCPItemText *bubble, QMouseEvent *event)
     m_dragSessionId = meta.sessionId;
     m_dragAttributeKey = meta.attributeKey;
 
+    // Record offset between click point and bubble anchor so the marker
+    // tracks from the grab point rather than snapping its center to the cursor.
+    double clickXCoord = customPlot->xAxis->pixelToCoord(event->pos().x());
+    double bubbleXCoord = customPlot->xAxis->pixelToCoord(bubble->position->pixelPosition().x());
+    m_dragXCoordOffset = clickXCoord - bubbleXCoord;
+
     customPlot->setCursor(Qt::ClosedHandCursor);
     return true;
 }
 
 bool PlotWidget::handleBubbleDrag(QMouseEvent *event)
 {
-    double xCoord = customPlot->xAxis->pixelToCoord(event->pos().x());
+    double xCoord = customPlot->xAxis->pixelToCoord(event->pos().x()) - m_dragXCoordOffset;
     QDateTime newDt = xCoordToUtcDateTime(xCoord, m_dragSessionId);
     if (newDt.isValid()) {
         model->updateAttribute(m_dragSessionId, m_dragAttributeKey, newDt);
@@ -1632,7 +1638,7 @@ bool PlotWidget::handleBubbleDrag(QMouseEvent *event)
 bool PlotWidget::handleBubbleRelease(QMouseEvent *event)
 {
     // Perform final position update
-    double xCoord = customPlot->xAxis->pixelToCoord(event->pos().x());
+    double xCoord = customPlot->xAxis->pixelToCoord(event->pos().x()) - m_dragXCoordOffset;
     QDateTime newDt = xCoordToUtcDateTime(xCoord, m_dragSessionId);
     if (newDt.isValid()) {
         model->updateAttribute(m_dragSessionId, m_dragAttributeKey, newDt);
@@ -1642,6 +1648,7 @@ bool PlotWidget::handleBubbleRelease(QMouseEvent *event)
     m_dragBubble = nullptr;
     m_dragSessionId.clear();
     m_dragAttributeKey.clear();
+    m_dragXCoordOffset = 0.0;
 
     customPlot->unsetCursor();
     return true;
