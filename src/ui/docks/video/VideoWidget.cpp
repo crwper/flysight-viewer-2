@@ -224,8 +224,8 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
     if (m_sessionModel) {
         connect(m_sessionModel, &SessionModel::modelChanged,
                 this, &VideoWidget::rebuildSessionSelector);
-        connect(m_sessionModel, &SessionModel::exitTimeChanged,
-                this, &VideoWidget::onExitTimeChanged);
+        connect(m_sessionModel, &SessionModel::dependencyChanged,
+                this, &VideoWidget::onDependencyChanged);
     }
 
     rebuildSessionSelector();
@@ -822,16 +822,6 @@ std::optional<double> VideoWidget::syncedExitUtcSeconds() const
     return dt.toMSecsSinceEpoch() / 1000.0;
 }
 
-void VideoWidget::onExitTimeChanged(const QString &sessionId, double deltaSeconds)
-{
-    Q_UNUSED(deltaSeconds);
-
-    if (sessionId != selectedSessionId())
-        return;
-
-    updateSyncLabels();
-}
-
 void VideoWidget::updateVideoCursorSyncState()
 {
     if (!m_cursorModel)
@@ -872,6 +862,20 @@ void VideoWidget::updateVideoCursorFromPositionMs(qint64 positionMs)
     const double utcNow = *exitUtc + (videoNowSeconds - *m_anchorVideoSeconds);
 
     m_cursorModel->setCursorPositionUtc(QStringLiteral("video"), utcNow);
+}
+
+void VideoWidget::onDependencyChanged(const QString &sessionId, const DependencyKey &key)
+{
+    if (key.type != DependencyKey::Type::Attribute)
+        return;
+    if (key.attributeKey != SessionKeys::ExitTime)
+        return;
+
+    // Only update if the changed session matches the selected one
+    if (sessionId != selectedSessionId())
+        return;
+
+    updateSyncLabels();
 }
 
 bool VideoWidget::eventFilter(QObject *obj, QEvent *event)

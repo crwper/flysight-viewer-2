@@ -9,6 +9,8 @@
 #include <QTimer>
 #include <QMediaPlayer>
 
+#include "dependencykey.h"
+
 QT_BEGIN_NAMESPACE
 class QQuickWidget;
 class QSlider;
@@ -64,9 +66,9 @@ private slots:
 #endif
 
     void onMarkExitClicked();
-    void onExitTimeChanged(const QString &sessionId, double deltaSeconds);
     void onSelectedSessionChanged(int index);
     void rebuildSessionSelector();
+    void onDependencyChanged(const QString &sessionId, const DependencyKey &key);
 
 private:
     static QString formatTimeMs(qint64 ms);

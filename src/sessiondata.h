@@ -43,14 +43,14 @@ public:
     QStringList attributeKeys() const;
     bool hasAttribute(const QString &key) const;
     QVariant getAttribute(const QString &key) const;
-    void setAttribute(const QString &key, const QVariant &value);
+    QSet<DependencyKey> setAttribute(const QString &key, const QVariant &value);
 
     QStringList sensorKeys() const;
     bool hasSensor(const QString &key) const;
     QStringList measurementKeys(const QString &sensorKey) const;
     bool hasMeasurement(const QString& sensorKey, const QString& measurementKey) const;
     QVector<double> getMeasurement(const QString& sensorKey, const QString& measurementKey) const;
-    void setMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
+    QSet<DependencyKey> setMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
     void setCalculatedMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
 
     static void registerCalculatedAttribute(const QString &key,

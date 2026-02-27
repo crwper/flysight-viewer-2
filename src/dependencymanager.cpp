@@ -14,7 +14,7 @@ void DependencyManager::registerDependencies(
     }
 }
 
-void DependencyManager::invalidateKeyAndDependents(
+QSet<DependencyKey> DependencyManager::invalidateKeyAndDependents(
     const DependencyKey& changedKey,
     CalculatedValue<QString, QVariant>& attributeCache,
     CalculatedValue<QPair<QString, QString>, QVector<double>>& measurementCache)
@@ -47,6 +47,8 @@ void DependencyManager::invalidateKeyAndDependents(
             measurementCache.invalidate(current.measurementKey);
         }
     }
+
+    return visited;
 }
 
 } // namespace FlySight

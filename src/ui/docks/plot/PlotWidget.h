@@ -6,8 +6,10 @@
 #include <QHash>
 #include <QPointer>
 #include <QSet>
+#include <QTimer>
 #include <memory>
 #include "QCustomPlot/qcustomplot.h"
+#include "dependencykey.h"
 #include "sessionmodel.h"
 #include "graphinfo.h"
 #include "crosshairmanager.h"
@@ -127,7 +129,7 @@ private slots:
     void onHoveredSessionChanged(const QString& sessionId);
     void onCursorsChanged();
     void onPreferenceChanged(const QString &key, const QVariant &value);
-    void onExitTimeChanged(const QString& sessionId, double deltaSeconds);
+    void onDependencyChanged(const QString &sessionId, const DependencyKey &key);
 
 private:
     // Initialization
@@ -138,6 +140,9 @@ private:
     // Utility Methods
     QPen determineGraphPen(const GraphInfo &info, const QString &hoveredSessionId) const;
     QString determineGraphLayer(const GraphInfo &info, const QString &hoveredSessionId) const;
+
+    // Coalescing rebuild helpers
+    void schedulePlotRebuild();
 
     // View management
     const SessionData* referenceSession() const;
@@ -192,10 +197,15 @@ private:
     int m_textSize = 9;
     double m_yAxisPadding = 0.05;
 
-    // Pending x-axis adjustment from exit time change (applied in updatePlot)
-    double m_pendingExitDelta = 0.0;
-
     void applyXAxisChange(const QString& key, const QString& label);
+
+    // Coalescing state for dependencyChanged signals
+    enum class RebuildLevel { None, Full };
+    RebuildLevel m_pendingRebuildLevel = RebuildLevel::None;
+    QTimer m_rebuildTimer;
+
+    // Viewport shift state for exit time changes
+    double m_lastReferenceOffset = 0.0;
 };
 
 } // namespace FlySight

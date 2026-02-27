@@ -508,8 +508,8 @@ bool SessionModel::updateAttribute(const QString &sessionId,
         return false;  // Nothing to update
     }
 
-    // 4. Update the attribute in SessionData
-    session.setAttribute(attributeKey, newValue);
+    // 4. Update the attribute in SessionData (captures all BFS-visited keys)
+    QSet<DependencyKey> visitedKeys = session.setAttribute(attributeKey, newValue);
 
     // 5. Notify views that data has changed
     //    (Emit dataChanged for all columns in this row to ensure full refresh.)
@@ -518,19 +518,10 @@ bool SessionModel::updateAttribute(const QString &sessionId,
     emit dataChanged(topLeft, bottomRight,
                      {Qt::DisplayRole, Qt::EditRole, Qt::CheckStateRole});
 
-    // 5.5. Emit exitTimeChanged for exit time updates (BEFORE modelChanged)
-    //      This allows listeners to adjust x-axis range before plot redraws.
-    if (attributeKey == SessionKeys::ExitTime) {
-        if (oldValue.canConvert<QDateTime>() && newValue.canConvert<QDateTime>()) {
-            double oldSec = oldValue.toDateTime().toMSecsSinceEpoch() / 1000.0;
-            double newSec = newValue.toDateTime().toMSecsSinceEpoch() / 1000.0;
-            double deltaSeconds = newSec - oldSec;
-            emit exitTimeChanged(sessionId, deltaSeconds);
-        }
+    // 6. Emit fine-grained dependencyChanged for each key visited during BFS invalidation
+    for (const DependencyKey &key : visitedKeys) {
+        emit dependencyChanged(sessionId, key);
     }
-
-    // 6. Emit modelChanged so anything else bound to your model updates
-    emit modelChanged();
 
     return true;
 }

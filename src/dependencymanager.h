@@ -14,7 +14,7 @@ public:
         const DependencyKey& thisKey,
         const QList<DependencyKey>& dependsOn);
 
-    void invalidateKeyAndDependents(
+    QSet<DependencyKey> invalidateKeyAndDependents(
         const DependencyKey& changedKey,
         CalculatedValue<QString, QVariant>& attributeCache,
         CalculatedValue<QPair<QString, QString>, QVector<double>>& measurementCache);

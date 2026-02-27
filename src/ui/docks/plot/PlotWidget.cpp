@@ -14,6 +14,7 @@
 #include <QBitmap>
 #include <QPainter>
 #include <QDebug>
+#include <QSignalBlocker>
 
 #include "plottool/plottool.h"
 #include "plottool/pantool.h"
@@ -152,6 +153,8 @@ PlotWidget::PlotWidget(SessionModel *model,
 
     // connect signals to slots for updates and interactions
     connect(model, &SessionModel::modelChanged, this, &PlotWidget::updatePlot);
+    connect(model, &SessionModel::dependencyChanged,
+            this, &PlotWidget::onDependencyChanged);
 
     if (plotModel) {
         connect(plotModel, &QAbstractItemModel::modelReset,
@@ -170,9 +173,6 @@ PlotWidget::PlotWidget(SessionModel *model,
     connect(model, &SessionModel::hoveredSessionChanged,
             this, &PlotWidget::onHoveredSessionChanged);
 
-    connect(model, &SessionModel::exitTimeChanged,
-            this, &PlotWidget::onExitTimeChanged);
-
     // Connect to preferences system
     connect(&PreferencesManager::instance(), &PreferencesManager::preferenceChanged,
             this, &PlotWidget::onPreferenceChanged);
@@ -184,11 +184,22 @@ PlotWidget::PlotWidget(SessionModel *model,
     // Apply initial preferences
     applyPlotPreferences();
 
+    // Initialize coalescing timer for dependencyChanged signals
+    m_rebuildTimer.setSingleShot(true);
+    m_rebuildTimer.setInterval(0);
+    connect(&m_rebuildTimer, &QTimer::timeout, this, &PlotWidget::updatePlot);
+
     // update the plot with initial data
     updatePlot();
 
     // Ensure ticker matches the initial x-axis mode (especially for UTC time)
     updateXAxisTicker();
+
+    // Initialize viewport shift tracking from the reference session
+    const SessionData* ref = referenceSession();
+    if (ref) {
+        m_lastReferenceOffset = exitTimeSeconds(*ref);
+    }
 }
 
 PlotWidget::~PlotWidget() = default;
@@ -307,28 +318,7 @@ QString PlotWidget::getXAxisKey() const
 // Slots
 void PlotWidget::updatePlot()
 {
-    // Apply any pending x-axis adjustment from exit time change.
-    // This must happen at the start of updatePlot() so the range adjustment
-    // and graph data rebuild occur together, preventing visual flash.
-    if (m_pendingExitDelta != 0.0) {
-        QCPRange newRange;
-        {
-            // Block signals to prevent onXAxisRangeChanged from triggering
-            // an intermediate replot while graphs are being rebuilt.
-            QSignalBlocker blocker(customPlot->xAxis);
-            QCPRange oldRange = customPlot->xAxis->range();
-            newRange.lower = oldRange.lower - m_pendingExitDelta;
-            newRange.upper = oldRange.upper - m_pendingExitDelta;
-            customPlot->xAxis->setRange(newRange);
-        }
-
-        // Broadcast the updated range to interested listeners (e.g., map).
-        if (m_rangeModel) {
-            m_rangeModel->setRange(m_xAxisKey, newRange.lower, newRange.upper);
-        }
-
-        m_pendingExitDelta = 0.0;
-    }
+    m_pendingRebuildLevel = RebuildLevel::None;
 
     // Clear existing graphs and axes
     customPlot->clearPlottables();
@@ -467,6 +457,12 @@ void PlotWidget::updatePlot()
 
     // Adjust y-axis ranges based on the updated x-axis range
     onXAxisRangeChanged(customPlot->xAxis->range());
+
+    // Update viewport shift tracking for the reference session
+    const SessionData* ref = referenceSession();
+    if (ref) {
+        m_lastReferenceOffset = exitTimeSeconds(*ref);
+    }
 }
 
 void PlotWidget::updateMarkersOnly()
@@ -864,30 +860,6 @@ void PlotWidget::onCursorsChanged()
 
     // Show a vertical line only when all sessions share the same xPlot.
     m_crosshairManager->setExternalCursorMulti(xBySession, true);
-}
-
-void PlotWidget::onExitTimeChanged(const QString& sessionId, double deltaSeconds)
-{
-    // Only apply range adjustment in TimeFromExit mode.
-    // In absolute Time mode, exit time changes don't affect x-coordinates.
-    if (m_xAxisKey != SessionKeys::TimeFromExit)
-        return;
-
-    // Check if the changed session is the reference session.
-    // The adjustment should be based on the reference session only.
-    const SessionData* ref = referenceSession();
-    if (!ref)
-        return;
-
-    QString refId = ref->getAttribute(SessionKeys::SessionId).toString();
-    if (refId != sessionId)
-        return;
-
-    // Store the delta to be applied at the start of updatePlot().
-    // We don't adjust the range here because Qt may process a screen refresh
-    // between this signal and modelChanged, causing a visual flash where the
-    // x-axis is shifted but the graph data hasn't been rebuilt yet.
-    m_pendingExitDelta = deltaSeconds;
 }
 
 // Protected Methods
@@ -1481,6 +1453,75 @@ void PlotWidget::applyXAxisChange(const QString& key, const QString& label)
 
     // If an external source (e.g., map hover) is driving the cursor, re-apply it under the new axis mode.
     onCursorsChanged();
+}
+
+void PlotWidget::schedulePlotRebuild()
+{
+    m_pendingRebuildLevel = RebuildLevel::Full;
+    m_rebuildTimer.start();
+}
+
+void PlotWidget::onDependencyChanged(const QString &sessionId, const DependencyKey &key)
+{
+    if (key.type == DependencyKey::Type::Attribute) {
+        if (key.attributeKey == SessionKeys::ExitTime) {
+            // Viewport shift in TimeFromExit mode for the reference session
+            if (m_xAxisKey == SessionKeys::TimeFromExit) {
+                const SessionData* ref = referenceSession();
+                if (ref) {
+                    QString refId = ref->getAttribute(SessionKeys::SessionId).toString();
+                    if (refId == sessionId) {
+                        double newOffset = exitTimeSeconds(*ref);
+                        double delta = newOffset - m_lastReferenceOffset;
+
+                        if (delta != 0.0) {
+                            QCPRange oldRange = customPlot->xAxis->range();
+                            QCPRange newRange(oldRange.lower - delta, oldRange.upper - delta);
+
+                            {
+                                QSignalBlocker blocker(customPlot->xAxis);
+                                customPlot->xAxis->setRange(newRange);
+                            }
+
+                            if (m_rangeModel) {
+                                m_rangeModel->setRange(m_xAxisKey, newRange.lower, newRange.upper);
+                            }
+
+                            m_lastReferenceOffset = newOffset;
+                        }
+                    }
+                }
+            }
+            // Exit time change always requires a full rebuild
+            schedulePlotRebuild();
+            return;
+        }
+        // Other attributes: ignore
+        return;
+    }
+
+    if (key.type == DependencyKey::Type::Measurement) {
+        const QString sensor = key.measurementKey.first;
+        const QString measurement = key.measurementKey.second;
+
+        // Check if this measurement is currently displayed
+        for (auto it = m_graphInfoMap.constBegin(); it != m_graphInfoMap.constEnd(); ++it) {
+            const GraphInfo &info = it.value();
+            if (info.sensorId == sensor && info.measurementId == measurement) {
+                schedulePlotRebuild();
+                return;
+            }
+        }
+
+        // Check if the invalidated measurement matches the x-axis key
+        if (measurement == m_xAxisKey) {
+            schedulePlotRebuild();
+            return;
+        }
+
+        // Measurement not displayed: ignore
+        return;
+    }
 }
 
 } // namespace FlySight

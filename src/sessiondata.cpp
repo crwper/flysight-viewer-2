@@ -32,12 +32,12 @@ QVariant SessionData::getAttribute(const QString &key) const {
     return computeAttribute(key);
 }
 
-void SessionData::setAttribute(const QString &key, const QVariant &value) {
+QSet<DependencyKey> SessionData::setAttribute(const QString &key, const QVariant &value) {
     // Store the attribute
     m_attributes.insert(key, value);
 
-    // Invalidate dependencies
-    m_dependencyManager.invalidateKeyAndDependents(
+    // Invalidate dependencies and return the set of all visited keys
+    return m_dependencyManager.invalidateKeyAndDependents(
         DependencyKey::attribute(key),
         m_calculatedAttributes,
         m_calculatedMeasurements);
@@ -71,12 +71,12 @@ QVector<double> SessionData::getMeasurement(const QString &sensorKey, const QStr
     return computeMeasurement(sensorKey, measurementKey);
 }
 
-void SessionData::setMeasurement(const QString &sensorKey, const QString &measurementKey, const QVector<double> &data) {
+QSet<DependencyKey> SessionData::setMeasurement(const QString &sensorKey, const QString &measurementKey, const QVector<double> &data) {
     // Store the measurement
     m_sensors[sensorKey].insert(measurementKey, data);
 
-    // Invalidate dependencies
-    m_dependencyManager.invalidateKeyAndDependents(
+    // Invalidate dependencies and return the set of all visited keys
+    return m_dependencyManager.invalidateKeyAndDependents(
         DependencyKey::measurement(sensorKey, measurementKey),
         m_calculatedAttributes,
         m_calculatedMeasurements);
