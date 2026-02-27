@@ -699,8 +699,8 @@ void MainWindow::registerBuiltInMarkers()
 {
     QVector<MarkerDefinition> defaults = {
         // Category: Reference
-        {"Reference", "Exit", QColor(0, 122, 204), SessionKeys::ExitTime},
-        {"Reference", "Start", QColor(0, 153, 51), SessionKeys::StartTime},
+        {"Reference", "Exit",  QColor(0, 122, 204), SessionKeys::ExitTime,  {}, true},
+        {"Reference", "Start", QColor(0, 153, 51),  SessionKeys::StartTime, {}, false},
     };
 
     for (auto &md : defaults)

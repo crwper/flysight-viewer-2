@@ -526,6 +526,41 @@ bool SessionModel::updateAttribute(const QString &sessionId,
     return true;
 }
 
+bool SessionModel::removeAttribute(const QString &sessionId,
+                                   const QString &attributeKey)
+{
+    // 1. Locate the row for the given session ID
+    int row = getSessionRow(sessionId);
+    if (row < 0) {
+        qWarning() << "SessionModel::removeAttribute: No session found with ID:" << sessionId;
+        return false;
+    }
+
+    // 2. Get a reference to the SessionData
+    SessionData &session = m_sessionData[row];
+
+    // 3. If the attribute is not stored, there is nothing to remove
+    if (!session.hasAttribute(attributeKey)) {
+        return false;
+    }
+
+    // 4. Remove the attribute and capture all BFS-visited keys
+    QSet<DependencyKey> visitedKeys = session.removeAttribute(attributeKey);
+
+    // 5. Notify views that data has changed
+    QModelIndex topLeft = index(row, 0);
+    QModelIndex bottomRight = index(row, columnCount() - 1);
+    emit dataChanged(topLeft, bottomRight,
+                     {Qt::DisplayRole, Qt::EditRole, Qt::CheckStateRole});
+
+    // 6. Emit fine-grained dependencyChanged for each key visited during BFS invalidation
+    for (const DependencyKey &key : visitedKeys) {
+        emit dependencyChanged(sessionId, key);
+    }
+
+    return true;
+}
+
 void SessionModel::sort(int column, Qt::SortOrder order)
 {
     if (column < 0 || column >= columns().size())

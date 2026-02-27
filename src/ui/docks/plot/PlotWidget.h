@@ -10,6 +10,7 @@
 #include <memory>
 #include "QCustomPlot/qcustomplot.h"
 #include "dependencykey.h"
+#include "markerregistry.h"
 #include "sessionmodel.h"
 #include "graphinfo.h"
 #include "crosshairmanager.h"
@@ -66,8 +67,12 @@ public:
 
     struct MarkerBubbleMeta
     {
-        int count = 0;
-        double utcSeconds = 0.0; // Only valid when count == 1
+        int     count = 0;
+        double  utcSeconds = 0.0;   // only valid when count == 1
+        QString attributeKey;       // marker definition's attributeKey
+        QString sessionId;          // only valid when count == 1
+        bool    editable = false;   // from MarkerDefinition
+        QVector<MeasurementKey> measurements;  // from MarkerDefinition
     };
 
     // Constructor / Destructor
@@ -109,6 +114,8 @@ public:
 
     static double interpolateY(const QCPGraph* graph, double x);
 
+    QDateTime xCoordToUtcDateTime(double xCoord, const QString &sessionId) const;
+
     QString getXAxisKey() const;
 
 signals:
@@ -143,6 +150,7 @@ private:
 
     // Coalescing rebuild helpers
     void schedulePlotRebuild();
+    void scheduleMarkerUpdate();
 
     // View management
     const SessionData* referenceSession() const;
@@ -154,6 +162,13 @@ private:
 
     enum class UpdateMode { Rebuild, Reflow };
     void updateReferenceMarkers(UpdateMode mode);
+
+    // Bubble hit-testing and drag interaction
+    QCPItemText* hitTestMarkerBubble(const QPoint &pos) const;
+    bool handleBubblePress(QCPItemText *bubble, QMouseEvent *event);
+    bool handleBubbleDrag(QMouseEvent *event);
+    bool handleBubbleRelease(QMouseEvent *event);
+    void showBubbleContextMenu(QCPItemText *bubble, const QPoint &globalPos);
 
     // Member Variables
     QCustomPlot *customPlot;
@@ -203,9 +218,15 @@ private:
     enum class RebuildLevel { None, Full };
     RebuildLevel m_pendingRebuildLevel = RebuildLevel::None;
     QTimer m_rebuildTimer;
+    QTimer m_markerUpdateTimer;
 
     // Viewport shift state for exit time changes
     double m_lastReferenceOffset = 0.0;
+
+    // Drag state for editable marker bubbles
+    QCPItemText *m_dragBubble = nullptr;
+    QString      m_dragSessionId;
+    QString      m_dragAttributeKey;
 };
 
 } // namespace FlySight

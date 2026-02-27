@@ -1,5 +1,6 @@
 #include "PlotWidget.h"
 #include "plotmodel.h"
+#include "plotregistry.h"
 #include "markermodel.h"
 #include "plotviewsettingsmodel.h"
 #include "cursormodel.h"
@@ -8,6 +9,7 @@
 #include "preferences/preferencekeys.h"
 #include "units/unitconverter.h"
 
+#include <QMenu>
 #include <QVBoxLayout>
 #include <QMouseEvent>
 #include <QPixmap>
@@ -189,6 +191,11 @@ PlotWidget::PlotWidget(SessionModel *model,
     m_rebuildTimer.setInterval(0);
     connect(&m_rebuildTimer, &QTimer::timeout, this, &PlotWidget::updatePlot);
 
+    // Initialize coalescing timer for lightweight marker-only updates
+    m_markerUpdateTimer.setSingleShot(true);
+    m_markerUpdateTimer.setInterval(0);
+    connect(&m_markerUpdateTimer, &QTimer::timeout, this, &PlotWidget::updateMarkersOnly);
+
     // update the plot with initial data
     updatePlot();
 
@@ -313,6 +320,29 @@ void PlotWidget::unlockFocus()
 QString PlotWidget::getXAxisKey() const
 {
     return m_xAxisKey;
+}
+
+QDateTime PlotWidget::xCoordToUtcDateTime(double xCoord, const QString &sessionId) const
+{
+    if (m_xAxisKey == SessionKeys::TimeFromExit) {
+        int row = model->getSessionRow(sessionId);
+        if (row < 0)
+            return QDateTime();
+
+        const SessionData &session = model->getAllSessions().at(row);
+        QVariant exitVar = session.getAttribute(SessionKeys::ExitTime);
+        if (!exitVar.canConvert<QDateTime>())
+            return QDateTime();
+
+        QDateTime exitDt = exitVar.toDateTime().toUTC();
+        double exitSec = exitDt.toMSecsSinceEpoch() / 1000.0;
+        return QDateTime::fromMSecsSinceEpoch(
+            qint64((exitSec + xCoord) * 1000.0), QTimeZone::utc());
+    }
+
+    // Absolute UTC mode (or fallback)
+    return QDateTime::fromMSecsSinceEpoch(
+        qint64(xCoord * 1000.0), QTimeZone::utc());
 }
 
 // Slots
@@ -880,6 +910,11 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
         case QEvent::MouseMove: {
             auto me = static_cast<QMouseEvent*>(event);
 
+            // Handle active bubble drag before anything else
+            if (m_dragBubble) {
+                return handleBubbleDrag(me);
+            }
+
             const bool wasInPlotArea = m_mouseInPlotArea;
 
             const bool inPlotArea =
@@ -931,10 +966,24 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
         }
         case QEvent::MouseButtonPress: {
             auto me = static_cast<QMouseEvent*>(event);
+            if (!customPlot->axisRect()->rect().contains(me->pos())) {
+                QCPItemText *hitBubble = hitTestMarkerBubble(me->pos());
+                if (hitBubble) {
+                    if (me->button() == Qt::RightButton) {
+                        showBubbleContextMenu(hitBubble, me->globalPosition().toPoint());
+                        return true;  // Always consume right-clicks on bubbles
+                    }
+                    return handleBubblePress(hitBubble, me);
+                }
+                return false;
+            }
             return m_currentTool->mousePressEvent(me);
         }
         case QEvent::MouseButtonRelease: {
             auto me = static_cast<QMouseEvent*>(event);
+            if (m_dragBubble) {
+                return handleBubbleRelease(me);
+            }
             return m_currentTool->mouseReleaseEvent(me);
         }
         case QEvent::Leave:
@@ -1181,6 +1230,44 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
             return true;
         };
 
+    // Compute annotation string for a single-session marker bubble
+    auto computeAnnotation = [this](const MarkerDefinition &def,
+                                    const QString &sessionId) -> QString
+    {
+        if (def.measurements.isEmpty())
+            return QString();
+
+        const auto &primaryMk = def.measurements.first();
+        QString valueKey = def.attributeKey
+            + QStringLiteral(":")
+            + primaryMk.first
+            + QStringLiteral("/")
+            + primaryMk.second;
+
+        int row = model->getSessionRow(sessionId);
+        if (row < 0)
+            return QString();
+
+        SessionData &session = model->sessionRef(row);
+        QVariant val = session.getAttribute(valueKey);
+        if (!val.isValid() || !val.canConvert<double>())
+            return QString();
+
+        double siValue = val.toDouble();
+
+        // Look up measurement type from PlotRegistry
+        QString measurementType;
+        const QVector<PlotValue> &allPlots = PlotRegistry::instance().allPlots();
+        for (const PlotValue &pv : allPlots) {
+            if (pv.sensorID == primaryMk.first && pv.measurementID == primaryMk.second) {
+                measurementType = pv.measurementType;
+                break;
+            }
+        }
+
+        return UnitConverter::instance().format(siValue, measurementType);
+    };
+
     const int clusterThresholdPx = 20;
 
     // Style (must match existing EXIT marker visuals)
@@ -1194,6 +1281,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
         struct DrawableInstance {
             double xPixel = 0.0;
             double markerUtcSeconds = 0.0;
+            QString sessionId;
         };
 
         QVector<DrawableInstance> drawable;
@@ -1230,6 +1318,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
             DrawableInstance di;
             di.xPixel = customPlot->xAxis->coordToPixel(xCoord);
             di.markerUtcSeconds = markerUtcSeconds;
+            di.sessionId = s.getAttribute(SessionKeys::SessionId).toString();
             drawable.append(di);
         }
 
@@ -1253,6 +1342,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
             int count = 0;
 
             double markerUtcSeconds = 0.0; // Only valid when count == 1
+            QString sessionId;             // Only valid when count == 1
         };
 
         QVector<Cluster> clusters;
@@ -1263,6 +1353,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
         current.lastXPixel = drawable.first().xPixel;
         current.count = 1;
         current.markerUtcSeconds = drawable.first().markerUtcSeconds;
+        current.sessionId = drawable.first().sessionId;
 
         for (int i = 1; i < drawable.size(); ++i) {
             const double xPix = drawable[i].xPixel;
@@ -1276,6 +1367,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
                 // Only valid for single-marker clusters.
                 if (current.count != 1) {
                     current.markerUtcSeconds = 0.0;
+                    current.sessionId.clear();
                 }
 
                 continue;
@@ -1283,9 +1375,14 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
 
             // finalize cluster
             current.anchorXPixel = current.sumXPixel / current.count;
-            current.label = (current.count == 1)
-                                ? def.label
-                                : QStringLiteral("%1 \u00D7%2").arg(def.label).arg(current.count);
+            if (current.count == 1) {
+                QString ann = computeAnnotation(def, current.sessionId);
+                current.label = ann.isEmpty()
+                    ? def.label
+                    : QStringLiteral("%1: %2").arg(def.label, ann);
+            } else {
+                current.label = QStringLiteral("%1 \u00D7%2").arg(def.label).arg(current.count);
+            }
             clusters.append(current);
 
             // start new cluster
@@ -1294,13 +1391,19 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
             current.lastXPixel = xPix;
             current.count = 1;
             current.markerUtcSeconds = utcSeconds;
+            current.sessionId = drawable[i].sessionId;
         }
 
         // finalize last cluster
         current.anchorXPixel = current.sumXPixel / current.count;
-        current.label = (current.count == 1)
-                            ? def.label
-                            : QStringLiteral("%1 \u00D7%2").arg(def.label).arg(current.count);
+        if (current.count == 1) {
+            QString ann = computeAnnotation(def, current.sessionId);
+            current.label = ann.isEmpty()
+                ? def.label
+                : QStringLiteral("%1: %2").arg(def.label, ann);
+        } else {
+            current.label = QStringLiteral("%1 \u00D7%2").arg(def.label).arg(current.count);
+        }
         clusters.append(current);
 
         if (clusters.isEmpty()) {
@@ -1388,8 +1491,12 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
                 bubble->position->setCoords(xPixel, bubbleBottomY);
 
                 MarkerBubbleMeta meta;
-                meta.count = clusters[i].count;
-                meta.utcSeconds = (clusters[i].count == 1) ? clusters[i].markerUtcSeconds : 0.0;
+                meta.count        = clusters[i].count;
+                meta.utcSeconds   = (clusters[i].count == 1) ? clusters[i].markerUtcSeconds : 0.0;
+                meta.attributeKey = def.attributeKey;
+                meta.sessionId    = (clusters[i].count == 1) ? clusters[i].sessionId : QString();
+                meta.editable     = def.editable;
+                meta.measurements = def.measurements;
                 m_markerBubbleMeta.insert(bubble, meta);
             }
         }
@@ -1455,10 +1562,133 @@ void PlotWidget::applyXAxisChange(const QString& key, const QString& label)
     onCursorsChanged();
 }
 
+QCPItemText* PlotWidget::hitTestMarkerBubble(const QPoint &pos) const
+{
+    for (auto it = m_markerBubbleMeta.constBegin(); it != m_markerBubbleMeta.constEnd(); ++it) {
+        QCPItemText *bubble = it.key();
+        if (!bubble)
+            continue;
+
+        // Compute the bubble's visual bounding rect in pixel coordinates,
+        // replicating the logic from QCPItemText::selectTest/draw.
+        QPointF anchor = bubble->position->pixelPosition();
+        QFontMetrics fm(bubble->font());
+        QRect textRect = fm.boundingRect(0, 0, 0, 0,
+            Qt::TextDontClip | bubble->textAlignment(), bubble->text());
+        QMargins pad = bubble->padding();
+        QRect boxRect = textRect.adjusted(-pad.left(), -pad.top(), pad.right(), pad.bottom());
+
+        // Apply position alignment (matches QCPItemText::getTextDrawPoint)
+        QPointF topLeft = anchor;
+        Qt::Alignment align = bubble->positionAlignment();
+        if (align.testFlag(Qt::AlignHCenter))
+            topLeft.rx() -= boxRect.width() / 2.0;
+        else if (align.testFlag(Qt::AlignRight))
+            topLeft.rx() -= boxRect.width();
+        if (align.testFlag(Qt::AlignVCenter))
+            topLeft.ry() -= boxRect.height() / 2.0;
+        else if (align.testFlag(Qt::AlignBottom))
+            topLeft.ry() -= boxRect.height();
+        boxRect.moveTopLeft(topLeft.toPoint());
+
+        if (boxRect.contains(pos))
+            return bubble;
+    }
+    return nullptr;
+}
+
+bool PlotWidget::handleBubblePress(QCPItemText *bubble, QMouseEvent *event)
+{
+    if (event->button() != Qt::LeftButton)
+        return false;
+
+    auto it = m_markerBubbleMeta.constFind(bubble);
+    if (it == m_markerBubbleMeta.constEnd())
+        return false;
+
+    const MarkerBubbleMeta &meta = it.value();
+    if (!meta.editable || meta.count != 1)
+        return false;
+
+    // Store drag state
+    m_dragBubble = bubble;
+    m_dragSessionId = meta.sessionId;
+    m_dragAttributeKey = meta.attributeKey;
+
+    customPlot->setCursor(Qt::ClosedHandCursor);
+    return true;
+}
+
+bool PlotWidget::handleBubbleDrag(QMouseEvent *event)
+{
+    double xCoord = customPlot->xAxis->pixelToCoord(event->pos().x());
+    QDateTime newDt = xCoordToUtcDateTime(xCoord, m_dragSessionId);
+    if (newDt.isValid()) {
+        model->updateAttribute(m_dragSessionId, m_dragAttributeKey, newDt);
+    }
+    return true;
+}
+
+bool PlotWidget::handleBubbleRelease(QMouseEvent *event)
+{
+    // Perform final position update
+    double xCoord = customPlot->xAxis->pixelToCoord(event->pos().x());
+    QDateTime newDt = xCoordToUtcDateTime(xCoord, m_dragSessionId);
+    if (newDt.isValid()) {
+        model->updateAttribute(m_dragSessionId, m_dragAttributeKey, newDt);
+    }
+
+    // Clear drag state
+    m_dragBubble = nullptr;
+    m_dragSessionId.clear();
+    m_dragAttributeKey.clear();
+
+    customPlot->unsetCursor();
+    return true;
+}
+
+void PlotWidget::showBubbleContextMenu(QCPItemText *bubble, const QPoint &globalPos)
+{
+    auto it = m_markerBubbleMeta.find(bubble);
+    if (it == m_markerBubbleMeta.end())
+        return;
+    const MarkerBubbleMeta &meta = it.value();
+
+    // Guard: editable, single-session, has calculation, has stored override
+    if (!meta.editable)
+        return;
+    if (meta.count != 1)
+        return;
+    if (!SessionData::hasRegisteredCalculation(meta.attributeKey))
+        return;
+
+    int row = model->getSessionRow(meta.sessionId);
+    if (row < 0)
+        return;
+    const SessionData &session = model->sessionRef(row);
+    if (!session.hasAttribute(meta.attributeKey))
+        return;
+
+    // Show menu
+    QMenu menu(this);
+    QAction *resetAction = menu.addAction(tr("Reset to default"));
+    QAction *chosenAction = menu.exec(globalPos);
+    if (chosenAction == resetAction) {
+        model->removeAttribute(meta.sessionId, meta.attributeKey);
+    }
+}
+
 void PlotWidget::schedulePlotRebuild()
 {
     m_pendingRebuildLevel = RebuildLevel::Full;
     m_rebuildTimer.start();
+}
+
+void PlotWidget::scheduleMarkerUpdate()
+{
+    if (m_pendingRebuildLevel == RebuildLevel::Full)
+        return;
+    m_markerUpdateTimer.start();
 }
 
 void PlotWidget::onDependencyChanged(const QString &sessionId, const DependencyKey &key)
@@ -1495,6 +1725,15 @@ void PlotWidget::onDependencyChanged(const QString &sessionId, const DependencyK
             // Exit time change always requires a full rebuild
             schedulePlotRebuild();
             return;
+        }
+        // Check if the changed attribute is a marker attribute
+        const QVector<MarkerDefinition> enabledDefs =
+            markerModel ? markerModel->enabledMarkers() : QVector<MarkerDefinition>{};
+        for (const MarkerDefinition &def : enabledDefs) {
+            if (key.attributeKey == def.attributeKey) {
+                scheduleMarkerUpdate();
+                return;
+            }
         }
         // Other attributes: ignore
         return;

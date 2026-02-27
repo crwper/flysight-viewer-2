@@ -51,6 +51,9 @@ public:
                          const QString &attributeKey,
                          const QVariant &newValue);
 
+    bool removeAttribute(const QString &sessionId,
+                         const QString &attributeKey);
+
     // Enable sorting
     void sort(int column, Qt::SortOrder order = Qt::AscendingOrder) override;
 

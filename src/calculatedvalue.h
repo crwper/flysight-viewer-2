@@ -33,6 +33,9 @@ public:
     // Checks if there's a registered calculation function for the given key.
     bool hasCalculation(const Key &key) const;
 
+    // Checks if there's a registered calculation for the given key (static variant).
+    static bool hasRegisteredCalculation(const Key &key) { return s_methods.contains(key); }
+
     // Retrieves the value associated with the given key, computing it if necessary.
     std::optional<Value> getValue(SessionData &session, const Key &key) const;
 

@@ -43,6 +43,17 @@ QSet<DependencyKey> SessionData::setAttribute(const QString &key, const QVariant
         m_calculatedMeasurements);
 }
 
+QSet<DependencyKey> SessionData::removeAttribute(const QString &key) {
+    // Remove the stored attribute (no-op if key is absent)
+    m_attributes.remove(key);
+
+    // Invalidate dependencies so downstream caches recompute from the calculated value
+    return m_dependencyManager.invalidateKeyAndDependents(
+        DependencyKey::attribute(key),
+        m_calculatedAttributes,
+        m_calculatedMeasurements);
+}
+
 QStringList SessionData::sensorKeys() const {
     return m_sensors.keys();
 }
@@ -86,6 +97,11 @@ void SessionData::setCalculatedMeasurement(const QString& sensorKey, const QStri
 {
     MeasurementKey k(sensorKey, measurementKey);
     m_calculatedMeasurements.setValue(k, data);
+}
+
+bool SessionData::hasRegisteredCalculation(const QString &key)
+{
+    return CalculatedValue<QString, QVariant>::hasRegisteredCalculation(key);
 }
 
 void SessionData::registerCalculatedAttribute(

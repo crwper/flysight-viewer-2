@@ -3,9 +3,12 @@
 
 #include <QString>
 #include <QColor>
+#include <QPair>
 #include <QVector>
 
 namespace FlySight {
+
+using MeasurementKey = QPair<QString, QString>;
 
 // Marker definitions
 struct MarkerDefinition {
@@ -13,6 +16,8 @@ struct MarkerDefinition {
     QString label;
     QColor color;
     QString attributeKey; // Unique, stable marker id (session attribute key)
+    QVector<MeasurementKey> measurements;  // sensor measurements this marker relates to
+    bool    editable = false;              // whether the user can reposition by dragging
 };
 
 class MarkerRegistry {

@@ -24,41 +24,16 @@ bool SetExitTool::mousePressEvent(QMouseEvent *event)
     // 1) pixel → axis coordinate (could be seconds-from-exit or epoch secs)
     double xCoord = m_plot->xAxis->pixelToCoord(event->pos().x());
 
-    // 2) lookup current mode from PlotWidget
-    const QString axisKey = m_widget->getXAxisKey();
-    if (axisKey.isEmpty()) {
-        qWarning() << "SetExitTool: PlotWidget returned empty X-axis key. Aborting.";
-        return false; // Or use a fallback, but ideally PlotWidget always has a valid one
-    }
-
-    // 3) Get traced sessions from CrosshairManager via PlotWidget
+    // 2) Get traced sessions from CrosshairManager via PlotWidget
     CrosshairManager* crosshairMgr = m_widget->crosshairManager();
     if (!crosshairMgr) return false; // Safety check
 
     QSet<QString> tracedIds = crosshairMgr->getTracedSessionIds();
 
     for (const QString& sessionId : tracedIds) {
-        int row = m_model->getSessionRow(sessionId);
-        if (row >= 0) {
-            SessionData &session = m_model->sessionRef(row);
-            QVariant oldVar = session.getAttribute(SessionKeys::ExitTime);
-            if (oldVar.canConvert<QDateTime>()) {
-                QDateTime newExit;
-                if (axisKey == SessionKeys::TimeFromExit) {
-                    // relative mode: add xCoord seconds to existing exit
-                    QDateTime oldExit = oldVar.toDateTime();
-                    double oldSec = oldExit.toMSecsSinceEpoch() / 1000.0;
-                    newExit = QDateTime::fromMSecsSinceEpoch(
-                        qint64((oldSec + xCoord) * 1000.0),
-                        QTimeZone::utc());
-                } else {
-                    // absolute UTC mode: treat xCoord as epoch seconds
-                    newExit = QDateTime::fromMSecsSinceEpoch(
-                        qint64(xCoord * 1000.0),
-                        QTimeZone::utc());
-                }
-                m_model->updateAttribute(sessionId, SessionKeys::ExitTime, newExit);
-            }
+        QDateTime newExit = m_widget->xCoordToUtcDateTime(xCoord, sessionId);
+        if (newExit.isValid()) {
+            m_model->updateAttribute(sessionId, SessionKeys::ExitTime, newExit);
         }
     }
 

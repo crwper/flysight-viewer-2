@@ -44,6 +44,7 @@ public:
     bool hasAttribute(const QString &key) const;
     QVariant getAttribute(const QString &key) const;
     QSet<DependencyKey> setAttribute(const QString &key, const QVariant &value);
+    QSet<DependencyKey> removeAttribute(const QString &key);
 
     QStringList sensorKeys() const;
     bool hasSensor(const QString &key) const;
@@ -52,6 +53,8 @@ public:
     QVector<double> getMeasurement(const QString& sensorKey, const QString& measurementKey) const;
     QSet<DependencyKey> setMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
     void setCalculatedMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
+
+    static bool hasRegisteredCalculation(const QString &key);
 
     static void registerCalculatedAttribute(const QString &key,
                                             const QList<DependencyKey>& dependencies, AttributeFunction func);
