@@ -104,6 +104,43 @@ void Calculations::registerAttributeCalculations()
         });
     }
 
+    // Maximum vertical speed time (time of peak velD after exit)
+    SessionData::registerCalculatedAttribute(
+        SessionKeys::MaxVelDTime,
+        {
+            DependencyKey::attribute(SessionKeys::ExitTime),
+            DependencyKey::measurement("GNSS", "velD"),
+            DependencyKey::measurement("GNSS", SessionKeys::Time)
+        },
+        [](SessionData& session) -> std::optional<QVariant> {
+        QVariant exitVar = session.getAttribute(SessionKeys::ExitTime);
+        if (!exitVar.canConvert<QDateTime>())
+            return std::nullopt;
+
+        double exitSec = exitVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+
+        QVector<double> velD = session.getMeasurement("GNSS", "velD");
+        QVector<double> time = session.getMeasurement("GNSS", SessionKeys::Time);
+
+        if (velD.isEmpty() || time.isEmpty() || velD.size() != time.size())
+            return std::nullopt;
+
+        double maxVelD = -std::numeric_limits<double>::max();
+        int maxIdx = -1;
+        for (int i = 0; i < velD.size(); ++i) {
+            if (time[i] >= exitSec && velD[i] > maxVelD) {
+                maxVelD = velD[i];
+                maxIdx = i;
+            }
+        }
+
+        if (maxIdx < 0)
+            return std::nullopt;
+
+        return QDateTime::fromMSecsSinceEpoch(
+            qint64(time[maxIdx] * 1000.0), QTimeZone::utc());
+    });
+
     // Ground elevation calculation based on preferences and GNSS data
     SessionData::registerCalculatedAttribute(
         SessionKeys::GroundElev,

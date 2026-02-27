@@ -701,6 +701,9 @@ void MainWindow::registerBuiltInMarkers()
         // Category: Reference
         {"Reference", "Exit",  QColor(0, 122, 204), SessionKeys::ExitTime,  {}, true},
         {"Reference", "Start", QColor(0, 153, 51),  SessionKeys::StartTime, {}, false},
+
+        // Category: Analysis
+        {"Analysis", "Max VZ", Qt::green, SessionKeys::MaxVelDTime, {{"GNSS", "velD"}}, false},
     };
 
     for (auto &md : defaults)
