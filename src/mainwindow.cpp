@@ -9,6 +9,7 @@
 #include <QMouseEvent>
 #include <QStandardPaths>
 #include <QCloseEvent>
+#include <QDateTime>
 #include <kddockwidgets/LayoutSaver.h>
 
 #include "version.h"
@@ -104,9 +105,12 @@ MainWindow::MainWindow(QWidget *parent)
         mouse.active = false;
         mouse.positionSpace = CursorModel::PositionSpace::PlotAxisCoord;
         mouse.positionValue = 0.0;
-        mouse.axisKey = m_plotViewSettingsModel
-            ? m_plotViewSettingsModel->xAxisKey()
-            : SessionKeys::TimeFromExit;
+        mouse.xVariable = m_plotViewSettingsModel
+            ? m_plotViewSettingsModel->xVariable()
+            : SessionKeys::Time;
+        mouse.referenceMarkerKey = m_plotViewSettingsModel
+            ? m_plotViewSettingsModel->referenceMarkerKey()
+            : QStringLiteral("_EXIT_TIME");
         mouse.targetPolicy = CursorModel::TargetPolicy::Explicit;
 
         m_cursorModel->ensureCursor(mouse);
@@ -119,7 +123,8 @@ MainWindow::MainWindow(QWidget *parent)
         video.active = false;
         video.positionSpace = CursorModel::PositionSpace::UtcSeconds;
         video.positionValue = 0.0;
-        video.axisKey.clear(); // unused when positionSpace == UtcSeconds
+        video.xVariable.clear();          // unused when positionSpace == UtcSeconds
+        video.referenceMarkerKey.clear(); // unused when positionSpace == UtcSeconds
         video.targetPolicy = CursorModel::TargetPolicy::AutoVisibleOverlap;
 
         m_cursorModel->ensureCursor(video);
@@ -354,8 +359,13 @@ void MainWindow::importFiles(
         return;
     }
 
-    // honour whatever the user picked in the Horizontal-Axis menu
-    const QString xAxisKey = currentXAxisKey();
+    // Fetch the x-axis variable from the settings model
+    const QString xVar = m_plotViewSettingsModel
+        ? m_plotViewSettingsModel->xVariable()
+        : SessionKeys::Time;
+    const QString refKey = m_plotViewSettingsModel
+        ? m_plotViewSettingsModel->referenceMarkerKey()
+        : QString();
 
     // Initialize a map to collect failed imports with error messages
     QMap<QString, QString> failedImports;
@@ -364,8 +374,22 @@ void MainWindow::importFiles(
     QList<SessionData> importedSessions;
 
     // Variables to track the overall min and max time from newly imported files
+    // (in plot-axis coordinates, i.e. raw minus offset)
     double newMinTime = std::numeric_limits<double>::max();
     double newMaxTime = std::numeric_limits<double>::lowest();
+
+    // Helper to compute the reference offset for a session
+    auto computeOffset = [&refKey](SessionData &session) -> double {
+        if (refKey.isEmpty())
+            return 0.0;
+        QVariant v = session.getAttribute(refKey);
+        if (!v.canConvert<QDateTime>())
+            return 0.0;
+        QDateTime dt = v.toDateTime();
+        if (!dt.isValid())
+            return 0.0;
+        return dt.toMSecsSinceEpoch() / 1000.0;
+    };
 
     if (showProgress) {
         // Show progress dialog
@@ -392,12 +416,15 @@ void MainWindow::importFiles(
                 // Collect for batch merge
                 importedSessions.append(tempSessionData);
 
-                // Collect min and max time from tempSessionData
+                // Compute offset for plot-axis coordinates
+                const double offset = computeOffset(tempSessionData);
+
+                // Collect min and max time from tempSessionData in plot-axis space
                 for (const QString &sensorKey : tempSessionData.sensorKeys()) {
-                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, xAxisKey);
+                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, xVar);
                     if (!times.isEmpty()) {
-                        double minTime = *std::min_element(times.begin(), times.end());
-                        double maxTime = *std::max_element(times.begin(), times.end());
+                        double minTime = *std::min_element(times.begin(), times.end()) - offset;
+                        double maxTime = *std::max_element(times.begin(), times.end()) - offset;
                         newMinTime = std::min(newMinTime, minTime);
                         newMaxTime = std::max(newMaxTime, maxTime);
                     }
@@ -441,12 +468,15 @@ void MainWindow::importFiles(
                 // Collect for batch merge
                 importedSessions.append(tempSessionData);
 
-                // Collect min and max time from tempSessionData
+                // Compute offset for plot-axis coordinates
+                const double offset = computeOffset(tempSessionData);
+
+                // Collect min and max time from tempSessionData in plot-axis space
                 for (const QString &sensorKey : tempSessionData.sensorKeys()) {
-                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, xAxisKey);
+                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, xVar);
                     if (!times.isEmpty()) {
-                        double minTime = *std::min_element(times.begin(), times.end());
-                        double maxTime = *std::max_element(times.begin(), times.end());
+                        double minTime = *std::min_element(times.begin(), times.end()) - offset;
+                        double maxTime = *std::max_element(times.begin(), times.end()) - offset;
                         newMinTime = std::min(newMinTime, minTime);
                         newMaxTime = std::max(newMaxTime, maxTime);
                     }
@@ -699,11 +729,11 @@ void MainWindow::registerBuiltInMarkers()
 {
     QVector<MarkerDefinition> defaults = {
         // Category: Reference
-        {"Reference", "Exit",  QColor(0, 122, 204), SessionKeys::ExitTime,  {}, true},
-        {"Reference", "Start", QColor(0, 153, 51),  SessionKeys::StartTime, {}, false},
+        {"Reference", "Exit",                    "Exit",   QColor(0, 122, 204), SessionKeys::ExitTime,  {}, true},
+        {"Reference", "Start",                   "Start",  QColor(0, 153, 51),  SessionKeys::StartTime, {}, false},
 
         // Category: Analysis
-        {"Analysis", "Max VZ", Qt::green, SessionKeys::MaxVelDTime, {{"GNSS", "velD"}}, false},
+        {"Analysis",  "Maximum vertical speed",  "Max VZ", Qt::green,           SessionKeys::MaxVelDTime, {{"GNSS", "velD"}}, false},
     };
 
     for (auto &md : defaults)
@@ -854,55 +884,29 @@ void MainWindow::initializePreferences()
 
 void MainWindow::initializeXAxisMenu()
 {
-    const QString activeKeyInSettings = currentXAxisKey();
-
-    struct AxisChoice {
-        QString menuText;
-        QString key;
-        QString axisLabel;
-    };
-
-    QVector<AxisChoice> choices = {
-        {tr("Time from exit (s)"), SessionKeys::TimeFromExit, tr("Time from exit (s)")},
-        {tr("UTC time (s)"),      SessionKeys::Time,        tr("Time (s)")}
-    };
-
     QMenu *plotsMenu = ui->menuPlots;
     Q_ASSERT(plotsMenu);
 
-    QMenu *xAxisMenu = plotsMenu->addMenu(tr("Horizontal Axis"));
+    QMenu *xAxisMenu = plotsMenu->addMenu(tr("Independent Variable"));
     plotsMenu->addSeparator();
 
     QActionGroup *axisGroup = new QActionGroup(this);
     axisGroup->setExclusive(true);
 
-    bool initialActionSet = false;
-    for (const AxisChoice &ch : choices) {
-        QAction *a = xAxisMenu->addAction(ch.menuText);
-        a->setCheckable(true);
-        a->setData(ch.key);
-        a->setProperty("axisLabel", ch.axisLabel);
-        axisGroup->addAction(a);
+    // For now, the only independent variable is "Time"
+    QAction *timeAction = xAxisMenu->addAction(tr("Time"));
+    timeAction->setCheckable(true);
+    timeAction->setChecked(true);
+    axisGroup->addAction(timeAction);
 
-        // If this matches what’s in settings, check it now
-        if (ch.key == activeKeyInSettings) {
-            a->setChecked(true);
-            setXAxisKey(ch.key, ch.axisLabel);
-            initialActionSet = true;
-        }
+    connect(timeAction, &QAction::triggered, this, [this]() {
+        if (m_plotViewSettingsModel)
+            m_plotViewSettingsModel->setXVariable(SessionKeys::Time);
+    });
 
-        connect(a, &QAction::triggered, this, [this, ch]() {
-            setXAxisKey(ch.key, ch.axisLabel);
-        });
-    }
-
-    // If no action matched or settings missing, default to first choice
-    if (!initialActionSet && !axisGroup->actions().isEmpty()) {
-        QAction *firstAction = axisGroup->actions().first();
-        firstAction->setChecked(true);
-        setXAxisKey(firstAction->data().toString(),
-                    firstAction->property("axisLabel").toString());
-    }
+    // Ensure the model has the correct xVariable
+    if (m_plotViewSettingsModel)
+        m_plotViewSettingsModel->setXVariable(SessionKeys::Time);
 }
 
 void MainWindow::initializePlotsMenu()
@@ -1054,22 +1058,6 @@ void MainWindow::setupPlotTools()
     ui->action_Pan->setChecked(true);
 }
 
-// Accessors for persisting the current x-axis measurement key
-QString MainWindow::currentXAxisKey() const
-{
-    if (!m_plotViewSettingsModel)
-        return SessionKeys::TimeFromExit;
-
-    return m_plotViewSettingsModel->xAxisKey();
-}
-
-void MainWindow::setXAxisKey(const QString &key, const QString &label)
-{
-    if (!m_plotViewSettingsModel)
-        return;
-
-    m_plotViewSettingsModel->setXAxis(key, label);
-}
 
 void MainWindow::on_action_ToggleUnits_triggered()
 {

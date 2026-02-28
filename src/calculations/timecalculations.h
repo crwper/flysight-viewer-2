@@ -7,7 +7,6 @@ namespace Calculations {
 /// Register time-related calculated measurements for all sensors.
 /// This includes:
 /// - _time: Converted UTC time for each sensor
-/// - _time_from_exit: Time relative to exit for each sensor
 void registerTimeCalculations();
 
 } // namespace Calculations

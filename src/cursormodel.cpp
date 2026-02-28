@@ -44,8 +44,10 @@ QVariant CursorModel::data(const QModelIndex &index, int role) const
         return static_cast<int>(c.positionSpace);
     case PositionValueRole:
         return c.positionValue;
-    case AxisKeyRole:
-        return c.axisKey;
+    case XVariableRole:
+        return c.xVariable;
+    case ReferenceMarkerKeyRole:
+        return c.referenceMarkerKey;
 
     case TargetPolicyRole:
         return static_cast<int>(c.targetPolicy);
@@ -70,7 +72,8 @@ QHash<int, QByteArray> CursorModel::roleNames() const
     roles[ActiveRole] = "active";
     roles[PositionSpaceRole] = "positionSpace";
     roles[PositionValueRole] = "positionValue";
-    roles[AxisKeyRole] = "axisKey";
+    roles[XVariableRole] = "xVariable";
+    roles[ReferenceMarkerKeyRole] = "referenceMarkerKey";
     roles[TargetPolicyRole] = "targetPolicy";
     roles[TargetSessionsRole] = "targetSessions";
     return roles;
@@ -158,7 +161,8 @@ void CursorModel::setCursorActive(const QString &id, bool active)
     emit cursorsChanged();
 }
 
-void CursorModel::setCursorPositionPlotAxis(const QString &id, const QString &axisKey, double x)
+void CursorModel::setCursorPositionPlotAxis(const QString &id, const QString &xVariable,
+                                             const QString &referenceMarkerKey, double x)
 {
     const int row = rowForId(id);
     if (row < 0)
@@ -166,19 +170,21 @@ void CursorModel::setCursorPositionPlotAxis(const QString &id, const QString &ax
 
     Cursor &c = m_cursors[row];
 
-    const bool changedSpace = (c.positionSpace != PositionSpace::PlotAxisCoord);
-    const bool changedAxis  = (c.axisKey != axisKey);
-    const bool changedVal   = (c.positionValue != x);
+    const bool changedSpace  = (c.positionSpace != PositionSpace::PlotAxisCoord);
+    const bool changedXVar   = (c.xVariable != xVariable);
+    const bool changedRefKey = (c.referenceMarkerKey != referenceMarkerKey);
+    const bool changedVal    = (c.positionValue != x);
 
-    if (!changedSpace && !changedAxis && !changedVal)
+    if (!changedSpace && !changedXVar && !changedRefKey && !changedVal)
         return;
 
     c.positionSpace = PositionSpace::PlotAxisCoord;
-    c.axisKey = axisKey;
+    c.xVariable = xVariable;
+    c.referenceMarkerKey = referenceMarkerKey;
     c.positionValue = x;
 
     const QModelIndex idx = index(row, 0);
-    emit dataChanged(idx, idx, {PositionSpaceRole, AxisKeyRole, PositionValueRole});
+    emit dataChanged(idx, idx, {PositionSpaceRole, XVariableRole, ReferenceMarkerKeyRole, PositionValueRole});
     emit cursorsChanged();
 }
 
@@ -190,19 +196,21 @@ void CursorModel::setCursorPositionUtc(const QString &id, double utcSeconds)
 
     Cursor &c = m_cursors[row];
 
-    const bool changedSpace = (c.positionSpace != PositionSpace::UtcSeconds);
-    const bool changedAxis  = (!c.axisKey.isEmpty());
-    const bool changedVal   = (c.positionValue != utcSeconds);
+    const bool changedSpace  = (c.positionSpace != PositionSpace::UtcSeconds);
+    const bool changedXVar   = (!c.xVariable.isEmpty());
+    const bool changedRefKey = (!c.referenceMarkerKey.isEmpty());
+    const bool changedVal    = (c.positionValue != utcSeconds);
 
-    if (!changedSpace && !changedAxis && !changedVal)
+    if (!changedSpace && !changedXVar && !changedRefKey && !changedVal)
         return;
 
     c.positionSpace = PositionSpace::UtcSeconds;
-    c.axisKey.clear();
+    c.xVariable.clear();
+    c.referenceMarkerKey.clear();
     c.positionValue = utcSeconds;
 
     const QModelIndex idx = index(row, 0);
-    emit dataChanged(idx, idx, {PositionSpaceRole, AxisKeyRole, PositionValueRole});
+    emit dataChanged(idx, idx, {PositionSpaceRole, XVariableRole, ReferenceMarkerKeyRole, PositionValueRole});
     emit cursorsChanged();
 }
 
@@ -260,12 +268,13 @@ void CursorModel::setCursorState(const QString &id,
     const bool changedTargetPolicy = (c.targetPolicy != TargetPolicy::Explicit);
     const bool changedTargetIds    = (c.targetSessions != targetSessions);
     const bool changedPosSpace     = (c.positionSpace != PositionSpace::UtcSeconds);
-    const bool changedPosAxis      = (!c.axisKey.isEmpty());
+    const bool changedPosXVar      = (!c.xVariable.isEmpty());
+    const bool changedPosRefKey    = (!c.referenceMarkerKey.isEmpty());
     const bool changedPosValue     = (c.positionValue != utcSeconds);
     const bool changedActive       = (c.active != active);
 
     if (!changedTargetPolicy && !changedTargetIds
-        && !changedPosSpace && !changedPosAxis && !changedPosValue
+        && !changedPosSpace && !changedPosXVar && !changedPosRefKey && !changedPosValue
         && !changedActive) {
         return; // nothing changed -- skip emission
     }
@@ -274,15 +283,17 @@ void CursorModel::setCursorState(const QString &id,
     c.targetPolicy   = TargetPolicy::Explicit;
     c.targetSessions = targetSessions;
     c.positionSpace  = PositionSpace::UtcSeconds;
-    c.axisKey.clear();
+    c.xVariable.clear();
+    c.referenceMarkerKey.clear();
     c.positionValue  = utcSeconds;
     c.active         = active;
 
     // Emit dataChanged once with the union of all affected roles
     const QModelIndex idx = index(row, 0);
     emit dataChanged(idx, idx, {TargetPolicyRole, TargetSessionsRole,
-                                PositionSpaceRole, AxisKeyRole,
-                                PositionValueRole, ActiveRole});
+                                PositionSpaceRole, XVariableRole,
+                                ReferenceMarkerKeyRole, PositionValueRole,
+                                ActiveRole});
     emit cursorsChanged();
 }
 

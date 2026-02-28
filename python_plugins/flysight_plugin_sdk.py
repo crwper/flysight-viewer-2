@@ -8,7 +8,7 @@ seamlessly with the FlySight Viewer application.
 
 Overview
 --------
-The SDK provides three main extension points:
+The SDK provides four main extension points:
 
 1. **AttributePlugin**: Compute single-value attributes from session data
    (e.g., start time, duration, exit time)
@@ -18,6 +18,9 @@ The SDK provides three main extension points:
 
 3. **SimplePlot**: Register plots that display measurements in the plot view
    with automatic unit conversion support
+
+4. **SimpleMarker**: Register marker definitions that appear on the plot as
+   reference or analysis markers (e.g., exit, start, max vertical speed)
 
 Unit Conversion
 ---------------
@@ -59,6 +62,7 @@ from flysight_cpp_bridge import DependencyKey
 _attributes:   List[AttributePlugin]   = []
 _measurements: List[MeasurementPlugin] = []
 _simple_plots: List[SimplePlot]        = []
+_markers:      List[SimpleMarker]      = []
 
 
 # ─── helpers to construct DependencyKey ─────────────────────────────────
@@ -164,6 +168,42 @@ def register_plot(meta: SimplePlot) -> None:
     _simple_plots.append(meta)
 
 
+@dataclass(frozen=True)
+class SimpleMarker:
+    """
+    Defines a simple marker that appears on the plot as a reference or analysis point.
+
+    Attributes:
+        category: Category name for grouping in the marker dock UI (e.g., "Reference", "Analysis")
+        display_name: Descriptive name shown in the marker dock, reference dropdown, and axis labels
+        short_label: Compact label shown in marker bubbles on the plot
+        color: CSS color string for the marker (e.g., "#007ACC", "green")
+        attribute_key: Unique session attribute key that stores the marker's time value
+        measurements: List of (sensor, measurement) tuples this marker relates to (default: empty)
+        editable: Whether the user can reposition this marker by dragging (default: False)
+
+    Example:
+        register_marker(SimpleMarker(
+            category="Analysis",
+            display_name="Maximum horizontal speed",
+            short_label="Max HS",
+            color="#FF5722",
+            attribute_key="_MAX_VELH_TIME",
+            measurements=[("GNSS", "velH")]
+        ))
+    """
+    category:      str
+    display_name:  str
+    short_label:   str
+    color:         str
+    attribute_key: str
+    measurements:  List[tuple] = ()
+    editable:      bool = False
+
+def register_marker(meta: SimpleMarker) -> None:
+    _markers.append(meta)
+
+
 # ─── default plug-ins ──────────────────────────────────────────────────
 class DefaultStartTime(AttributePlugin):
     def __init__(self, sensor: str):
@@ -219,20 +259,3 @@ class DefaultTime(MeasurementPlugin):
         if raw.size==0: return None
         return raw 
 
-class DefaultTimeFromExit(MeasurementPlugin):
-    units = "s"
-    def __init__(self, sensor: str):
-        self.name   = "_time_from_exit"
-        self.sensor = sensor
-    def inputs(self):
-        return [
-            meas(self.sensor, "_time"),
-            attr("_EXIT_TIME"),
-        ]
-    def compute(self, session):
-        raw = np.array(session.getMeasurement(self.sensor, "_time"), float)
-        exit_iso = session.getAttribute("_EXIT_TIME")
-        if raw.size==0 or exit_iso is None: return None
-        dt = datetime.fromisoformat(exit_iso.replace("Z","+00:00"))
-        exit_ts = dt.timestamp()
-        return raw - exit_ts

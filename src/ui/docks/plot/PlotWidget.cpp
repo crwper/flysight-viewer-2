@@ -84,15 +84,19 @@ PlotWidget::PlotWidget(SessionModel *model,
     , m_viewSettingsModel(viewSettingsModel)
     , m_cursorModel(cursorModel)
     , m_rangeModel(rangeModel)
-    , m_xAxisKey(SessionKeys::TimeFromExit)
+    , m_xVariable(SessionKeys::Time)
+    , m_referenceMarkerKey(QStringLiteral("_EXIT_TIME"))
     , m_xAxisLabel(tr("Time from exit (s)"))
 {
     if (m_viewSettingsModel) {
-        m_xAxisKey = m_viewSettingsModel->xAxisKey();
+        m_xVariable = m_viewSettingsModel->xVariable();
+        m_referenceMarkerKey = m_viewSettingsModel->referenceMarkerKey();
         m_xAxisLabel = m_viewSettingsModel->xAxisLabel();
 
-        connect(m_viewSettingsModel, &PlotViewSettingsModel::xAxisChanged,
-                this, &PlotWidget::onXAxisKeyChanged);
+        connect(m_viewSettingsModel, &PlotViewSettingsModel::xVariableChanged,
+                this, &PlotWidget::onXVariableChanged);
+        connect(m_viewSettingsModel, &PlotViewSettingsModel::referenceMarkerKeyChanged,
+                this, &PlotWidget::onReferenceMarkerKeyChanged);
     }
 
     // set up the layout with the custom plot
@@ -205,7 +209,7 @@ PlotWidget::PlotWidget(SessionModel *model,
     // Initialize viewport shift tracking from the reference session
     const SessionData* ref = referenceSession();
     if (ref) {
-        m_lastReferenceOffset = exitTimeSeconds(*ref);
+        m_lastReferenceOffset = referenceOffsetForSession(*ref).value_or(0.0);
     }
 }
 
@@ -276,10 +280,19 @@ void PlotWidget::zoomToExtent()
         if (!session.isVisible())
             continue;
 
+        auto offset = referenceOffsetForSession(session);
+        if (!offset.has_value())
+            continue;  // session lacks reference marker value; skip it
+
         QVector<double> xData = const_cast<SessionData &>(session)
-            .getMeasurement(QStringLiteral("GNSS"), m_xAxisKey);
+            .getMeasurement(QStringLiteral("GNSS"), m_xVariable);
         if (xData.isEmpty())
             continue;
+
+        if (offset.value() != 0.0) {
+            for (double &x : xData)
+                x -= offset.value();
+        }
 
         auto [minIt, maxIt] = std::minmax_element(xData.begin(), xData.end());
         minX = std::min(minX, *minIt);
@@ -317,32 +330,21 @@ void PlotWidget::unlockFocus()
         m_crosshairManager->clearToolFocusLock();
 }
 
-QString PlotWidget::getXAxisKey() const
-{
-    return m_xAxisKey;
-}
-
 QDateTime PlotWidget::xCoordToUtcDateTime(double xCoord, const QString &sessionId) const
 {
-    if (m_xAxisKey == SessionKeys::TimeFromExit) {
-        int row = model->getSessionRow(sessionId);
-        if (row < 0)
-            return QDateTime();
+    int row = model->getSessionRow(sessionId);
+    if (row < 0)
+        return QDateTime();
 
-        const SessionData &session = model->getAllSessions().at(row);
-        QVariant exitVar = session.getAttribute(SessionKeys::ExitTime);
-        if (!exitVar.canConvert<QDateTime>())
-            return QDateTime();
+    const SessionData &session = model->getAllSessions().at(row);
+    auto offset = referenceOffsetForSession(session);
+    if (!offset.has_value())
+        return QDateTime();
 
-        QDateTime exitDt = exitVar.toDateTime().toUTC();
-        double exitSec = exitDt.toMSecsSinceEpoch() / 1000.0;
-        return QDateTime::fromMSecsSinceEpoch(
-            qint64((exitSec + xCoord) * 1000.0), QTimeZone::utc());
-    }
-
-    // Absolute UTC mode (or fallback)
+    // Plot-to-UTC: add offset back
+    double utcSeconds = xCoord + offset.value();
     return QDateTime::fromMSecsSinceEpoch(
-        qint64(xCoord * 1000.0), QTimeZone::utc());
+        qint64(utcSeconds * 1000.0), QTimeZone::utc());
 }
 
 // Slots
@@ -444,10 +446,19 @@ void PlotWidget::updatePlot()
                 continue;
             }
 
-            QVector<double> xData = const_cast<SessionData &>(session).getMeasurement(sensorID, m_xAxisKey);
+            auto offset = referenceOffsetForSession(session);
+            if (!offset.has_value())
+                continue;  // session lacks reference marker value; skip it
+
+            QVector<double> xData = const_cast<SessionData &>(session).getMeasurement(sensorID, m_xVariable);
             if (xData.isEmpty() || xData.size() != yData.size()) {
                 qWarning() << "Time and measurement data size mismatch for session:" << session.getAttribute(SessionKeys::SessionId);
                 continue;
+            }
+
+            if (offset.value() != 0.0) {
+                for (double &x : xData)
+                    x -= offset.value();
             }
 
             GraphInfo info;
@@ -491,7 +502,7 @@ void PlotWidget::updatePlot()
     // Update viewport shift tracking for the reference session
     const SessionData* ref = referenceSession();
     if (ref) {
-        m_lastReferenceOffset = exitTimeSeconds(*ref);
+        m_lastReferenceOffset = referenceOffsetForSession(*ref).value_or(0.0);
     }
 }
 
@@ -651,24 +662,85 @@ void PlotWidget::onXAxisRangeChanged(const QCPRange &newRange)
         m_crosshairManager->updateIfOverPlotArea();
     customPlot->replot(QCustomPlot::rpQueuedReplot);
 
-    if (m_xAxisKey == SessionKeys::Time)
+    if (m_referenceMarkerKey.isEmpty() && m_xVariable == SessionKeys::Time)
         updateXAxisTicker();      // update format when span changes
 
     // Broadcast range to interested listeners (e.g., map)
     if (m_rangeModel) {
-        m_rangeModel->setRange(m_xAxisKey, newRange.lower, newRange.upper);
+        m_rangeModel->setRange(m_xVariable, m_referenceMarkerKey, newRange.lower, newRange.upper);
     }
 
     m_updatingYAxis = false;
 }
 
-void PlotWidget::onXAxisKeyChanged(const QString &newKey, const QString &newLabel)
+void PlotWidget::onXVariableChanged(const QString &newXVariable)
 {
-    qDebug() << "PlotWidget::onXAxisKeyAndLabelChanged - Key:" << newKey << "Label:" << newLabel;
-    if (m_xAxisKey == newKey && m_xAxisLabel == newLabel) {
-        return; // No change
+    if (m_xVariable == newXVariable)
+        return;
+
+    m_xVariable = newXVariable;
+    m_xAxisLabel = m_viewSettingsModel ? m_viewSettingsModel->xAxisLabel() : m_xAxisLabel;
+    customPlot->xAxis->setLabel(m_xAxisLabel);
+    updateXAxisTicker();
+    updatePlot();
+}
+
+void PlotWidget::onReferenceMarkerKeyChanged(const QString &oldKey, const QString &newKey)
+{
+    if (m_referenceMarkerKey == newKey)
+        return;
+
+    // Compute old and new offsets from the reference session BEFORE updating m_referenceMarkerKey
+    const SessionData* ref = referenceSession();
+    double oldOffset = 0.0;
+    double newOffset = 0.0;
+
+    if (ref) {
+        // Compute old offset using current m_referenceMarkerKey
+        oldOffset = referenceOffsetForSession(*ref).value_or(0.0);
+
+        // Compute new offset using the incoming key
+        if (newKey.isEmpty()) {
+            newOffset = 0.0;
+        } else {
+            QVariant v = ref->getAttribute(newKey);
+            if (v.canConvert<QDateTime>()) {
+                QDateTime dt = v.toDateTime();
+                if (dt.isValid())
+                    newOffset = dt.toUTC().toMSecsSinceEpoch() / 1000.0;
+            }
+        }
     }
-    applyXAxisChange(newKey, newLabel);
+
+    // Translate viewport by the difference between old and new offsets
+    double delta = newOffset - oldOffset;
+    QCPRange oldRange = customPlot->xAxis->range();
+    QCPRange newRange(oldRange.lower - delta, oldRange.upper - delta);
+
+    // Update m_referenceMarkerKey AFTER computing the delta but BEFORE updatePlot()
+    m_referenceMarkerKey = newKey;
+    m_xAxisLabel = m_viewSettingsModel ? m_viewSettingsModel->xAxisLabel() : m_xAxisLabel;
+    m_lastReferenceOffset = newOffset;
+
+    customPlot->xAxis->setLabel(m_xAxisLabel);
+
+    {
+        QSignalBlocker blocker(customPlot->xAxis);
+        customPlot->xAxis->setRange(newRange);
+    }
+
+    updateXAxisTicker();
+    updatePlot();
+    customPlot->replot();
+    updateXAxisTicker();
+
+    // Broadcast range with new axis configuration
+    if (m_rangeModel) {
+        m_rangeModel->setRange(m_xVariable, m_referenceMarkerKey, newRange.lower, newRange.upper);
+    }
+
+    // Re-apply external cursors under the new axis mode
+    onCursorsChanged();
 }
 
 void PlotWidget::onHoveredSessionChanged(const QString &sessionId)
@@ -749,22 +821,6 @@ void PlotWidget::onCursorsChanged()
             sessionById.insert(sid, &s);
     }
 
-    auto tryExitTimeSeconds = [](const SessionData &s, double *outExitUtcSeconds) -> bool {
-        if (!outExitUtcSeconds)
-            return false;
-
-        QVariant v = s.getAttribute(SessionKeys::ExitTime);
-        if (!v.canConvert<QDateTime>())
-            return false;
-
-        QDateTime dt = v.toDateTime();
-        if (!dt.isValid())
-            return false;
-
-        *outExitUtcSeconds = dt.toMSecsSinceEpoch() / 1000.0;
-        return true;
-    };
-
     auto xPlotForSession = [&](const CursorModel::Cursor &c,
                               const SessionData &s,
                               double *outXPlot) -> bool {
@@ -772,7 +828,7 @@ void PlotWidget::onCursorsChanged()
             return false;
 
         if (c.positionSpace == CursorModel::PositionSpace::PlotAxisCoord) {
-            if (c.axisKey != m_xAxisKey)
+            if (c.xVariable != m_xVariable || c.referenceMarkerKey != m_referenceMarkerKey)
                 return false;
 
             *outXPlot = c.positionValue;
@@ -780,22 +836,12 @@ void PlotWidget::onCursorsChanged()
         }
 
         if (c.positionSpace == CursorModel::PositionSpace::UtcSeconds) {
-            if (m_xAxisKey == SessionKeys::Time) {
-                *outXPlot = c.positionValue;
-                return true;
-            }
+            auto offset = referenceOffsetForSession(s);
+            if (!offset.has_value())
+                return false;
 
-            if (m_xAxisKey == SessionKeys::TimeFromExit) {
-                double exitUtc = 0.0;
-                if (!tryExitTimeSeconds(s, &exitUtc))
-                    return false;
-
-                *outXPlot = c.positionValue - exitUtc;
-                return true;
-            }
-
-            // Fallback: treat UTC seconds as plot x.
-            *outXPlot = c.positionValue;
+            // UTC-to-plot: subtract offset
+            *outXPlot = c.positionValue - offset.value();
             return true;
         }
 
@@ -938,7 +984,8 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 
                     m_cursorModel->setCursorPositionPlotAxis(
                         QStringLiteral("mouse"),
-                        m_xAxisKey,
+                        m_xVariable,
+                        m_referenceMarkerKey,
                         xCoord
                     );
                 }
@@ -985,6 +1032,19 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                 return handleBubbleRelease(me);
             }
             return m_currentTool->mouseReleaseEvent(me);
+        }
+        case QEvent::MouseButtonDblClick: {
+            auto me = static_cast<QMouseEvent*>(event);
+            if (!customPlot->axisRect()->rect().contains(me->pos())) {
+                if (me->button() == Qt::LeftButton) {
+                    QCPItemText *hitBubble = hitTestMarkerBubble(me->pos());
+                    if (hitBubble) {
+                        handleBubbleDoubleClick(hitBubble);
+                        return true;
+                    }
+                }
+            }
+            break;
         }
         case QEvent::Leave:
             m_mouseInPlotArea = false;
@@ -1049,8 +1109,8 @@ void PlotWidget::setupPlot()
 
 void PlotWidget::updateXAxisTicker()
 {
-    if (m_xAxisKey == SessionKeys::Time) {
-        // Absolute UTC time → human‑readable
+    if (m_referenceMarkerKey.isEmpty() && m_xVariable == SessionKeys::Time) {
+        // Absolute UTC time → human-readable
         auto dtTicker = QSharedPointer<QCPAxisTickerDateTime>::create();
         dtTicker->setDateTimeSpec(Qt::UTC);
 
@@ -1125,37 +1185,20 @@ const SessionData* PlotWidget::referenceSession() const
     return nullptr;           // should not happen
 }
 
-double PlotWidget::exitTimeSeconds(const SessionData& s)
+std::optional<double> PlotWidget::referenceOffsetForSession(const SessionData &session) const
 {
-    QVariant v = s.getAttribute(SessionKeys::ExitTime);
-    if (!v.canConvert<QDateTime>()) return 0.0;
-    return v.toDateTime().toMSecsSinceEpoch() / 1000.0;
-}
+    if (m_referenceMarkerKey.isEmpty())
+        return 0.0;  // absolute mode, no offset
 
-QVector<ReferenceMoment> PlotWidget::collectExitMoments() const
-{
-    QVector<ReferenceMoment> exitMoments;
+    QVariant v = session.getAttribute(m_referenceMarkerKey);
+    if (!v.canConvert<QDateTime>())
+        return std::nullopt;  // session lacks the reference marker attribute
 
-    for (const auto& s : model->getAllSessions()) {
-        if (!s.isVisible())
-            continue;
+    QDateTime dt = v.toDateTime();
+    if (!dt.isValid())
+        return std::nullopt;
 
-        QVariant v = s.getAttribute(SessionKeys::ExitTime);
-        if (!v.canConvert<QDateTime>())
-            continue;
-
-        QDateTime dt = v.toDateTime();
-        if (!dt.isValid())
-            continue;
-
-        ReferenceMoment moment;
-        moment.sessionId = s.getAttribute(SessionKeys::SessionId).toString();
-        moment.exitUtcSeconds = dt.toMSecsSinceEpoch() / 1000.0;
-
-        exitMoments.append(moment);
-    }
-
-    return exitMoments;
+    return dt.toUTC().toMSecsSinceEpoch() / 1000.0;
 }
 
 void PlotWidget::updateReferenceMarkers(UpdateMode mode)
@@ -1295,22 +1338,11 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
             if (!tryAttributeUtcSeconds(s, def.attributeKey, &markerUtcSeconds))
                 continue;
 
-            double xCoord = 0.0;
+            auto offset = referenceOffsetForSession(s);
+            if (!offset.has_value())
+                continue;
 
-            if (m_xAxisKey == SessionKeys::Time) {
-                // Absolute UTC time axis
-                xCoord = markerUtcSeconds;
-            } else if (m_xAxisKey == SessionKeys::TimeFromExit) {
-                // Relative time-from-exit axis (must use ExitTime from the same session)
-                double exitUtcSeconds = 0.0;
-                if (!tryAttributeUtcSeconds(s, SessionKeys::ExitTime, &exitUtcSeconds))
-                    continue;
-
-                xCoord = markerUtcSeconds - exitUtcSeconds;
-            } else {
-                // Fallback: treat as absolute UTC seconds
-                xCoord = markerUtcSeconds;
-            }
+            double xCoord = markerUtcSeconds - offset.value();
 
             if (xCoord < xRange.lower || xCoord > xRange.upper)
                 continue;
@@ -1378,10 +1410,10 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
             if (current.count == 1) {
                 QString ann = computeAnnotation(def, current.sessionId);
                 current.label = ann.isEmpty()
-                    ? def.label
-                    : QStringLiteral("%1: %2").arg(def.label, ann);
+                    ? def.shortLabel
+                    : QStringLiteral("%1: %2").arg(def.shortLabel, ann);
             } else {
-                current.label = QStringLiteral("%1 \u00D7%2").arg(def.label).arg(current.count);
+                current.label = QStringLiteral("%1 \u00D7%2").arg(def.shortLabel).arg(current.count);
             }
             clusters.append(current);
 
@@ -1399,10 +1431,10 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
         if (current.count == 1) {
             QString ann = computeAnnotation(def, current.sessionId);
             current.label = ann.isEmpty()
-                ? def.label
-                : QStringLiteral("%1: %2").arg(def.label, ann);
+                ? def.shortLabel
+                : QStringLiteral("%1: %2").arg(def.shortLabel, ann);
         } else {
-            current.label = QStringLiteral("%1 \u00D7%2").arg(def.label).arg(current.count);
+            current.label = QStringLiteral("%1 \u00D7%2").arg(def.shortLabel).arg(current.count);
         }
         clusters.append(current);
 
@@ -1461,7 +1493,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
                 bubble->setPositionAlignment(Qt::AlignHCenter | Qt::AlignBottom);
                 bubble->setTextAlignment(Qt::AlignCenter);
 
-                bubble->setText(def.label);
+                bubble->setText(def.shortLabel);
                 bubble->setPadding(QMargins(6, 2, 6, 2));
                 bubble->setBrush(QBrush(markerColor));
                 bubble->setPen(QPen(markerColor));
@@ -1513,53 +1545,6 @@ QCPRange PlotWidget::keyRangeOf(const SessionData& s,
 
     auto [minIt,maxIt] = std::minmax_element(v.begin(), v.end());
     return QCPRange(*minIt, *maxIt);
-}
-
-void PlotWidget::applyXAxisChange(const QString& key, const QString& label)
-{
-    if (key == m_xAxisKey)           // already on this scale
-        return;
-
-    qDebug() << "PlotWidget::applyXAxisChange - Applying Key:" << key << "Label:" << label;
-
-    /* 1. keep a copy of the current window (old scale) */
-    QCPRange oldRange = customPlot->xAxis->range();
-
-    /* 2. locate a reference session */
-    const SessionData* ref = referenceSession();
-    double exitT = ref ? exitTimeSeconds(*ref) : 0.0;
-
-    /* 3. translate the window */
-    QCPRange newRange;
-    if (key == SessionKeys::Time) {                  // going relative → absolute
-        newRange.lower = oldRange.lower + exitT;
-        newRange.upper = oldRange.upper + exitT;
-    } else {                                         // absolute → relative
-        newRange.lower = oldRange.lower - exitT;
-        newRange.upper = oldRange.upper - exitT;
-    }
-
-    /* 4. commit the switch */
-    m_xAxisKey   = key;
-    m_xAxisLabel = label;
-    customPlot->xAxis->setLabel(label);
-    customPlot->xAxis->setRange(newRange);
-
-    /* 5. Update x-axis ticker */
-    updateXAxisTicker();
-
-    updatePlot();                 // rebuild graphs with new x-values
-    customPlot->replot();
-
-    updateXAxisTicker();
-
-    // Broadcast range with new axis key
-    if (m_rangeModel) {
-        m_rangeModel->setRange(m_xAxisKey, newRange.lower, newRange.upper);
-    }
-
-    // If an external source (e.g., map hover) is driving the cursor, re-apply it under the new axis mode.
-    onCursorsChanged();
 }
 
 QCPItemText* PlotWidget::hitTestMarkerBubble(const QPoint &pos) const
@@ -1685,6 +1670,17 @@ void PlotWidget::showBubbleContextMenu(QCPItemText *bubble, const QPoint &global
     }
 }
 
+void PlotWidget::handleBubbleDoubleClick(QCPItemText *bubble)
+{
+    auto it = m_markerBubbleMeta.constFind(bubble);
+    if (it == m_markerBubbleMeta.constEnd())
+        return;
+
+    const MarkerBubbleMeta &meta = it.value();
+    if (m_viewSettingsModel)
+        m_viewSettingsModel->setReferenceMarkerKey(meta.attributeKey);
+}
+
 void PlotWidget::schedulePlotRebuild()
 {
     m_pendingRebuildLevel = RebuildLevel::Full;
@@ -1701,39 +1697,38 @@ void PlotWidget::scheduleMarkerUpdate()
 void PlotWidget::onDependencyChanged(const QString &sessionId, const DependencyKey &key)
 {
     if (key.type == DependencyKey::Type::Attribute) {
-        if (key.attributeKey == SessionKeys::ExitTime) {
-            // Viewport shift in TimeFromExit mode for the reference session
-            if (m_xAxisKey == SessionKeys::TimeFromExit) {
-                const SessionData* ref = referenceSession();
-                if (ref) {
-                    QString refId = ref->getAttribute(SessionKeys::SessionId).toString();
-                    if (refId == sessionId) {
-                        double newOffset = exitTimeSeconds(*ref);
-                        double delta = newOffset - m_lastReferenceOffset;
+        // Check if the changed attribute is the current reference marker key
+        if (!m_referenceMarkerKey.isEmpty() && key.attributeKey == m_referenceMarkerKey) {
+            // Viewport shift for the reference session
+            const SessionData* ref = referenceSession();
+            if (ref) {
+                QString refId = ref->getAttribute(SessionKeys::SessionId).toString();
+                if (refId == sessionId) {
+                    double newOffset = referenceOffsetForSession(*ref).value_or(0.0);
+                    double delta = newOffset - m_lastReferenceOffset;
 
-                        if (delta != 0.0) {
-                            QCPRange oldRange = customPlot->xAxis->range();
-                            QCPRange newRange(oldRange.lower - delta, oldRange.upper - delta);
+                    if (delta != 0.0) {
+                        QCPRange oldRange = customPlot->xAxis->range();
+                        QCPRange newRange(oldRange.lower - delta, oldRange.upper - delta);
 
-                            {
-                                QSignalBlocker blocker(customPlot->xAxis);
-                                customPlot->xAxis->setRange(newRange);
-                            }
-
-                            if (m_rangeModel) {
-                                m_rangeModel->setRange(m_xAxisKey, newRange.lower, newRange.upper);
-                            }
-
-                            m_lastReferenceOffset = newOffset;
+                        {
+                            QSignalBlocker blocker(customPlot->xAxis);
+                            customPlot->xAxis->setRange(newRange);
                         }
+
+                        if (m_rangeModel) {
+                            m_rangeModel->setRange(m_xVariable, m_referenceMarkerKey, newRange.lower, newRange.upper);
+                        }
+
+                        m_lastReferenceOffset = newOffset;
                     }
                 }
             }
-            // Exit time change always requires a full rebuild
+            // Reference marker change always requires a full rebuild
             schedulePlotRebuild();
             return;
         }
-        // Check if the changed attribute is a marker attribute
+        // Check if the changed attribute is a marker attribute (for marker display updates)
         const QVector<MarkerDefinition> enabledDefs =
             markerModel ? markerModel->enabledMarkers() : QVector<MarkerDefinition>{};
         for (const MarkerDefinition &def : enabledDefs) {
@@ -1759,8 +1754,8 @@ void PlotWidget::onDependencyChanged(const QString &sessionId, const DependencyK
             }
         }
 
-        // Check if the invalidated measurement matches the x-axis key
-        if (measurement == m_xAxisKey) {
+        // Check if the invalidated measurement matches the x-axis variable
+        if (measurement == m_xVariable) {
             schedulePlotRebuild();
             return;
         }

@@ -274,7 +274,7 @@ QVariant MarkerModel::data(const QModelIndex& index, int role) const
 
     switch (role) {
     case Qt::DisplayRole:
-        return marker->def.label;
+        return marker->def.displayName;
     case Qt::CheckStateRole:
         return marker->enabled ? Qt::Checked : Qt::Unchecked;
     case AttributeKeyRole:

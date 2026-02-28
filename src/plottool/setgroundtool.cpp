@@ -1,9 +1,11 @@
 #include "setgroundtool.h"
 #include "ui/docks/plot/PlotWidget.h"
 #include "../crosshairmanager.h"
+#include "../sessiondata.h"
 #include <QCustomPlot/qcustomplot.h>
 
 #include <QMouseEvent>
+#include <QDateTime>
 #include <QDebug>
 
 namespace FlySight {
@@ -17,17 +19,26 @@ SetGroundTool::SetGroundTool(const PlotWidget::PlotContext &ctx)
 
 double SetGroundTool::computeGroundElevation(SessionData &session, double xCoord) const
 {
-    // 1) fetch the current time-measurement key from PlotWidget
-    const QString timeKey = m_widget->getXAxisKey();
-    if (timeKey.isEmpty()){
-        qWarning() << "SetGroundTool::computeGroundElevation: PlotWidget returned empty X-axis key.";
-        return std::numeric_limits<double>::quiet_NaN();
-    }
+    // Fetch xVariable and referenceMarkerKey from PlotWidget
+    const QString xVar = m_widget->xVariable();
+    const QString refKey = m_widget->referenceMarkerKey();
 
     constexpr char sensor[] = "GNSS";
     constexpr char measH[]  = "hMSL";
 
-    const auto times      = session.getMeasurement(sensor, timeKey);
+    // Compute offset to convert plot-space xCoord to raw data space
+    double offset = 0.0;
+    if (!refKey.isEmpty()) {
+        QVariant v = session.getAttribute(refKey);
+        if (v.canConvert<QDateTime>()) {
+            QDateTime dt = v.toDateTime();
+            if (dt.isValid())
+                offset = dt.toMSecsSinceEpoch() / 1000.0;
+        }
+    }
+    const double rawX = xCoord + offset;
+
+    const auto times      = session.getMeasurement(sensor, xVar);
     const auto elevations = session.getMeasurement(sensor, measH);
 
     const int n = times.size();
@@ -37,23 +48,23 @@ double SetGroundTool::computeGroundElevation(SessionData &session, double xCoord
         return std::numeric_limits<double>::quiet_NaN();
     }
 
-    // 2) out-of-bounds?
-    if (xCoord < times.first() || xCoord > times.last()) {
+    // out-of-bounds?
+    if (rawX < times.first() || rawX > times.last()) {
         return std::numeric_limits<double>::quiet_NaN();
     }
 
-    // 3) find insertion point
-    auto it = std::lower_bound(times.constBegin(), times.constEnd(), xCoord);
+    // find insertion point
+    auto it = std::lower_bound(times.constBegin(), times.constEnd(), rawX);
     int idx = std::clamp<int>(int(it - times.constBegin()), 1, n - 1);
 
     // exact matches?
-    if (qFuzzyCompare(xCoord, times[idx]))     return elevations[idx];
-    if (qFuzzyCompare(xCoord, times[idx-1]))   return elevations[idx-1];
+    if (qFuzzyCompare(rawX, times[idx]))     return elevations[idx];
+    if (qFuzzyCompare(rawX, times[idx-1]))   return elevations[idx-1];
 
-    // 4) linear interpolate
+    // linear interpolate
     double x1 = times[idx-1], x2 = times[idx];
     double y1 = elevations[idx-1], y2 = elevations[idx];
-    double t  = (xCoord - x1) / (x2 - x1);
+    double t  = (rawX - x1) / (x2 - x1);
 
     return y1 + t * (y2 - y1);
 }

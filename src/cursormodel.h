@@ -41,7 +41,8 @@ public:
 
         PositionSpace positionSpace = PositionSpace::PlotAxisCoord;
         double positionValue = 0.0;
-        QString axisKey; // only meaningful when positionSpace == PlotAxisCoord
+        QString xVariable;          // only meaningful when positionSpace == PlotAxisCoord
+        QString referenceMarkerKey;  // only meaningful when positionSpace == PlotAxisCoord
 
         TargetPolicy targetPolicy = TargetPolicy::Explicit;
         QSet<QString> targetSessions; // meaningful when targetPolicy == Explicit
@@ -54,7 +55,8 @@ public:
         ActiveRole,
         PositionSpaceRole,
         PositionValueRole,
-        AxisKeyRole,
+        XVariableRole,
+        ReferenceMarkerKeyRole,
         TargetPolicyRole,
         TargetSessionsRole
     };
@@ -70,7 +72,8 @@ public:
     void updateCursor(const Cursor &updated);
 
     void setCursorActive(const QString &id, bool active);
-    void setCursorPositionPlotAxis(const QString &id, const QString &axisKey, double x);
+    void setCursorPositionPlotAxis(const QString &id, const QString &xVariable,
+                                   const QString &referenceMarkerKey, double x);
     void setCursorPositionUtc(const QString &id, double utcSeconds);
 
     void setCursorTargetsExplicit(const QString &id, const QSet<QString> &sessionIds);

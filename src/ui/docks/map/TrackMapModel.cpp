@@ -101,33 +101,21 @@ bool TrackMapModel::computeSessionUtcRange(const SessionData &session,
     if (!m_rangeModel || !m_rangeModel->hasRange())
         return false;
 
-    const QString axisKey = m_rangeModel->axisKey();
-
-    if (axisKey == SessionKeys::Time) {
-        // UTC mode: range values are already in UTC seconds
-        *outLower = m_rangeModel->rangeLower();
-        *outUpper = m_rangeModel->rangeUpper();
-        return true;
-    }
-
-    if (axisKey == SessionKeys::TimeFromExit) {
-        // Time-from-exit mode: need to convert using session's exit time
-        QVariant v = session.getAttribute(SessionKeys::ExitTime);
+    const QString refKey = m_rangeModel->referenceMarkerKey();
+    double offset = 0.0;
+    if (!refKey.isEmpty()) {
+        QVariant v = session.getAttribute(refKey);
         if (!v.canConvert<QDateTime>())
             return false;
-
         QDateTime dt = v.toDateTime();
         if (!dt.isValid())
             return false;
-
-        double exitUtcSeconds = dt.toMSecsSinceEpoch() / 1000.0;
-
-        *outLower = m_rangeModel->rangeLower() + exitUtcSeconds;
-        *outUpper = m_rangeModel->rangeUpper() + exitUtcSeconds;
-        return true;
+        offset = dt.toMSecsSinceEpoch() / 1000.0;
     }
 
-    return false;
+    *outLower = m_rangeModel->rangeLower() + offset;
+    *outUpper = m_rangeModel->rangeUpper() + offset;
+    return true;
 }
 
 void TrackMapModel::rebuild()

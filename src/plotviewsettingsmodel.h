@@ -13,21 +13,22 @@ class PlotViewSettingsModel : public QObject
 public:
     explicit PlotViewSettingsModel(QSettings *settings, QObject *parent = nullptr);
 
-    QString xAxisKey() const;
+    QString xVariable() const;
+    QString referenceMarkerKey() const;
     QString xAxisLabel() const;
 
 public slots:
-    void setXAxis(const QString &key, const QString &label);
+    void setXVariable(const QString &xVariable);
+    void setReferenceMarkerKey(const QString &key);
 
 signals:
-    void xAxisChanged(const QString &key, const QString &label);
+    void xVariableChanged(const QString &xVariable);
+    void referenceMarkerKeyChanged(const QString &oldKey, const QString &newKey);
 
 private:
-    QString defaultLabelForKey(const QString &key) const;
-
     QSettings *m_settings = nullptr;
-    QString m_xAxisKey;
-    QString m_xAxisLabel;
+    QString m_xVariable;
+    QString m_referenceMarkerKey;
 };
 
 } // namespace FlySight

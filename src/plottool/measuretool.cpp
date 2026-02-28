@@ -85,22 +85,20 @@ QString formatValue(double value, const QString &measurementId, const QString &m
 
 // Convert plot-axis X to UTC seconds for header display.
 double plotAxisXToUtcSeconds(double plotAxisX,
-                             const QString &axisKey,
+                             const QString &referenceMarkerKey,
                              const SessionData &session)
 {
-    if (axisKey == SessionKeys::Time)
-        return plotAxisX;
-
-    if (axisKey == SessionKeys::TimeFromExit) {
-        QVariant v = session.getAttribute(SessionKeys::ExitTime);
+    double offset = 0.0;
+    if (!referenceMarkerKey.isEmpty()) {
+        QVariant v = session.getAttribute(referenceMarkerKey);
         if (!v.canConvert<QDateTime>())
             return kNaN;
         QDateTime dt = v.toDateTime();
         if (!dt.isValid())
             return kNaN;
-        return dt.toMSecsSinceEpoch() / 1000.0 + plotAxisX;
+        offset = dt.toMSecsSinceEpoch() / 1000.0;
     }
-    return kNaN;
+    return plotAxisX + offset;
 }
 
 } // anonymous namespace
@@ -256,7 +254,8 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
         m_plot->replot(QCustomPlot::rpQueuedReplot);
     }
 
-    const QString axisKey = m_widget->getXAxisKey();
+    const QString xVariable = m_widget->xVariable();
+    const QString referenceMarkerKey = m_widget->referenceMarkerKey();
     const QVector<PlotValue> enabledPlots = m_plotModel->enabledPlots();
 
     if (enabledPlots.isEmpty()) {
@@ -266,6 +265,19 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
 
     const double xLo = qMin(m_startX, currentX);
     const double xHi = qMax(m_startX, currentX);
+
+    // Helper: compute the reference offset for a given session
+    auto offsetForSession = [&referenceMarkerKey](const SessionData &s) -> double {
+        if (referenceMarkerKey.isEmpty())
+            return 0.0;
+        QVariant v = s.getAttribute(referenceMarkerKey);
+        if (!v.canConvert<QDateTime>())
+            return 0.0;
+        QDateTime dt = v.toDateTime();
+        if (!dt.isValid())
+            return 0.0;
+        return dt.toMSecsSinceEpoch() / 1000.0;
+    };
 
     if (m_multiTrack) {
         // ---- Multi-track: min/avg/max across all visible sessions ----
@@ -305,19 +317,25 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
 
             for (auto it = sessionById.constBegin(); it != sessionById.constEnd(); ++it) {
                 const SessionData *session = it.value();
-                const QVector<double> xData = session->getMeasurement(pv.sensorID, axisKey);
+                const double offset = offsetForSession(*session);
+
+                // Convert plot-space bounds to raw data space
+                const double rawLo = xLo + offset;
+                const double rawHi = xHi + offset;
+
+                const QVector<double> xData = session->getMeasurement(pv.sensorID, xVariable);
                 const QVector<double> yData = session->getMeasurement(pv.sensorID, pv.measurementID);
 
                 // Interpolated endpoints
-                const double yAtLo = interpolateAtX(xData, yData, xLo);
-                const double yAtHi = interpolateAtX(xData, yData, xHi);
+                const double yAtLo = interpolateAtX(xData, yData, rawLo);
+                const double yAtHi = interpolateAtX(xData, yData, rawHi);
                 if (!std::isnan(yAtLo)) samples.append(yAtLo);
                 if (!std::isnan(yAtHi)) samples.append(yAtHi);
 
                 // Interior data points
                 if (!xData.isEmpty() && xData.size() == yData.size()) {
-                    auto itBegin = std::lower_bound(xData.cbegin(), xData.cend(), xLo);
-                    auto itEnd   = std::upper_bound(xData.cbegin(), xData.cend(), xHi);
+                    auto itBegin = std::lower_bound(xData.cbegin(), xData.cend(), rawLo);
+                    auto itEnd   = std::upper_bound(xData.cbegin(), xData.cend(), rawHi);
                     for (auto jt = itBegin; jt != itEnd; ++jt) {
                         int i = static_cast<int>(std::distance(xData.cbegin(), jt));
                         double y = yData[i];
@@ -369,6 +387,13 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
         return;
     }
 
+    // Compute offset for raw data space conversion
+    const double offset = offsetForSession(*session);
+    const double rawStartX  = m_startX + offset;
+    const double rawCurrentX = currentX + offset;
+    const double rawLo = qMin(rawStartX, rawCurrentX);
+    const double rawHi = qMax(rawStartX, rawCurrentX);
+
     // Build rows for each enabled plot value.
     QVector<MeasureModel::Row> rows;
     rows.reserve(enabledPlots.size());
@@ -379,11 +404,11 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
         row.name  = seriesDisplayName(pv);
         row.color = pv.defaultColor;
 
-        const QVector<double> xData = session->getMeasurement(pv.sensorID, axisKey);
+        const QVector<double> xData = session->getMeasurement(pv.sensorID, xVariable);
         const QVector<double> yData = session->getMeasurement(pv.sensorID, pv.measurementID);
 
-        const double initialVal = interpolateAtX(xData, yData, m_startX);
-        const double finalVal   = interpolateAtX(xData, yData, currentX);
+        const double initialVal = interpolateAtX(xData, yData, rawStartX);
+        const double finalVal   = interpolateAtX(xData, yData, rawCurrentX);
 
         if (std::isnan(initialVal) && std::isnan(finalVal)) {
             row.deltaValue = QStringLiteral("--");
@@ -405,20 +430,20 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
 
         row.finalValue = formatValue(finalVal, pv.measurementID, pv.measurementType);
 
-        // Compute min / avg / max across the range [xLo, xHi].
+        // Compute min / avg / max across the range [rawLo, rawHi].
         // Collect: interpolated endpoints + all interior data points.
         QVector<double> samples;
 
         // Interpolated endpoints
-        const double yAtLo = interpolateAtX(xData, yData, xLo);
-        const double yAtHi = interpolateAtX(xData, yData, xHi);
+        const double yAtLo = interpolateAtX(xData, yData, rawLo);
+        const double yAtHi = interpolateAtX(xData, yData, rawHi);
         if (!std::isnan(yAtLo)) samples.append(yAtLo);
         if (!std::isnan(yAtHi)) samples.append(yAtHi);
 
         // Interior data points
         if (!xData.isEmpty() && xData.size() == yData.size()) {
-            auto itBegin = std::lower_bound(xData.cbegin(), xData.cend(), xLo);
-            auto itEnd   = std::upper_bound(xData.cbegin(), xData.cend(), xHi);
+            auto itBegin = std::lower_bound(xData.cbegin(), xData.cend(), rawLo);
+            auto itEnd   = std::upper_bound(xData.cbegin(), xData.cend(), rawHi);
             for (auto it = itBegin; it != itEnd; ++it) {
                 int i = static_cast<int>(std::distance(xData.cbegin(), it));
                 double y = yData[i];
@@ -457,7 +482,7 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
     QString utcText;
     QString coordsText;
 
-    const double utcSecs = plotAxisXToUtcSeconds(currentX, axisKey, *session);
+    const double utcSecs = plotAxisXToUtcSeconds(currentX, referenceMarkerKey, *session);
     if (!std::isnan(utcSecs)) {
         utcText = QStringLiteral("%1 UTC")
                       .arg(QDateTime::fromMSecsSinceEpoch(

@@ -143,42 +143,38 @@ CursorModel::Cursor chooseEffectiveCursor(const CursorModel *cursorModel)
 }
 
 std::optional<double> plotAxisXForSession(const CursorModel::Cursor &cursor,
-                                         const QString &axisKey,
+                                         const QString &xVariable,
+                                         const QString &referenceMarkerKey,
                                          const SessionData &session)
 {
     using PS = CursorModel::PositionSpace;
 
     if (cursor.positionSpace == PS::PlotAxisCoord) {
-        if (cursor.axisKey != axisKey)
+        // Match both xVariable and referenceMarkerKey
+        if (cursor.xVariable != xVariable || cursor.referenceMarkerKey != referenceMarkerKey)
             return std::nullopt;
         return cursor.positionValue;
     }
 
-    // UtcSeconds → depends on current axis mode
+    // UtcSeconds -> convert to plot-axis coordinate: plotCoord = utcSeconds - offset
     const double utc = cursor.positionValue;
 
-    if (axisKey == SessionKeys::Time) {
-        return utc;
-    }
-
-    if (axisKey == SessionKeys::TimeFromExit) {
-        QVariant v = session.getAttribute(SessionKeys::ExitTime);
+    double offset = 0.0;
+    if (!referenceMarkerKey.isEmpty()) {
+        QVariant v = session.getAttribute(referenceMarkerKey);
         if (!v.canConvert<QDateTime>())
             return std::nullopt;
-
         const QDateTime dt = v.toDateTime();
         if (!dt.isValid())
             return std::nullopt;
-
-        const double exitUtc = dt.toMSecsSinceEpoch() / 1000.0;
-        return utc - exitUtc;
+        offset = dt.toMSecsSinceEpoch() / 1000.0;
     }
 
-    return std::nullopt;
+    return utc - offset;
 }
 
 std::optional<double> utcSecondsForHeader(const CursorModel::Cursor &cursor,
-                                         const QString &axisKey,
+                                         const QString &referenceMarkerKey,
                                          const SessionData &session,
                                          double plotAxisX)
 {
@@ -188,34 +184,41 @@ std::optional<double> utcSecondsForHeader(const CursorModel::Cursor &cursor,
         return cursor.positionValue;
     }
 
-    // PlotAxisCoord → depends on axisKey
-    if (axisKey == SessionKeys::Time) {
-        return plotAxisX;
-    }
-
-    if (axisKey == SessionKeys::TimeFromExit) {
-        QVariant v = session.getAttribute(SessionKeys::ExitTime);
+    // PlotAxisCoord -> convert to UTC: utcSeconds = plotAxisX + offset
+    double offset = 0.0;
+    if (!referenceMarkerKey.isEmpty()) {
+        QVariant v = session.getAttribute(referenceMarkerKey);
         if (!v.canConvert<QDateTime>())
             return std::nullopt;
-
         const QDateTime dt = v.toDateTime();
         if (!dt.isValid())
             return std::nullopt;
-
-        const double exitUtc = dt.toMSecsSinceEpoch() / 1000.0;
-        return exitUtc + plotAxisX;
+        offset = dt.toMSecsSinceEpoch() / 1000.0;
     }
 
-    return std::nullopt;
+    return plotAxisX + offset;
 }
 
 bool sessionOverlapsAtX(const SessionData &session,
                         const QVector<PlotValue> &enabledPlots,
-                        const QString &axisKey,
+                        const QString &xVariable,
+                        const QString &referenceMarkerKey,
                         double plotAxisX)
 {
+    // Compute offset: plot-to-raw conversion is rawX = plotAxisX + offset
+    double offset = 0.0;
+    if (!referenceMarkerKey.isEmpty()) {
+        QVariant v = session.getAttribute(referenceMarkerKey);
+        if (v.canConvert<QDateTime>()) {
+            QDateTime dt = v.toDateTime();
+            if (dt.isValid())
+                offset = dt.toMSecsSinceEpoch() / 1000.0;
+        }
+    }
+    const double rawX = plotAxisX + offset;
+
     for (const PlotValue &pv : enabledPlots) {
-        const QVector<double> xData = session.getMeasurement(pv.sensorID, axisKey);
+        const QVector<double> xData = session.getMeasurement(pv.sensorID, xVariable);
         const QVector<double> yData = session.getMeasurement(pv.sensorID, pv.measurementID);
 
         if (xData.isEmpty() || yData.isEmpty() || xData.size() != yData.size()) {
@@ -227,7 +230,7 @@ bool sessionOverlapsAtX(const SessionData &session,
             continue;
         }
 
-        if (plotAxisX >= *minmax.first && plotAxisX <= *minmax.second) {
+        if (rawX >= *minmax.first && rawX <= *minmax.second) {
             return true;
         }
     }
@@ -276,7 +279,9 @@ LegendPresenter::LegendPresenter(SessionModel *sessionModel,
     }
 
     if (m_plotViewSettings) {
-        connect(m_plotViewSettings, &PlotViewSettingsModel::xAxisChanged,
+        connect(m_plotViewSettings, &PlotViewSettingsModel::xVariableChanged,
+                this, &LegendPresenter::scheduleUpdate);
+        connect(m_plotViewSettings, &PlotViewSettingsModel::referenceMarkerKeyChanged,
                 this, &LegendPresenter::scheduleUpdate);
     }
 
@@ -348,7 +353,8 @@ void LegendPresenter::recompute()
         return;
     }
 
-    const QString axisKey = m_plotViewSettings->xAxisKey();
+    const QString xVariable = m_plotViewSettings->xVariable();
+    const QString referenceMarkerKey = m_plotViewSettings->referenceMarkerKey();
 
     const QVector<PlotValue> enabledPlots = m_plotModel->enabledPlots();
     if (enabledPlots.isEmpty()) {
@@ -362,15 +368,17 @@ void LegendPresenter::recompute()
         return;
     }
 
-    // If cursor is in plot-axis space, it must match the current axis.
-    if (cursor.positionSpace == CursorModel::PositionSpace::PlotAxisCoord && cursor.axisKey != axisKey) {
+    // If cursor is in plot-axis space, it must match the current axis mode.
+    if (cursor.positionSpace == CursorModel::PositionSpace::PlotAxisCoord &&
+        (cursor.xVariable != xVariable ||
+         cursor.referenceMarkerKey != referenceMarkerKey)) {
         m_legendWidget->clear();
         return;
     }
 
     const QVector<SessionData> &sessions = m_sessionModel->getAllSessions();
 
-    // Build a fast id → session lookup.
+    // Build a fast id -> session lookup.
     QHash<QString, const SessionData *> sessionById;
     sessionById.reserve(sessions.size());
     for (const auto &s : sessions) {
@@ -404,11 +412,11 @@ void LegendPresenter::recompute()
             if (sid.isEmpty())
                 continue;
 
-            const auto xOpt = plotAxisXForSession(cursor, axisKey, s);
+            const auto xOpt = plotAxisXForSession(cursor, xVariable, referenceMarkerKey, s);
             if (!xOpt.has_value())
                 continue;
 
-            if (sessionOverlapsAtX(s, enabledPlots, axisKey, *xOpt)) {
+            if (sessionOverlapsAtX(s, enabledPlots, xVariable, referenceMarkerKey, *xOpt)) {
                 targets.insert(sid);
             }
         }
@@ -418,6 +426,19 @@ void LegendPresenter::recompute()
         m_legendWidget->clear();
         return;
     }
+
+    // Helper: compute the reference offset for a given session
+    auto offsetForSession = [&referenceMarkerKey](const SessionData &s) -> double {
+        if (referenceMarkerKey.isEmpty())
+            return 0.0;
+        QVariant v = s.getAttribute(referenceMarkerKey);
+        if (!v.canConvert<QDateTime>())
+            return 0.0;
+        QDateTime dt = v.toDateTime();
+        if (!dt.isValid())
+            return 0.0;
+        return dt.toMSecsSinceEpoch() / 1000.0;
+    };
 
     const bool pointMode = (targets.size() == 1);
 
@@ -434,12 +455,16 @@ void LegendPresenter::recompute()
             return;
         }
 
-        const auto xOpt = plotAxisXForSession(cursor, axisKey, *session);
+        const auto xOpt = plotAxisXForSession(cursor, xVariable, referenceMarkerKey, *session);
         if (!xOpt.has_value()) {
             m_legendWidget->clear();
             return;
         }
-        const double x = *xOpt;
+        const double plotX = *xOpt;
+
+        // Convert plot coordinate to raw data space for interpolation
+        const double offset = offsetForSession(*session);
+        const double rawX = plotX + offset;
 
         // Rows
         for (const PlotValue &pv : enabledPlots) {
@@ -447,7 +472,7 @@ void LegendPresenter::recompute()
             row.name = seriesDisplayName(pv);
             row.color = pv.defaultColor;
 
-            const double v = interpolateSessionMeasurement(*session, pv.sensorID, axisKey, pv.measurementID, x);
+            const double v = interpolateSessionMeasurement(*session, pv.sensorID, xVariable, pv.measurementID, rawX);
             if (!std::isnan(v)) {
                 hasData = true;
             }
@@ -469,7 +494,7 @@ void LegendPresenter::recompute()
         QString utcText;
         QString coordsText;
 
-        const auto utcOpt = utcSecondsForHeader(cursor, axisKey, *session, x);
+        const auto utcOpt = utcSecondsForHeader(cursor, referenceMarkerKey, *session, plotX);
         if (utcOpt.has_value()) {
             const double utcSecs = *utcOpt;
 
@@ -518,11 +543,15 @@ void LegendPresenter::recompute()
             if (!session)
                 continue;
 
-            const auto xOpt = plotAxisXForSession(cursor, axisKey, *session);
+            const auto xOpt = plotAxisXForSession(cursor, xVariable, referenceMarkerKey, *session);
             if (!xOpt.has_value())
                 continue;
 
-            const double v = interpolateSessionMeasurement(*session, pv.sensorID, axisKey, pv.measurementID, *xOpt);
+            // Convert plot coordinate to raw data space for interpolation
+            const double offset = offsetForSession(*session);
+            const double rawX = *xOpt + offset;
+
+            const double v = interpolateSessionMeasurement(*session, pv.sensorID, xVariable, pv.measurementID, rawX);
             if (!std::isnan(v)) {
                 valuesAtCursor.append(v);
             }

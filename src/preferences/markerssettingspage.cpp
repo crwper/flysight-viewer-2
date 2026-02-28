@@ -93,7 +93,7 @@ void MarkersSettingsPage::populateMarkerTree()
         // Add markers under this category
         for (const MarkerDefinition &marker : categoryMarkers) {
             QTreeWidgetItem *markerItem = new QTreeWidgetItem(categoryItem);
-            markerItem->setText(0, marker.label);
+            markerItem->setText(0, marker.displayName);
             markerItem->setFlags(Qt::ItemIsEnabled); // Not selectable, not editable
 
             // Store the default color for reset functionality

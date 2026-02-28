@@ -8,6 +8,7 @@
 #include <QSet>
 #include <QTimer>
 #include <memory>
+#include <optional>
 #include "QCustomPlot/qcustomplot.h"
 #include "dependencykey.h"
 #include "markerregistry.h"
@@ -32,15 +33,6 @@ class MarkerModel;
 class CursorModel;
 class PlotRangeModel;
 class MeasureModel;
-
-struct ReferenceMoment
-{
-    QString sessionId;
-    double exitUtcSeconds = 0.0;
-
-    enum class Kind { Exit };
-    Kind kind = Kind::Exit;
-};
 
 class PlotWidget : public QWidget
 {
@@ -116,7 +108,9 @@ public:
 
     QDateTime xCoordToUtcDateTime(double xCoord, const QString &sessionId) const;
 
-    QString getXAxisKey() const;
+    // Axis configuration getters (used by tools and downstream consumers)
+    QString xVariable() const { return m_xVariable; }
+    QString referenceMarkerKey() const { return m_referenceMarkerKey; }
 
 signals:
     void sessionsSelected(const QList<QString> &sessionIds);
@@ -126,7 +120,8 @@ public slots:
     void updatePlot();
     void updateMarkersOnly();
     void onXAxisRangeChanged(const QCPRange &newRange);
-    void onXAxisKeyChanged(const QString &newKey, const QString &newLabel);
+    void onXVariableChanged(const QString &newXVariable);
+    void onReferenceMarkerKeyChanged(const QString &oldKey, const QString &newKey);
     void zoomToExtent();
 
 protected:
@@ -154,8 +149,7 @@ private:
 
     // View management
     const SessionData* referenceSession() const;
-    static double exitTimeSeconds(const SessionData& s);
-    QVector<ReferenceMoment> collectExitMoments() const;
+    std::optional<double> referenceOffsetForSession(const SessionData &session) const;
     QCPRange keyRangeOf(const SessionData& s,
                         const QString& sensor,
                         const QString& meas) const;
@@ -169,6 +163,7 @@ private:
     bool handleBubbleDrag(QMouseEvent *event);
     bool handleBubbleRelease(QMouseEvent *event);
     void showBubbleContextMenu(QCPItemText *bubble, const QPoint &globalPos);
+    void handleBubbleDoubleClick(QCPItemText *bubble);
 
     // Member Variables
     QCustomPlot *customPlot;
@@ -204,7 +199,8 @@ private:
     QVector<QVector<QPointer<QCPAbstractItem>>> m_markerItemsByLane;
     QHash<QCPItemText*, MarkerBubbleMeta> m_markerBubbleMeta;
 
-    QString m_xAxisKey   = SessionKeys::TimeFromExit;
+    QString m_xVariable        = SessionKeys::Time;
+    QString m_referenceMarkerKey = "_EXIT_TIME";
     QString m_xAxisLabel = "Time from exit (s)";
 
     // Cached preference values
@@ -212,15 +208,13 @@ private:
     int m_textSize = 9;
     double m_yAxisPadding = 0.05;
 
-    void applyXAxisChange(const QString& key, const QString& label);
-
     // Coalescing state for dependencyChanged signals
     enum class RebuildLevel { None, Full };
     RebuildLevel m_pendingRebuildLevel = RebuildLevel::None;
     QTimer m_rebuildTimer;
     QTimer m_markerUpdateTimer;
 
-    // Viewport shift state for exit time changes
+    // Viewport shift state for reference marker changes
     double m_lastReferenceOffset = 0.0;
 
     // Drag state for editable marker bubbles

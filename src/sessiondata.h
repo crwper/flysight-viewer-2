@@ -20,7 +20,6 @@ namespace SessionKeys {
     constexpr char Visible[] = "_VISIBLE";
     constexpr char Description[] = "_DESCRIPTION";
     constexpr char Time[] = "_time";
-    constexpr char TimeFromExit[] = "_time_from_exit";
     constexpr char TimeFitA[] = "_TIME_FIT_A";
     constexpr char TimeFitB[] = "_TIME_FIT_B";
     constexpr char ExitTime[] = "_EXIT_TIME";

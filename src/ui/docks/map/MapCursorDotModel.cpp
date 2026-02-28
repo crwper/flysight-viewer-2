@@ -15,23 +15,6 @@ static constexpr const char *kDefaultSensor = "Simplified";
 static constexpr const char *kLatKey = "lat";
 static constexpr const char *kLonKey = "lon";
 
-static bool exitTimeSeconds(const SessionData &s, double *outExitUtcSeconds)
-{
-    if (!outExitUtcSeconds)
-        return false;
-
-    const QVariant v = s.getAttribute(SessionKeys::ExitTime);
-    if (!v.canConvert<QDateTime>())
-        return false;
-
-    const QDateTime dt = v.toDateTime();
-    if (!dt.isValid())
-        return false;
-
-    *outExitUtcSeconds = dt.toMSecsSinceEpoch() / 1000.0;
-    return true;
-}
-
 static bool isMonotonic(const QVector<double> &t, int n, bool ascending)
 {
     if (n < 2)
@@ -197,22 +180,19 @@ static bool cursorUtcSecondsForSession(const CursorModel::Cursor &c,
     if (c.positionSpace != CursorModel::PositionSpace::PlotAxisCoord)
         return false;
 
-    if (c.axisKey == QString::fromLatin1(SessionKeys::Time)) {
-        *outUtcSeconds = c.positionValue;
-        return true;
-    }
-
-    if (c.axisKey == QString::fromLatin1(SessionKeys::TimeFromExit)) {
-        double exitT = 0.0;
-        if (!exitTimeSeconds(session, &exitT))
+    double offset = 0.0;
+    if (!c.referenceMarkerKey.isEmpty()) {
+        QVariant v = session.getAttribute(c.referenceMarkerKey);
+        if (!v.canConvert<QDateTime>())
             return false;
-
-        *outUtcSeconds = exitT + c.positionValue;
-        return true;
+        QDateTime dt = v.toDateTime();
+        if (!dt.isValid())
+            return false;
+        offset = dt.toMSecsSinceEpoch() / 1000.0;
     }
 
-    // Unsupported axis key for map dots (future expansion possible)
-    return false;
+    *outUtcSeconds = c.positionValue + offset;
+    return true;
 }
 
 static CursorModel::Cursor chooseEffectiveCursor(const CursorModel *cursorModel)

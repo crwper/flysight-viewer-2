@@ -40,6 +40,7 @@
 #include "sessiondata.h"
 #include "dependencykey.h"
 #include "plotregistry.h"
+#include "markerregistry.h"
 #include "python_output_redirector.h"
 
 namespace py = pybind11;
@@ -380,10 +381,37 @@ void PluginHost::initialise(const QString& pluginDir)
     }
 
     /* ------------------------------------------------------------------ */
+    /* 6b. Register simple marker definitions                             */
+    /* ------------------------------------------------------------------ */
+    for (py::handle h : sdk.attr("_markers")) {
+        py::object mk = h.cast<py::object>();
+
+        MarkerDefinition def;
+        def.category     = QString::fromStdString(mk.attr("category").cast<std::string>());
+        def.displayName  = QString::fromStdString(mk.attr("display_name").cast<std::string>());
+        def.shortLabel   = QString::fromStdString(mk.attr("short_label").cast<std::string>());
+        def.color        = QColor(QString::fromStdString(mk.attr("color").cast<std::string>()));
+        def.attributeKey = QString::fromStdString(mk.attr("attribute_key").cast<std::string>());
+        def.editable     = mk.attr("editable").cast<bool>();
+
+        // Convert measurements list: each element is a (sensor, measurement) tuple
+        for (py::handle mh : mk.attr("measurements")) {
+            py::tuple t = mh.cast<py::tuple>();
+            def.measurements.append({
+                QString::fromStdString(t[0].cast<std::string>()),
+                QString::fromStdString(t[1].cast<std::string>())
+            });
+        }
+
+        MarkerRegistry::instance().registerMarker(def);
+    }
+
+    /* ------------------------------------------------------------------ */
     /* 7.  Summary                                                        */
     /* ------------------------------------------------------------------ */
     qInfo() << "[PluginHost] Registered"
             << py::len(sdk.attr("_attributes"))   << "attributes,"
-            << py::len(sdk.attr("_measurements")) << "measurements and"
-            << py::len(sdk.attr("_simple_plots")) << "plots.";
+            << py::len(sdk.attr("_measurements")) << "measurements,"
+            << py::len(sdk.attr("_simple_plots")) << "plots and"
+            << py::len(sdk.attr("_markers"))      << "markers.";
 }

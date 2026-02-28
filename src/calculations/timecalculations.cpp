@@ -120,44 +120,4 @@ void Calculations::registerTimeCalculations()
         });
     }
 
-    // Helper lambda to compute time from exit
-    auto compute_time_from_exit = [](SessionData &session, const QString &sensorKey) -> std::optional<QVector<double>> {
-        // Get raw time first to force calculation if needed
-        QVector<double> rawTime = session.getMeasurement(sensorKey, SessionKeys::Time);
-
-        // Then get exit time attribute
-        QVariant var = session.getAttribute(SessionKeys::ExitTime);
-        if (!var.canConvert<QDateTime>()) {
-            return std::nullopt;
-        }
-
-        QDateTime dt = var.toDateTime();
-        if (!dt.isValid()) {
-            return std::nullopt;
-        }
-
-        // If you need the exit time as a double (seconds since epoch):
-        double exitTime = dt.toMSecsSinceEpoch() / 1000.0;
-
-        // Now calculate the difference
-        QVector<double> result(rawTime.size());
-        for (int i = 0; i < rawTime.size(); ++i) {
-            result[i] = rawTime[i] - exitTime;
-        }
-        return result;
-    };
-
-    // Register for all sensors
-    QStringList all_sensors = {"GNSS", "BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
-    for (const QString &sens : all_sensors) {
-        SessionData::registerCalculatedMeasurement(
-            sens, SessionKeys::TimeFromExit,
-            {
-                DependencyKey::measurement(sens, SessionKeys::Time),
-                DependencyKey::attribute(SessionKeys::ExitTime)
-            },
-            [compute_time_from_exit, sens](SessionData &s) {
-            return compute_time_from_exit(s, sens);
-        });
-    }
 }
