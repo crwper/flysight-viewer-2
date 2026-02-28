@@ -39,6 +39,7 @@
 #include "measuremodel.h"
 #include "units/unitconverter.h"
 #include "calculations/calculatedvalueregistry.h"
+#include "plotutils.h"
 
 namespace FlySight {
 
@@ -110,7 +111,7 @@ MainWindow::MainWindow(QWidget *parent)
             : SessionKeys::Time;
         mouse.referenceMarkerKey = m_plotViewSettingsModel
             ? m_plotViewSettingsModel->referenceMarkerKey()
-            : QStringLiteral("_EXIT_TIME");
+            : QLatin1String(SessionKeys::ExitTime);
         mouse.targetPolicy = CursorModel::TargetPolicy::Explicit;
 
         m_cursorModel->ensureCursor(mouse);
@@ -380,15 +381,7 @@ void MainWindow::importFiles(
 
     // Helper to compute the reference offset for a session
     auto computeOffset = [&refKey](SessionData &session) -> double {
-        if (refKey.isEmpty())
-            return 0.0;
-        QVariant v = session.getAttribute(refKey);
-        if (!v.canConvert<QDateTime>())
-            return 0.0;
-        QDateTime dt = v.toDateTime();
-        if (!dt.isValid())
-            return 0.0;
-        return dt.toMSecsSinceEpoch() / 1000.0;
+        return markerOffsetUtcSeconds(session, refKey).value_or(0.0);
     };
 
     if (showProgress) {

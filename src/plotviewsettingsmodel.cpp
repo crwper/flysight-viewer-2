@@ -24,7 +24,7 @@ PlotViewSettingsModel::PlotViewSettingsModel(QSettings *settings, QObject *paren
         } else {
             // Default / TimeFromExit: reference to exit
             m_xVariable = SessionKeys::Time;
-            m_referenceMarkerKey = QStringLiteral("_EXIT_TIME");
+            m_referenceMarkerKey = QLatin1String(SessionKeys::ExitTime);
         }
 
         // Persist the migrated values and remove the old key
@@ -39,8 +39,8 @@ PlotViewSettingsModel::PlotViewSettingsModel(QSettings *settings, QObject *paren
 
         m_referenceMarkerKey = m_settings
             ? m_settings->value(QStringLiteral("plot/referenceMarkerKey"),
-                                QStringLiteral("_EXIT_TIME")).toString()
-            : QStringLiteral("_EXIT_TIME");
+                                QLatin1String(SessionKeys::ExitTime)).toString()
+            : QLatin1String(SessionKeys::ExitTime);
     }
 }
 

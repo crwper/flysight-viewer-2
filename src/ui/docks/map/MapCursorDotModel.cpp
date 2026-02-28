@@ -3,6 +3,7 @@
 #include "cursormodel.h"
 #include "sessiondata.h"
 #include "sessionmodel.h"
+#include "plotutils.h"
 
 #include <QtMath>
 #include <QDateTime>
@@ -180,52 +181,12 @@ static bool cursorUtcSecondsForSession(const CursorModel::Cursor &c,
     if (c.positionSpace != CursorModel::PositionSpace::PlotAxisCoord)
         return false;
 
-    double offset = 0.0;
-    if (!c.referenceMarkerKey.isEmpty()) {
-        QVariant v = session.getAttribute(c.referenceMarkerKey);
-        if (!v.canConvert<QDateTime>())
-            return false;
-        QDateTime dt = v.toDateTime();
-        if (!dt.isValid())
-            return false;
-        offset = dt.toMSecsSinceEpoch() / 1000.0;
-    }
+    const auto optOffset = markerOffsetUtcSeconds(session, c.referenceMarkerKey);
+    if (!optOffset.has_value())
+        return false;
 
-    *outUtcSeconds = c.positionValue + offset;
+    *outUtcSeconds = c.positionValue + *optOffset;
     return true;
-}
-
-static CursorModel::Cursor chooseEffectiveCursor(const CursorModel *cursorModel)
-{
-    if (!cursorModel)
-        return CursorModel::Cursor{};
-
-    // 1) Prefer mouse cursor when active and it has usable targets
-    if (cursorModel->hasCursor(QStringLiteral("mouse"))) {
-        const CursorModel::Cursor mouse = cursorModel->cursorById(QStringLiteral("mouse"));
-        if (mouse.active) {
-            if (mouse.targetPolicy == CursorModel::TargetPolicy::Explicit && !mouse.targetSessions.isEmpty()) {
-                return mouse;
-            }
-            // If explicit targets are empty, treat as not usable and fall through.
-        }
-    }
-
-    // 2) Otherwise, first active non-mouse cursor
-    const int n = cursorModel->rowCount();
-    for (int row = 0; row < n; ++row) {
-        const QModelIndex idx = cursorModel->index(row, 0);
-        const QString id = cursorModel->data(idx, CursorModel::IdRole).toString();
-        if (id.isEmpty() || id == QStringLiteral("mouse"))
-            continue;
-
-        const CursorModel::Cursor c = cursorModel->cursorById(id);
-        if (c.active)
-            return c;
-    }
-
-    // 3) None
-    return CursorModel::Cursor{};
 }
 
 MapCursorDotModel::MapCursorDotModel(SessionModel *sessionModel, CursorModel *cursorModel, QObject *parent)

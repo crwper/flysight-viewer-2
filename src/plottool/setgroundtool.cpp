@@ -2,6 +2,7 @@
 #include "ui/docks/plot/PlotWidget.h"
 #include "../crosshairmanager.h"
 #include "../sessiondata.h"
+#include "../plotutils.h"
 #include <QCustomPlot/qcustomplot.h>
 
 #include <QMouseEvent>
@@ -27,15 +28,7 @@ double SetGroundTool::computeGroundElevation(SessionData &session, double xCoord
     constexpr char measH[]  = "hMSL";
 
     // Compute offset to convert plot-space xCoord to raw data space
-    double offset = 0.0;
-    if (!refKey.isEmpty()) {
-        QVariant v = session.getAttribute(refKey);
-        if (v.canConvert<QDateTime>()) {
-            QDateTime dt = v.toDateTime();
-            if (dt.isValid())
-                offset = dt.toMSecsSinceEpoch() / 1000.0;
-        }
-    }
+    const double offset = markerOffsetUtcSeconds(session, refKey).value_or(0.0);
     const double rawX = xCoord + offset;
 
     const auto times      = session.getMeasurement(sensor, xVar);

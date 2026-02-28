@@ -8,6 +8,7 @@
 #include "LegendWidget.h"
 #include "sessiondata.h"
 #include "units/unitconverter.h"
+#include "plotutils.h"
 
 #include <QHash>
 #include <QDateTime>
@@ -21,126 +22,6 @@
 
 namespace FlySight {
 namespace {
-
-constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
-
-QString seriesDisplayName(const PlotValue &pv)
-{
-    QString displayUnits = pv.plotUnits; // Fallback
-
-    if (!pv.measurementType.isEmpty()) {
-        QString convertedLabel = UnitConverter::instance().getUnitLabel(pv.measurementType);
-        if (!convertedLabel.isEmpty()) {
-            displayUnits = convertedLabel;
-        }
-    }
-
-    if (!displayUnits.isEmpty()) {
-        return QString("%1 (%2)").arg(pv.plotName).arg(displayUnits);
-    }
-    return pv.plotName;
-}
-
-// Match PlotWidget::interpolateY semantics (NaN at ends / degenerate segment).
-double interpolateAtX(const QVector<double> &xData,
-                      const QVector<double> &yData,
-                      double x)
-{
-    if (xData.isEmpty() || yData.isEmpty() || xData.size() != yData.size()) {
-        return kNaN;
-    }
-
-    auto itLower = std::lower_bound(xData.cbegin(), xData.cend(), x);
-
-    if (itLower == xData.cbegin() || itLower == xData.cend()) {
-        return kNaN;
-    }
-
-    const int index = static_cast<int>(std::distance(xData.cbegin(), itLower));
-
-    const double x1 = xData[index - 1];
-    const double y1 = yData[index - 1];
-    const double x2 = xData[index];
-    const double y2 = yData[index];
-
-    if (x2 == x1) {
-        return kNaN;
-    }
-
-    return y1 + (y2 - y1) * (x - x1) / (x2 - x1);
-}
-
-double interpolateSessionMeasurement(const SessionData &session,
-                                    const QString &sensorId,
-                                    const QString &xAxisKey,
-                                    const QString &measurementId,
-                                    double x)
-{
-    const QVector<double> xData = session.getMeasurement(sensorId, xAxisKey);
-    const QVector<double> yData = session.getMeasurement(sensorId, measurementId);
-    return interpolateAtX(xData, yData, x);
-}
-
-QString formatValue(double value, const QString &measurementId, const QString &measurementType)
-{
-    if (std::isnan(value))
-        return QStringLiteral("--");
-
-    // Preserve coordinate precision regardless of unit system (per constraints)
-    const QString m = measurementId.toLower();
-    if (m.contains(QStringLiteral("lat")) || m.contains(QStringLiteral("lon"))) {
-        return QString::number(value, 'f', 6);
-    }
-
-    // Apply unit conversion if measurementType is specified
-    if (!measurementType.isEmpty()) {
-        double displayValue = UnitConverter::instance().convert(value, measurementType);
-        int precision = UnitConverter::instance().getPrecision(measurementType);
-        if (precision < 0) precision = 1; // Fallback
-        return QString::number(displayValue, 'f', precision);
-    }
-
-    // Legacy fallback: use measurement-based heuristics
-    int precision = 1;
-    if (m.contains(QStringLiteral("time"))) {
-        precision = 3;
-    }
-
-    return QString::number(value, 'f', precision);
-}
-
-CursorModel::Cursor chooseEffectiveCursor(const CursorModel *cursorModel)
-{
-    if (!cursorModel)
-        return CursorModel::Cursor{};
-
-    // 1) Prefer mouse cursor when active and it has usable targets
-    if (cursorModel->hasCursor(QStringLiteral("mouse"))) {
-        const CursorModel::Cursor mouse = cursorModel->cursorById(QStringLiteral("mouse"));
-        if (mouse.active) {
-            if (mouse.targetPolicy == CursorModel::TargetPolicy::Explicit && !mouse.targetSessions.isEmpty()) {
-                return mouse;
-            }
-            // If explicit targets are empty, treat as not usable and fall through.
-        }
-    }
-
-    // 2) Otherwise, first active non-mouse cursor
-    const int n = cursorModel->rowCount();
-    for (int row = 0; row < n; ++row) {
-        const QModelIndex idx = cursorModel->index(row, 0);
-        const QString id = cursorModel->data(idx, CursorModel::IdRole).toString();
-        if (id.isEmpty() || id == QStringLiteral("mouse"))
-            continue;
-
-        const CursorModel::Cursor c = cursorModel->cursorById(id);
-        if (c.active)
-            return c;
-    }
-
-    // 3) None
-    return CursorModel::Cursor{};
-}
 
 std::optional<double> plotAxisXForSession(const CursorModel::Cursor &cursor,
                                          const QString &xVariable,
@@ -159,18 +40,11 @@ std::optional<double> plotAxisXForSession(const CursorModel::Cursor &cursor,
     // UtcSeconds -> convert to plot-axis coordinate: plotCoord = utcSeconds - offset
     const double utc = cursor.positionValue;
 
-    double offset = 0.0;
-    if (!referenceMarkerKey.isEmpty()) {
-        QVariant v = session.getAttribute(referenceMarkerKey);
-        if (!v.canConvert<QDateTime>())
-            return std::nullopt;
-        const QDateTime dt = v.toDateTime();
-        if (!dt.isValid())
-            return std::nullopt;
-        offset = dt.toMSecsSinceEpoch() / 1000.0;
-    }
+    const auto optOffset = markerOffsetUtcSeconds(session, referenceMarkerKey);
+    if (!optOffset.has_value())
+        return std::nullopt;
 
-    return utc - offset;
+    return utc - *optOffset;
 }
 
 std::optional<double> utcSecondsForHeader(const CursorModel::Cursor &cursor,
@@ -185,18 +59,11 @@ std::optional<double> utcSecondsForHeader(const CursorModel::Cursor &cursor,
     }
 
     // PlotAxisCoord -> convert to UTC: utcSeconds = plotAxisX + offset
-    double offset = 0.0;
-    if (!referenceMarkerKey.isEmpty()) {
-        QVariant v = session.getAttribute(referenceMarkerKey);
-        if (!v.canConvert<QDateTime>())
-            return std::nullopt;
-        const QDateTime dt = v.toDateTime();
-        if (!dt.isValid())
-            return std::nullopt;
-        offset = dt.toMSecsSinceEpoch() / 1000.0;
-    }
+    const auto optOffset = markerOffsetUtcSeconds(session, referenceMarkerKey);
+    if (!optOffset.has_value())
+        return std::nullopt;
 
-    return plotAxisX + offset;
+    return plotAxisX + *optOffset;
 }
 
 bool sessionOverlapsAtX(const SessionData &session,
@@ -206,15 +73,7 @@ bool sessionOverlapsAtX(const SessionData &session,
                         double plotAxisX)
 {
     // Compute offset: plot-to-raw conversion is rawX = plotAxisX + offset
-    double offset = 0.0;
-    if (!referenceMarkerKey.isEmpty()) {
-        QVariant v = session.getAttribute(referenceMarkerKey);
-        if (v.canConvert<QDateTime>()) {
-            QDateTime dt = v.toDateTime();
-            if (dt.isValid())
-                offset = dt.toMSecsSinceEpoch() / 1000.0;
-        }
-    }
+    const double offset = markerOffsetUtcSeconds(session, referenceMarkerKey).value_or(0.0);
     const double rawX = plotAxisX + offset;
 
     for (const PlotValue &pv : enabledPlots) {
@@ -429,15 +288,7 @@ void LegendPresenter::recompute()
 
     // Helper: compute the reference offset for a given session
     auto offsetForSession = [&referenceMarkerKey](const SessionData &s) -> double {
-        if (referenceMarkerKey.isEmpty())
-            return 0.0;
-        QVariant v = s.getAttribute(referenceMarkerKey);
-        if (!v.canConvert<QDateTime>())
-            return 0.0;
-        QDateTime dt = v.toDateTime();
-        if (!dt.isValid())
-            return 0.0;
-        return dt.toMSecsSinceEpoch() / 1000.0;
+        return markerOffsetUtcSeconds(s, referenceMarkerKey).value_or(0.0);
     };
 
     const bool pointMode = (targets.size() == 1);

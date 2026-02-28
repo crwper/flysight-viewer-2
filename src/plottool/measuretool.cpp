@@ -4,6 +4,7 @@
 #include "../sessiondata.h"
 #include "../crosshairmanager.h"
 #include "../units/unitconverter.h"
+#include "../plotutils.h"
 
 #include <QDateTime>
 #include <algorithm>
@@ -14,91 +15,15 @@
 namespace FlySight {
 namespace {
 
-constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
-
-// ------- helpers (same logic as LegendPresenter) -------
-
-QString seriesDisplayName(const PlotValue &pv)
-{
-    QString displayUnits = pv.plotUnits;
-    if (!pv.measurementType.isEmpty()) {
-        QString converted = UnitConverter::instance().getUnitLabel(pv.measurementType);
-        if (!converted.isEmpty())
-            displayUnits = converted;
-    }
-    if (!displayUnits.isEmpty())
-        return QStringLiteral("%1 (%2)").arg(pv.plotName, displayUnits);
-    return pv.plotName;
-}
-
-double interpolateAtX(const QVector<double> &xData,
-                      const QVector<double> &yData,
-                      double x)
-{
-    if (xData.isEmpty() || yData.isEmpty() || xData.size() != yData.size())
-        return kNaN;
-
-    auto it = std::lower_bound(xData.cbegin(), xData.cend(), x);
-    if (it == xData.cbegin() || it == xData.cend())
-        return kNaN;
-
-    const int idx = static_cast<int>(std::distance(xData.cbegin(), it));
-    const double x1 = xData[idx - 1], y1 = yData[idx - 1];
-    const double x2 = xData[idx],     y2 = yData[idx];
-    if (x2 == x1)
-        return kNaN;
-    return y1 + (y2 - y1) * (x - x1) / (x2 - x1);
-}
-
-double interpolateSessionMeasurement(const SessionData &session,
-                                     const QString &sensorId,
-                                     const QString &xAxisKey,
-                                     const QString &measurementId,
-                                     double x)
-{
-    const QVector<double> xData = session.getMeasurement(sensorId, xAxisKey);
-    const QVector<double> yData = session.getMeasurement(sensorId, measurementId);
-    return interpolateAtX(xData, yData, x);
-}
-
-QString formatValue(double value, const QString &measurementId, const QString &measurementType)
-{
-    if (std::isnan(value))
-        return QStringLiteral("--");
-
-    const QString m = measurementId.toLower();
-    if (m.contains(QStringLiteral("lat")) || m.contains(QStringLiteral("lon")))
-        return QString::number(value, 'f', 6);
-
-    if (!measurementType.isEmpty()) {
-        double displayValue = UnitConverter::instance().convert(value, measurementType);
-        int precision = UnitConverter::instance().getPrecision(measurementType);
-        if (precision < 0) precision = 1;
-        return QString::number(displayValue, 'f', precision);
-    }
-
-    int precision = 1;
-    if (m.contains(QStringLiteral("time")))
-        precision = 3;
-    return QString::number(value, 'f', precision);
-}
-
 // Convert plot-axis X to UTC seconds for header display.
 double plotAxisXToUtcSeconds(double plotAxisX,
                              const QString &referenceMarkerKey,
                              const SessionData &session)
 {
-    double offset = 0.0;
-    if (!referenceMarkerKey.isEmpty()) {
-        QVariant v = session.getAttribute(referenceMarkerKey);
-        if (!v.canConvert<QDateTime>())
-            return kNaN;
-        QDateTime dt = v.toDateTime();
-        if (!dt.isValid())
-            return kNaN;
-        offset = dt.toMSecsSinceEpoch() / 1000.0;
-    }
-    return plotAxisX + offset;
+    const auto optOffset = markerOffsetUtcSeconds(session, referenceMarkerKey);
+    if (!optOffset.has_value())
+        return kNaN;
+    return plotAxisX + *optOffset;
 }
 
 } // anonymous namespace
@@ -268,15 +193,7 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
 
     // Helper: compute the reference offset for a given session
     auto offsetForSession = [&referenceMarkerKey](const SessionData &s) -> double {
-        if (referenceMarkerKey.isEmpty())
-            return 0.0;
-        QVariant v = s.getAttribute(referenceMarkerKey);
-        if (!v.canConvert<QDateTime>())
-            return 0.0;
-        QDateTime dt = v.toDateTime();
-        if (!dt.isValid())
-            return 0.0;
-        return dt.toMSecsSinceEpoch() / 1000.0;
+        return markerOffsetUtcSeconds(s, referenceMarkerKey).value_or(0.0);
     };
 
     if (m_multiTrack) {

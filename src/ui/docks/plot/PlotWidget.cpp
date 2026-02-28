@@ -25,6 +25,7 @@
 #include "plottool/setexittool.h"
 #include "plottool/setgroundtool.h"
 #include "plottool/measuretool.h"
+#include "plotutils.h"
 
 namespace {
 
@@ -85,7 +86,7 @@ PlotWidget::PlotWidget(SessionModel *model,
     , m_cursorModel(cursorModel)
     , m_rangeModel(rangeModel)
     , m_xVariable(SessionKeys::Time)
-    , m_referenceMarkerKey(QStringLiteral("_EXIT_TIME"))
+    , m_referenceMarkerKey(SessionKeys::ExitTime)
     , m_xAxisLabel(tr("Time from exit (s)"))
 {
     if (m_viewSettingsModel) {
@@ -700,16 +701,7 @@ void PlotWidget::onReferenceMarkerKeyChanged(const QString &oldKey, const QStrin
         oldOffset = referenceOffsetForSession(*ref).value_or(0.0);
 
         // Compute new offset using the incoming key
-        if (newKey.isEmpty()) {
-            newOffset = 0.0;
-        } else {
-            QVariant v = ref->getAttribute(newKey);
-            if (v.canConvert<QDateTime>()) {
-                QDateTime dt = v.toDateTime();
-                if (dt.isValid())
-                    newOffset = dt.toUTC().toMSecsSinceEpoch() / 1000.0;
-            }
-        }
+        newOffset = markerOffsetUtcSeconds(*ref, newKey).value_or(0.0);
     }
 
     // Translate viewport by the difference between old and new offsets
@@ -1187,18 +1179,7 @@ const SessionData* PlotWidget::referenceSession() const
 
 std::optional<double> PlotWidget::referenceOffsetForSession(const SessionData &session) const
 {
-    if (m_referenceMarkerKey.isEmpty())
-        return 0.0;  // absolute mode, no offset
-
-    QVariant v = session.getAttribute(m_referenceMarkerKey);
-    if (!v.canConvert<QDateTime>())
-        return std::nullopt;  // session lacks the reference marker attribute
-
-    QDateTime dt = v.toDateTime();
-    if (!dt.isValid())
-        return std::nullopt;
-
-    return dt.toUTC().toMSecsSinceEpoch() / 1000.0;
+    return markerOffsetUtcSeconds(session, m_referenceMarkerKey);
 }
 
 void PlotWidget::updateReferenceMarkers(UpdateMode mode)

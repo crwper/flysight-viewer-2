@@ -200,7 +200,7 @@ private:
     QHash<QCPItemText*, MarkerBubbleMeta> m_markerBubbleMeta;
 
     QString m_xVariable        = SessionKeys::Time;
-    QString m_referenceMarkerKey = "_EXIT_TIME";
+    QString m_referenceMarkerKey = SessionKeys::ExitTime;
     QString m_xAxisLabel = "Time from exit (s)";
 
     // Cached preference values

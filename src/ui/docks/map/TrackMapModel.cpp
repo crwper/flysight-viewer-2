@@ -3,6 +3,7 @@
 #include "sessionmodel.h"
 #include "sessiondata.h"
 #include "plotrangemodel.h"
+#include "plotutils.h"
 
 #include <QtMath>
 #include <QVariantMap>
@@ -102,16 +103,10 @@ bool TrackMapModel::computeSessionUtcRange(const SessionData &session,
         return false;
 
     const QString refKey = m_rangeModel->referenceMarkerKey();
-    double offset = 0.0;
-    if (!refKey.isEmpty()) {
-        QVariant v = session.getAttribute(refKey);
-        if (!v.canConvert<QDateTime>())
-            return false;
-        QDateTime dt = v.toDateTime();
-        if (!dt.isValid())
-            return false;
-        offset = dt.toMSecsSinceEpoch() / 1000.0;
-    }
+    const auto optOffset = markerOffsetUtcSeconds(session, refKey);
+    if (!optOffset.has_value())
+        return false;
+    const double offset = *optOffset;
 
     *outLower = m_rangeModel->rangeLower() + offset;
     *outUpper = m_rangeModel->rangeUpper() + offset;

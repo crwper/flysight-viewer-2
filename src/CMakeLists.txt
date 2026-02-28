@@ -269,6 +269,7 @@ set(PROJECT_SOURCES
   dependencykey.h
   crosshairmanager.h         crosshairmanager.cpp
   graphinfo.h
+  plotutils.cpp              plotutils.h
   pluginhost.h               pluginhost.cpp
   plotregistry.cpp           plotregistry.h
   python_output_redirector.h
