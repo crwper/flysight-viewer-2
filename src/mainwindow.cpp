@@ -725,6 +725,8 @@ void MainWindow::registerBuiltInMarkers()
         {"Reference", "Exit",                    "Exit",   QColor(0, 122, 204), SessionKeys::ExitTime,           {}, true},
         {"Reference", "Manoeuvre start",         "MS",     QColor(255, 140, 0), SessionKeys::ManoeuvreStartTime, {}, true},
         {"Reference", "Landing",                  "Land",   QColor(153, 102, 51), SessionKeys::LandingTime,        {}, true},
+        {"Reference", "Analysis start",           "AS",     QColor(128, 0, 128),  SessionKeys::AnalysisStartTime,  {}, true},
+        {"Reference", "Analysis end",             "AE",     QColor(128, 0, 128),  SessionKeys::AnalysisEndTime,    {}, true},
 
         // Category: Analysis
         {"Analysis",  "Maximum vertical speed",  "Max VZ", Qt::green,           SessionKeys::MaxVelDTime, {{"GNSS", "velD"}}, false},
@@ -812,6 +814,7 @@ void MainWindow::initializePreferences()
     // ========================================================================
     prefs.registerPreference(PreferenceKeys::ImportGroundReferenceMode, QStringLiteral("Automatic"));
     prefs.registerPreference(PreferenceKeys::ImportFixedElevation, 0.0);
+    prefs.registerPreference(PreferenceKeys::ImportDescentPauseSeconds, 30.0);
 
     // ========================================================================
     // Global Plot Preferences

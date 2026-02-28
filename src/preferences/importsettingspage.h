@@ -5,6 +5,7 @@
 #include <QRadioButton>
 #include <QGroupBox>
 #include <QLineEdit>
+#include <QDoubleSpinBox>
 #include <QVBoxLayout>
 #include <QSettings>
 
@@ -23,8 +24,10 @@ private:
     QRadioButton *automaticRadioButton;
     QRadioButton *fixedRadioButton;
     QLineEdit *fixedElevationLineEdit;
+    QDoubleSpinBox *descentPauseSpinBox;
 
     QGroupBox* createGroundReferenceGroup();
+    QGroupBox* createDescentPauseGroup();
 };
 
 } // namespace FlySight
