@@ -722,11 +722,13 @@ void MainWindow::registerBuiltInMarkers()
 {
     QVector<MarkerDefinition> defaults = {
         // Category: Reference
-        {"Reference", "Exit",                    "Exit",   QColor(0, 122, 204), SessionKeys::ExitTime,  {}, true},
-        {"Reference", "Start",                   "Start",  QColor(0, 153, 51),  SessionKeys::StartTime, {}, false},
+        {"Reference", "Exit",                    "Exit",   QColor(0, 122, 204), SessionKeys::ExitTime,           {}, true},
+        {"Reference", "Manoeuvre start",         "MS",     QColor(255, 140, 0), SessionKeys::ManoeuvreStartTime, {}, true},
+        {"Reference", "Landing",                  "Land",   QColor(153, 102, 51), SessionKeys::LandingTime,        {}, true},
 
         // Category: Analysis
         {"Analysis",  "Maximum vertical speed",  "Max VZ", Qt::green,           SessionKeys::MaxVelDTime, {{"GNSS", "velD"}}, false},
+        {"Analysis",  "Maximum horizontal speed", "Max VH", Qt::red,            SessionKeys::MaxVelHTime, {{"GNSS", "velH"}}, false},
     };
 
     for (auto &md : defaults)

@@ -27,6 +27,9 @@ namespace SessionKeys {
     constexpr char Duration[] = "_DURATION";
     constexpr char GroundElev[] = "_GROUND_ELEV";
     constexpr char MaxVelDTime[] = "_MAX_VELD_TIME";
+    constexpr char ManoeuvreStartTime[] = "_MANOEUVRE_START_TIME";
+    constexpr char MaxVelHTime[] = "_MAX_VELH_TIME";
+    constexpr char LandingTime[] = "_LANDING_TIME";
 }
 
 class SessionData {
