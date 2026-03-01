@@ -40,6 +40,9 @@ public:
     void loadVideo(const QString &filePath);
     QString videoFilePath() const { return m_filePath; }
 
+    void stepBackward();
+    void stepForward();
+
 protected:
     void wheelEvent(QWheelEvent *event) override;
     bool eventFilter(QObject *obj, QEvent *event) override;

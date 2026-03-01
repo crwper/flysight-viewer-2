@@ -357,6 +357,9 @@ void VideoWidget::onPlayPauseClicked()
     }
 }
 
+void VideoWidget::stepBackward()  { onStepBackwardClicked(); }
+void VideoWidget::stepForward()   { onStepForwardClicked(); }
+
 void VideoWidget::onStepBackwardClicked()
 {
     if (!m_player)

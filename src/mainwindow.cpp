@@ -198,6 +198,25 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Setup plot tools
     setupPlotTools();
+
+    // Video step shortcuts (comma = back, period = forward, matching YouTube)
+    auto *stepBackAction = new QAction(tr("Step Video Backward"), this);
+    stepBackAction->setShortcut(QKeySequence(Qt::Key_Comma));
+    connect(stepBackAction, &QAction::triggered, this, [this]() {
+        auto *vf = findFeature<VideoDockFeature>();
+        if (vf && vf->videoWidget())
+            vf->videoWidget()->stepBackward();
+    });
+    addAction(stepBackAction);
+
+    auto *stepForwardAction = new QAction(tr("Step Video Forward"), this);
+    stepForwardAction->setShortcut(QKeySequence(Qt::Key_Period));
+    connect(stepForwardAction, &QAction::triggered, this, [this]() {
+        auto *vf = findFeature<VideoDockFeature>();
+        if (vf && vf->videoWidget())
+            vf->videoWidget()->stepForward();
+    });
+    addAction(stepForwardAction);
 }
 
 MainWindow::~MainWindow()
