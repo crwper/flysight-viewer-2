@@ -240,14 +240,17 @@ void Calculations::registerAttributeCalculations()
 
     // Landing time: first flying-to-walking transition within the analysis window
     // "Walking" = vertical speed < 2*sAcc AND horizontal speed < 10 km/h
+    //             AND elevation within 10 m of ground
     SessionData::registerCalculatedAttribute(
         SessionKeys::LandingTime,
         {
             DependencyKey::attribute(SessionKeys::AnalysisStartTime),
             DependencyKey::attribute(SessionKeys::AnalysisEndTime),
+            DependencyKey::attribute(SessionKeys::GroundElev),
             DependencyKey::measurement("GNSS", "velD"),
             DependencyKey::measurement("GNSS", "velH"),
             DependencyKey::measurement("GNSS", "sAcc"),
+            DependencyKey::measurement("GNSS", "hMSL"),
             DependencyKey::measurement("GNSS", SessionKeys::Time)
         },
         [](SessionData& session) -> std::optional<QVariant> {
@@ -262,22 +265,31 @@ void Calculations::registerAttributeCalculations()
             return std::nullopt;
         double analysisEndSec = aeVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
 
+        QVariant geVar = session.getAttribute(SessionKeys::GroundElev);
+        if (!geVar.canConvert<double>())
+            return std::nullopt;
+        double groundElev = geVar.toDouble();
+
         QVector<double> velD = session.getMeasurement("GNSS", "velD");
         QVector<double> velH = session.getMeasurement("GNSS", "velH");
         QVector<double> sAcc = session.getMeasurement("GNSS", "sAcc");
+        QVector<double> hMSL = session.getMeasurement("GNSS", "hMSL");
         QVector<double> time = session.getMeasurement("GNSS", SessionKeys::Time);
 
         const int n = velD.size();
-        if (n == 0 || velH.size() != n || sAcc.size() != n || time.size() != n)
+        if (n == 0 || velH.size() != n || sAcc.size() != n
+            || hMSL.size() != n || time.size() != n)
             return std::nullopt;
 
         const double hSpeedThreshold = 10.0 / 3.6; // 10 km/h in m/s
+        const double elevThreshold = 10.0; // metres above ground
 
-        // "Walking" when both conditions are met:
-        //   abs(velD) < 2*sAcc  AND  velH < 10 km/h
+        // "Walking" when all conditions are met:
+        //   abs(velD) < 2*sAcc  AND  velH < 10 km/h  AND  within 10 m of ground
         auto isWalking = [&](int i) {
             return std::abs(velD[i]) < 2.0 * sAcc[i]
-                && velH[i] < hSpeedThreshold;
+                && velH[i] < hSpeedThreshold
+                && (hMSL[i] - groundElev) < elevThreshold;
         };
 
         // Find the FIRST flying-to-walking transition within the analysis window
