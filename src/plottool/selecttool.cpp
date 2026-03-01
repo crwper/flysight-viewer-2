@@ -13,6 +13,7 @@ SelectTool::SelectTool(const PlotWidget::PlotContext &ctx)
     , m_selecting(false)
 {
     m_selectionRect->setVisible(false);
+    m_selectionRect->setClipToAxisRect(true);
     m_selectionRect->setPen(QPen(Qt::blue, 1, Qt::DashLine));
     m_selectionRect->setBrush(QColor(100, 100, 255, 50));
 }
@@ -21,21 +22,17 @@ bool SelectTool::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton)
     {
-        // Check if inside the axisRect
-        if (m_plot->axisRect()->rect().contains(event->pos()))
-        {
-            m_selecting = true;
-            m_startPixel = event->pos();
-            m_selectionRect->setVisible(true);
+        m_selecting = true;
+        m_startPixel = event->pos();
+        m_selectionRect->setVisible(true);
 
-            // Initialize it to zero size
-            QPointF startCoord = pixelToPlotCoords(m_startPixel);
-            m_selectionRect->topLeft->setCoords(startCoord.x(), startCoord.y());
-            m_selectionRect->bottomRight->setCoords(startCoord.x(), startCoord.y());
+        // Initialize it to zero size
+        QPointF startCoord = pixelToPlotCoords(m_startPixel);
+        m_selectionRect->topLeft->setCoords(startCoord.x(), startCoord.y());
+        m_selectionRect->bottomRight->setCoords(startCoord.x(), startCoord.y());
 
-            m_plot->replot(QCustomPlot::rpQueuedReplot);
-            return true; // we consumed it
-        }
+        m_plot->replot(QCustomPlot::rpQueuedReplot);
+        return true; // we consumed it
     }
     return false;
 }

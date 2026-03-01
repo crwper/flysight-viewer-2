@@ -1014,16 +1014,13 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
         }
         case QEvent::MouseButtonPress: {
             auto me = static_cast<QMouseEvent*>(event);
-            if (!customPlot->axisRect()->rect().contains(me->pos())) {
-                QCPItemText *hitBubble = hitTestMarkerBubble(me->pos());
-                if (hitBubble) {
-                    if (me->button() == Qt::RightButton) {
-                        showBubbleContextMenu(hitBubble, me->globalPosition().toPoint());
-                        return true;  // Always consume right-clicks on bubbles
-                    }
-                    return handleBubblePress(hitBubble, me);
+            QCPItemText *hitBubble = hitTestMarkerBubble(me->pos());
+            if (hitBubble) {
+                if (me->button() == Qt::RightButton) {
+                    showBubbleContextMenu(hitBubble, me->globalPosition().toPoint());
+                    return true;  // Always consume right-clicks on bubbles
                 }
-                return false;
+                return handleBubblePress(hitBubble, me);
             }
             return m_currentTool->mousePressEvent(me);
         }
@@ -1036,13 +1033,11 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
         }
         case QEvent::MouseButtonDblClick: {
             auto me = static_cast<QMouseEvent*>(event);
-            if (!customPlot->axisRect()->rect().contains(me->pos())) {
-                if (me->button() == Qt::LeftButton) {
-                    QCPItemText *hitBubble = hitTestMarkerBubble(me->pos());
-                    if (hitBubble) {
-                        handleBubbleDoubleClick(hitBubble);
-                        return true;
-                    }
+            if (me->button() == Qt::LeftButton) {
+                QCPItemText *hitBubble = hitTestMarkerBubble(me->pos());
+                if (hitBubble) {
+                    handleBubbleDoubleClick(hitBubble);
+                    return true;
                 }
             }
             break;
@@ -1101,11 +1096,13 @@ void PlotWidget::setupPlot()
     // create a dedicated layer for highlighted graphs
     customPlot->addLayer("highlighted", customPlot->layer("main"), QCustomPlot::limAbove);
 
-    // create a dedicated layer for reference marker items (drawn above all plot content)
+    // create dedicated layers for reference marker items (drawn above all plot content)
+    // arrows below bubbles so that pointer lines never cross over bubble labels
     QCPLayer *aboveLayer = customPlot->layer("overlay");
     if (!aboveLayer)
         aboveLayer = customPlot->layer("highlighted");
-    customPlot->addLayer("referenceMarkers", aboveLayer, QCustomPlot::limAbove);
+    customPlot->addLayer("markerArrows", aboveLayer, QCustomPlot::limAbove);
+    customPlot->addLayer("markerBubbles", customPlot->layer("markerArrows"), QCustomPlot::limAbove);
 }
 
 void PlotWidget::updateXAxisTicker()
@@ -1460,7 +1457,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
             for (int i = 0; i < clusters.size(); ++i) {
                 // Pointer triangle (implemented via a flat arrow head)
                 QCPItemLine *pointer = new QCPItemLine(customPlot);
-                pointer->setLayer("referenceMarkers");
+                pointer->setLayer("markerArrows");
                 pointer->setClipToAxisRect(false);
                 pointer->setSelectable(false);
 
@@ -1475,7 +1472,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
 
                 // Label bubble
                 QCPItemText *bubble = new QCPItemText(customPlot);
-                bubble->setLayer("referenceMarkers");
+                bubble->setLayer("markerBubbles");
                 bubble->setClipToAxisRect(false);
                 bubble->setSelectable(false);
 

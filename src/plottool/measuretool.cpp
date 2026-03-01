@@ -42,19 +42,20 @@ MeasureTool::MeasureTool(const PlotWidget::PlotContext &ctx)
     , m_lineRight(new QCPItemLine(ctx.plot))
 {
     m_rect->setVisible(false);
+    m_rect->setClipToAxisRect(true);
     m_rect->setPen(Qt::NoPen);
     m_rect->setBrush(QColor(0, 120, 215, 40));
 
     m_lineLeft->setVisible(false);
+    m_lineLeft->setClipToAxisRect(true);
     m_lineRight->setVisible(false);
+    m_lineRight->setClipToAxisRect(true);
     applyLinePenFromPreferences();
 }
 
 bool MeasureTool::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() != Qt::LeftButton)
-        return false;
-    if (!m_plot->axisRect()->rect().contains(event->pos()))
         return false;
 
     const bool shiftHeld = event->modifiers().testFlag(Qt::ShiftModifier);

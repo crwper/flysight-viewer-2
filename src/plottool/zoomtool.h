@@ -16,13 +16,14 @@ public:
         , m_zooming(false)
     {
         m_zoomRect->setVisible(false);
+        m_zoomRect->setClipToAxisRect(true);
         m_zoomRect->setPen(QPen(Qt::green, 1, Qt::DashLine));
         m_zoomRect->setBrush(QColor(0, 255, 0, 50));
     }
 
     bool mousePressEvent(QMouseEvent *event) override
     {
-        if (event->button() == Qt::LeftButton && isCursorOverPlotArea(event->pos()))
+        if (event->button() == Qt::LeftButton)
         {
             m_zooming = true;
             m_startPixel = event->pos();
@@ -118,10 +119,6 @@ private:
         return QPointF(x, y);
     }
 
-    bool isCursorOverPlotArea(const QPoint &pos) const
-    {
-        return m_plot->axisRect()->rect().contains(pos);
-    }
 };
 
 } // namespace FlySight
