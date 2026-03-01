@@ -187,8 +187,8 @@ void Calculations::registerAttributeCalculations()
         return std::nullopt;
     });
 
-    // Manoeuvre start time: last crossing where velD goes from < 10 to >= 10 m/s
-    // between exit time and landing time
+    // Manoeuvre start time: walk backward from the last 10 m/s crossing
+    // to the local minimum in vertical speed
     SessionData::registerCalculatedAttribute(
         SessionKeys::ManoeuvreStartTime,
         {
@@ -218,24 +218,32 @@ void Calculations::registerAttributeCalculations()
         const double vThreshold = 10.0; // m/s
 
         // Find the LAST upward crossing of the threshold between exit and landing
-        double lastCrossingTime = -1.0;
-        bool found = false;
+        int crossingIdx = -1;
 
         for (int i = 1; i < velD.size(); ++i) {
             if (time[i] < exitSec) continue;
             if (time[i] > landingSec) break;
             if (velD[i - 1] < vThreshold && velD[i] >= vThreshold) {
-                double a = (vThreshold - velD[i - 1]) / (velD[i] - velD[i - 1]);
-                lastCrossingTime = time[i - 1] + a * (time[i] - time[i - 1]);
-                found = true;
+                crossingIdx = i;
             }
         }
 
-        if (!found)
+        if (crossingIdx < 0)
             return std::nullopt;
 
+        // Walk backward from the crossing to the local minimum in velD
+        int minIdx = crossingIdx - 1;
+        for (int j = crossingIdx - 2; j >= 0; --j) {
+            if (time[j] < exitSec) break;
+            if (velD[j] < velD[minIdx]) {
+                minIdx = j;
+            } else {
+                break; // velD is increasing; we've passed the local minimum
+            }
+        }
+
         return QDateTime::fromMSecsSinceEpoch(
-            qint64(lastCrossingTime * 1000.0), QTimeZone::utc());
+            qint64(time[minIdx] * 1000.0), QTimeZone::utc());
     });
 
     // Landing time: first flying-to-walking transition within the analysis window
