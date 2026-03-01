@@ -215,7 +215,8 @@ private:
     QTimer m_markerUpdateTimer;
 
     // Viewport shift state for reference marker changes
-    double m_lastReferenceOffset = 0.0;
+    QString m_lastRefSessionId;
+    double m_lastRefOffset = 0.0;
 
     // Drag state for editable marker bubbles
     QCPItemText *m_dragBubble = nullptr;

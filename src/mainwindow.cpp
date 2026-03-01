@@ -10,6 +10,7 @@
 #include <QStandardPaths>
 #include <QCloseEvent>
 #include <QDateTime>
+#include <optional>
 #include <kddockwidgets/LayoutSaver.h>
 
 #include "version.h"
@@ -380,8 +381,8 @@ void MainWindow::importFiles(
     double newMaxTime = std::numeric_limits<double>::lowest();
 
     // Helper to compute the reference offset for a session
-    auto computeOffset = [&refKey](SessionData &session) -> double {
-        return markerOffsetUtcSeconds(session, refKey).value_or(0.0);
+    auto computeOffset = [&refKey](SessionData &session) -> std::optional<double> {
+        return markerOffsetUtcSeconds(session, refKey);
     };
 
     if (showProgress) {
@@ -410,16 +411,20 @@ void MainWindow::importFiles(
                 importedSessions.append(tempSessionData);
 
                 // Compute offset for plot-axis coordinates
-                const double offset = computeOffset(tempSessionData);
+                const auto optOffset = computeOffset(tempSessionData);
 
                 // Collect min and max time from tempSessionData in plot-axis space
-                for (const QString &sensorKey : tempSessionData.sensorKeys()) {
-                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, xVar);
-                    if (!times.isEmpty()) {
-                        double minTime = *std::min_element(times.begin(), times.end()) - offset;
-                        double maxTime = *std::max_element(times.begin(), times.end()) - offset;
-                        newMinTime = std::min(newMinTime, minTime);
-                        newMaxTime = std::max(newMaxTime, maxTime);
+                // (skip sessions whose reference offset can't be computed)
+                if (optOffset.has_value()) {
+                    const double offset = *optOffset;
+                    for (const QString &sensorKey : tempSessionData.sensorKeys()) {
+                        QVector<double> times = tempSessionData.getMeasurement(sensorKey, xVar);
+                        if (!times.isEmpty()) {
+                            double minTime = *std::min_element(times.begin(), times.end()) - offset;
+                            double maxTime = *std::max_element(times.begin(), times.end()) - offset;
+                            newMinTime = std::min(newMinTime, minTime);
+                            newMaxTime = std::max(newMaxTime, maxTime);
+                        }
                     }
                 }
             } else {
@@ -462,16 +467,20 @@ void MainWindow::importFiles(
                 importedSessions.append(tempSessionData);
 
                 // Compute offset for plot-axis coordinates
-                const double offset = computeOffset(tempSessionData);
+                const auto optOffset = computeOffset(tempSessionData);
 
                 // Collect min and max time from tempSessionData in plot-axis space
-                for (const QString &sensorKey : tempSessionData.sensorKeys()) {
-                    QVector<double> times = tempSessionData.getMeasurement(sensorKey, xVar);
-                    if (!times.isEmpty()) {
-                        double minTime = *std::min_element(times.begin(), times.end()) - offset;
-                        double maxTime = *std::max_element(times.begin(), times.end()) - offset;
-                        newMinTime = std::min(newMinTime, minTime);
-                        newMaxTime = std::max(newMaxTime, maxTime);
+                // (skip sessions whose reference offset can't be computed)
+                if (optOffset.has_value()) {
+                    const double offset = *optOffset;
+                    for (const QString &sensorKey : tempSessionData.sensorKeys()) {
+                        QVector<double> times = tempSessionData.getMeasurement(sensorKey, xVar);
+                        if (!times.isEmpty()) {
+                            double minTime = *std::min_element(times.begin(), times.end()) - offset;
+                            double maxTime = *std::max_element(times.begin(), times.end()) - offset;
+                            newMinTime = std::min(newMinTime, minTime);
+                            newMaxTime = std::max(newMaxTime, maxTime);
+                        }
                     }
                 }
             } else {

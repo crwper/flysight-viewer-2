@@ -210,7 +210,8 @@ PlotWidget::PlotWidget(SessionModel *model,
     // Initialize viewport shift tracking from the reference session
     const SessionData* ref = referenceSession();
     if (ref) {
-        m_lastReferenceOffset = referenceOffsetForSession(*ref).value_or(0.0);
+        m_lastRefSessionId = ref->getAttribute(SessionKeys::SessionId).toString();
+        m_lastRefOffset = referenceOffsetForSession(*ref).value_or(0.0);
     }
 }
 
@@ -503,7 +504,8 @@ void PlotWidget::updatePlot()
     // Update viewport shift tracking for the reference session
     const SessionData* ref = referenceSession();
     if (ref) {
-        m_lastReferenceOffset = referenceOffsetForSession(*ref).value_or(0.0);
+        m_lastRefSessionId = ref->getAttribute(SessionKeys::SessionId).toString();
+        m_lastRefOffset = referenceOffsetForSession(*ref).value_or(0.0);
     }
 }
 
@@ -691,28 +693,35 @@ void PlotWidget::onReferenceMarkerKeyChanged(const QString &oldKey, const QStrin
     if (m_referenceMarkerKey == newKey)
         return;
 
-    // Compute old and new offsets from the reference session BEFORE updating m_referenceMarkerKey
-    const SessionData* ref = referenceSession();
-    double oldOffset = 0.0;
-    double newOffset = 0.0;
+    // Compute per-session viewport transformations and take the union.
+    // Each session may have a different offset for the old and new reference
+    // markers, so a single global delta would only be correct for one session.
+    QCPRange oldRange = customPlot->xAxis->range();
+    double newLower = std::numeric_limits<double>::max();
+    double newUpper = std::numeric_limits<double>::lowest();
+    bool hasValid = false;
 
-    if (ref) {
-        // Compute old offset using current m_referenceMarkerKey
-        oldOffset = referenceOffsetForSession(*ref).value_or(0.0);
+    const QVector<SessionData> &sessions = model->getAllSessions();
+    for (const SessionData &session : sessions) {
+        if (!session.isVisible())
+            continue;
 
-        // Compute new offset using the incoming key
-        newOffset = markerOffsetUtcSeconds(*ref, newKey).value_or(0.0);
+        auto oldOffset = markerOffsetUtcSeconds(session, oldKey);
+        auto newOffset = markerOffsetUtcSeconds(session, newKey);
+        if (!oldOffset.has_value() || !newOffset.has_value())
+            continue;
+
+        double delta = newOffset.value() - oldOffset.value();
+        newLower = std::min(newLower, oldRange.lower - delta);
+        newUpper = std::max(newUpper, oldRange.upper - delta);
+        hasValid = true;
     }
 
-    // Translate viewport by the difference between old and new offsets
-    double delta = newOffset - oldOffset;
-    QCPRange oldRange = customPlot->xAxis->range();
-    QCPRange newRange(oldRange.lower - delta, oldRange.upper - delta);
+    QCPRange newRange = hasValid ? QCPRange(newLower, newUpper) : oldRange;
 
-    // Update m_referenceMarkerKey AFTER computing the delta but BEFORE updatePlot()
+    // Update state
     m_referenceMarkerKey = newKey;
     m_xAxisLabel = m_viewSettingsModel ? m_viewSettingsModel->xAxisLabel() : m_xAxisLabel;
-    m_lastReferenceOffset = newOffset;
 
     customPlot->xAxis->setLabel(m_xAxisLabel);
 
@@ -1680,13 +1689,15 @@ void PlotWidget::onDependencyChanged(const QString &sessionId, const DependencyK
     if (key.type == DependencyKey::Type::Attribute) {
         // Check if the changed attribute is the current reference marker key
         if (!m_referenceMarkerKey.isEmpty() && key.attributeKey == m_referenceMarkerKey) {
-            // Viewport shift for the reference session
+            // Viewport shift for the reference session.
+            // Only apply the delta when the changed session is the same one
+            // whose offset we cached, to avoid stale/mismatched deltas.
             const SessionData* ref = referenceSession();
             if (ref) {
                 QString refId = ref->getAttribute(SessionKeys::SessionId).toString();
-                if (refId == sessionId) {
+                if (refId == sessionId && sessionId == m_lastRefSessionId) {
                     double newOffset = referenceOffsetForSession(*ref).value_or(0.0);
-                    double delta = newOffset - m_lastReferenceOffset;
+                    double delta = newOffset - m_lastRefOffset;
 
                     if (delta != 0.0) {
                         QCPRange oldRange = customPlot->xAxis->range();
@@ -1701,7 +1712,7 @@ void PlotWidget::onDependencyChanged(const QString &sessionId, const DependencyK
                             m_rangeModel->setRange(m_xVariable, m_referenceMarkerKey, newRange.lower, newRange.upper);
                         }
 
-                        m_lastReferenceOffset = newOffset;
+                        m_lastRefOffset = newOffset;
                     }
                 }
             }
