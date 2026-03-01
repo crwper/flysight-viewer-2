@@ -195,6 +195,7 @@ void Calculations::registerAttributeCalculations()
             DependencyKey::attribute(SessionKeys::ExitTime),
             DependencyKey::attribute(SessionKeys::LandingTime),
             DependencyKey::measurement("GNSS", "velD"),
+            DependencyKey::measurement("GNSS", "sAcc"),
             DependencyKey::measurement("GNSS", SessionKeys::Time)
         },
         [](SessionData& session) -> std::optional<QVariant> {
@@ -210,9 +211,11 @@ void Calculations::registerAttributeCalculations()
         double landingSec = landVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
 
         QVector<double> velD = session.getMeasurement("GNSS", "velD");
+        QVector<double> sAcc = session.getMeasurement("GNSS", "sAcc");
         QVector<double> time = session.getMeasurement("GNSS", SessionKeys::Time);
 
-        if (velD.isEmpty() || time.isEmpty() || velD.size() != time.size())
+        if (velD.isEmpty() || time.isEmpty() || sAcc.isEmpty()
+            || velD.size() != time.size() || velD.size() != sAcc.size())
             return std::nullopt;
 
         const double vThreshold = 10.0; // m/s
@@ -231,14 +234,15 @@ void Calculations::registerAttributeCalculations()
         if (crossingIdx < 0)
             return std::nullopt;
 
-        // Walk backward from the crossing to the local minimum in velD
+        // Walk backward from the crossing to find the minimum in velD,
+        // tolerating small bumps within the speed accuracy band
         int minIdx = crossingIdx - 1;
         for (int j = crossingIdx - 2; j >= 0; --j) {
             if (time[j] < exitSec) break;
             if (velD[j] < velD[minIdx]) {
                 minIdx = j;
-            } else {
-                break; // velD is increasing; we've passed the local minimum
+            } else if (velD[j] > velD[minIdx] + 2.0 * sAcc[j]) {
+                break; // confidently above the minimum
             }
         }
 
