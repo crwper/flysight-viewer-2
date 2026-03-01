@@ -82,10 +82,14 @@ void Calculations::registerAttributeCalculations()
         }
 
         if (bestDrop > 0 && bestHighIdx >= 0) {
+            // Add a grace period (equal to the pause timeout) on each side
+            double startSec = std::max(time[bestHighIdx] - timeout, time[0]);
+            double endSec = std::min(time[bestLowIdx] + timeout, time[n - 1]);
+
             QDateTime analysisStartTime = QDateTime::fromMSecsSinceEpoch(
-                qint64(time[bestHighIdx] * 1000.0), QTimeZone::utc());
+                qint64(startSec * 1000.0), QTimeZone::utc());
             QDateTime analysisEndTime = QDateTime::fromMSecsSinceEpoch(
-                qint64(time[bestLowIdx] * 1000.0), QTimeZone::utc());
+                qint64(endSec * 1000.0), QTimeZone::utc());
 
             // Store both results
             session.setAttribute(SessionKeys::AnalysisStartTime, analysisStartTime);
@@ -123,17 +127,23 @@ void Calculations::registerAttributeCalculations()
         SessionKeys::ExitTime,
         {
             DependencyKey::attribute(SessionKeys::AnalysisStartTime),
+            DependencyKey::attribute(SessionKeys::AnalysisEndTime),
             DependencyKey::measurement("GNSS", "velD"),
             DependencyKey::measurement("GNSS", "sAcc"),
             DependencyKey::measurement("GNSS", "accD"),
             DependencyKey::measurement("GNSS", SessionKeys::Time)
         },
         [](SessionData& session) -> std::optional<QVariant> {
-        // Retrieve analysis start time to constrain the search
+        // Retrieve analysis window to constrain the search
         QVariant asVar = session.getAttribute(SessionKeys::AnalysisStartTime);
         if (!asVar.canConvert<QDateTime>())
             return std::nullopt;
         double analysisStartSec = asVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+
+        QVariant aeVar = session.getAttribute(SessionKeys::AnalysisEndTime);
+        if (!aeVar.canConvert<QDateTime>())
+            return std::nullopt;
+        double analysisEndSec = aeVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
 
         // Find the first timestamp where vertical speed drops below a threshold
         QVector<double> velD = session.getMeasurement("GNSS", "velD");
@@ -152,6 +162,7 @@ void Calculations::registerAttributeCalculations()
 
         for (int i = 1; i < velD.size(); ++i) {
             if (time[i] < analysisStartSec) continue;
+            if (time[i] > analysisEndSec) break;
 
             // Get interpolation coefficient
             const double a = (vThreshold - velD[i - 1]) / (velD[i] - velD[i - 1]);
@@ -227,11 +238,12 @@ void Calculations::registerAttributeCalculations()
             qint64(lastCrossingTime * 1000.0), QTimeZone::utc());
     });
 
-    // Landing time: first flying-to-walking transition from analysis end time
+    // Landing time: first flying-to-walking transition within the analysis window
     // "Walking" = vertical speed < 2*sAcc AND horizontal speed < 10 km/h
     SessionData::registerCalculatedAttribute(
         SessionKeys::LandingTime,
         {
+            DependencyKey::attribute(SessionKeys::AnalysisStartTime),
             DependencyKey::attribute(SessionKeys::AnalysisEndTime),
             DependencyKey::measurement("GNSS", "velD"),
             DependencyKey::measurement("GNSS", "velH"),
@@ -239,7 +251,12 @@ void Calculations::registerAttributeCalculations()
             DependencyKey::measurement("GNSS", SessionKeys::Time)
         },
         [](SessionData& session) -> std::optional<QVariant> {
-        // Retrieve analysis end time to constrain the search
+        // Retrieve analysis window to constrain the search
+        QVariant asVar = session.getAttribute(SessionKeys::AnalysisStartTime);
+        if (!asVar.canConvert<QDateTime>())
+            return std::nullopt;
+        double analysisStartSec = asVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+
         QVariant aeVar = session.getAttribute(SessionKeys::AnalysisEndTime);
         if (!aeVar.canConvert<QDateTime>())
             return std::nullopt;
@@ -263,9 +280,10 @@ void Calculations::registerAttributeCalculations()
                 && velH[i] < hSpeedThreshold;
         };
 
-        // Find the FIRST flying-to-walking transition at or after analysis end time
+        // Find the FIRST flying-to-walking transition within the analysis window
         for (int i = 1; i < n; ++i) {
-            if (time[i] < analysisEndSec) continue;
+            if (time[i] < analysisStartSec) continue;
+            if (time[i] > analysisEndSec) break;
             if (!isWalking(i - 1) && isWalking(i)) {
                 return QDateTime::fromMSecsSinceEpoch(
                     qint64(time[i] * 1000.0), QTimeZone::utc());
