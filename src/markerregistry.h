@@ -1,6 +1,7 @@
 #ifndef MARKERREGISTRY_H
 #define MARKERREGISTRY_H
 
+#include <QObject>
 #include <QString>
 #include <QColor>
 #include <QPair>
@@ -19,11 +20,14 @@ struct MarkerDefinition {
     QString attributeKey; // Unique, stable marker id (session attribute key)
     QVector<MeasurementKey> measurements;  // sensor measurements this marker relates to
     bool    editable = false;              // whether the user can reposition by dragging
+    QString groupId;                       // empty = statically registered; non-empty = managed group
 };
 
-class MarkerRegistry {
+class MarkerRegistry : public QObject {
+    Q_OBJECT
+
 public:
-    static MarkerRegistry& instance();
+    static MarkerRegistry* instance();
 
     /// register one marker (called by C++ or future PluginHost)
     void registerMarker(const MarkerDefinition& def);
@@ -31,8 +35,18 @@ public:
     /// returns all markers (built-in + plugins). Called by MainWindow.
     QVector<MarkerDefinition> allMarkers() const;
 
+    /// removes all markers belonging to the given group
+    void clearMarkerGroup(const QString &groupId);
+
+signals:
+    void markersChanged();
+
 private:
+    explicit MarkerRegistry(QObject *parent = nullptr);
+
     QVector<MarkerDefinition> m_markers;
+
+    Q_DISABLE_COPY(MarkerRegistry)
 };
 
 } // namespace FlySight

@@ -98,6 +98,22 @@ inline QString markerColorKey(const QString &attributeKey) {
     return QStringLiteral("markers/%1/color").arg(attributeKey);
 }
 
+// ============================================================================
+// Altitude Markers Preferences
+// ============================================================================
+inline const QString AltitudeMarkersUnits = QStringLiteral("altitudeMarkers/units");
+inline const QString AltitudeMarkersColor = QStringLiteral("altitudeMarkers/color");
+inline const QString AltitudeMarkersSize  = QStringLiteral("altitudeMarkers/size");
+
+/**
+ * @brief Generate the preference key for a specific altitude marker's value.
+ * @param index 1-based index of the altitude marker (matches QSettings array convention)
+ * @return The preference key in format "altitudeMarkers/{index}/value"
+ */
+inline QString altitudeMarkerValueKey(int index) {
+    return QStringLiteral("altitudeMarkers/%1/value").arg(index);
+}
+
 } // namespace PreferenceKeys
 } // namespace FlySight
 

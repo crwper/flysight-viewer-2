@@ -403,7 +403,7 @@ void PluginHost::initialise(const QString& pluginDir)
             });
         }
 
-        MarkerRegistry::instance().registerMarker(def);
+        MarkerRegistry::instance()->registerMarker(def);
     }
 
     /* ------------------------------------------------------------------ */

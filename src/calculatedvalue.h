@@ -36,6 +36,10 @@ public:
     // Checks if there's a registered calculation for the given key (static variant).
     static bool hasRegisteredCalculation(const Key &key) { return s_methods.contains(key); }
 
+    // Removes the calculation entry for the given key from the global registry.
+    // No-op if the key was never registered.
+    static void unregisterCalculation(const Key &key) { s_methods.remove(key); }
+
     // Retrieves the value associated with the given key, computing it if necessary.
     std::optional<Value> getValue(SessionData &session, const Key &key) const;
 

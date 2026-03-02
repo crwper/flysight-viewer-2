@@ -67,9 +67,14 @@ SessionData::AttributeFunction makeInterpolationFunction(
 
 } // anonymous namespace
 
-MarkerRegistry& MarkerRegistry::instance() {
-    static MarkerRegistry R;
-    return R;
+MarkerRegistry* MarkerRegistry::instance() {
+    static MarkerRegistry* s_instance = new MarkerRegistry(nullptr);
+    return s_instance;
+}
+
+MarkerRegistry::MarkerRegistry(QObject *parent)
+    : QObject(parent)
+{
 }
 
 void MarkerRegistry::registerMarker(const MarkerDefinition& def) {
@@ -95,6 +100,16 @@ void MarkerRegistry::registerMarker(const MarkerDefinition& def) {
             deps,
             makeInterpolationFunction(def.attributeKey, mk.first, mk.second));
     }
+
+    emit markersChanged();
+}
+
+void MarkerRegistry::clearMarkerGroup(const QString &groupId) {
+    m_markers.removeIf([&groupId](const MarkerDefinition &def) {
+        return def.groupId == groupId;
+    });
+
+    emit markersChanged();
 }
 
 QVector<MarkerDefinition> MarkerRegistry::allMarkers() const {

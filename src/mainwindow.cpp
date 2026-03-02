@@ -46,6 +46,7 @@
 #include "units/unitconverter.h"
 #include "calculations/calculatedvalueregistry.h"
 #include "plotutils.h"
+#include "altitudemarkerfeature.h"
 
 namespace {
 
@@ -111,10 +112,9 @@ MainWindow::MainWindow(QWidget *parent)
     // Initialize calculated values
     CalculatedValueRegistry::instance().registerBuiltInCalculations();
 
-    // Populate marker model before PlotWidget construction so markers can render immediately
-    if (markerModel) {
-        markerModel->setMarkers(MarkerRegistry::instance().allMarkers());
-    }
+    // Instantiate and register altitude markers (must come after calculations are registered)
+    m_altitudeMarkerManager = new AltitudeMarkerManager(model, this);
+    m_altitudeMarkerManager->registerAll();
 
     // Create range model for synchronizing plot x-axis range with other docks
     m_rangeModel = new PlotRangeModel(this);
@@ -894,7 +894,7 @@ void MainWindow::registerBuiltInMarkers()
     };
 
     for (auto &md : defaults)
-        MarkerRegistry::instance().registerMarker(md);
+        MarkerRegistry::instance()->registerMarker(md);
 }
 
 void MainWindow::registerBuiltInPlots()
@@ -1034,7 +1034,7 @@ void MainWindow::initializePreferences()
     // ========================================================================
     // Per-Marker Preferences (dynamically registered from MarkerRegistry)
     // ========================================================================
-    const QVector<MarkerDefinition> allMarkers = MarkerRegistry::instance().allMarkers();
+    const QVector<MarkerDefinition> allMarkers = MarkerRegistry::instance()->allMarkers();
     for (const MarkerDefinition &md : allMarkers) {
         // Color preference (default from MarkerDefinition.color)
         prefs.registerPreference(

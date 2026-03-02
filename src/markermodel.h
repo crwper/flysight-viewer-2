@@ -49,6 +49,9 @@ public:
 protected:
     QHash<int, QByteArray> roleNames() const override;
 
+private slots:
+    void onMarkersChanged();
+
 private:
     struct Node {
         enum class Type { Category, Marker };

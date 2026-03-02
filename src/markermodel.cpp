@@ -9,11 +9,18 @@ namespace FlySight {
 MarkerModel::MarkerModel(QObject *parent)
     : QAbstractItemModel(parent)
 {
+    connect(MarkerRegistry::instance(), &MarkerRegistry::markersChanged,
+            this, &MarkerModel::onMarkersChanged);
 }
 
 void MarkerModel::setSettings(QSettings *settings)
 {
     m_settings = settings;
+}
+
+void MarkerModel::onMarkersChanged()
+{
+    setMarkers(MarkerRegistry::instance()->allMarkers());
 }
 
 QString MarkerModel::makeMarkerId(const QString& attributeKey)

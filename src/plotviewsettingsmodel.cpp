@@ -61,7 +61,7 @@ QString PlotViewSettingsModel::xAxisLabel() const
     }
 
     // Look up the marker's display name from MarkerRegistry
-    const QVector<MarkerDefinition> markers = MarkerRegistry::instance().allMarkers();
+    const QVector<MarkerDefinition> markers = MarkerRegistry::instance()->allMarkers();
     for (const MarkerDefinition &md : markers) {
         if (md.attributeKey == m_referenceMarkerKey) {
             return tr("Time from %1 (s)").arg(md.displayName.toLower());

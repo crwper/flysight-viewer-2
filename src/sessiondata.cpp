@@ -104,6 +104,14 @@ bool SessionData::hasRegisteredCalculation(const QString &key)
     return CalculatedValue<QString, QVariant>::hasRegisteredCalculation(key);
 }
 
+void SessionData::unregisterCalculatedAttribute(const QString &key)
+{
+    // Remove from global calculation registry (affects all sessions)
+    CalculatedValue<QString, QVariant>::unregisterCalculation(key);
+    // Flush this session's cached value for the key
+    m_calculatedAttributes.invalidate(key);
+}
+
 void SessionData::registerCalculatedAttribute(
     const QString& key,
     const QList<DependencyKey>& dependencies,

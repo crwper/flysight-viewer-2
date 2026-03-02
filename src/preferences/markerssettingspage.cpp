@@ -67,12 +67,14 @@ void MarkersSettingsPage::populateMarkerTree()
     m_defaultColors.clear();
 
     // Get all markers from registry
-    QVector<MarkerDefinition> markers = MarkerRegistry::instance().allMarkers();
+    QVector<MarkerDefinition> markers = MarkerRegistry::instance()->allMarkers();
 
-    // Group markers by category
+    // Group markers by category, skipping any whose colour is managed by their own subsystem
     QMap<QString, QVector<MarkerDefinition>> categorizedMarkers;
     for (const MarkerDefinition &marker : markers) {
-        categorizedMarkers[marker.category].append(marker);
+        if (marker.groupId.isEmpty()) {
+            categorizedMarkers[marker.category].append(marker);
+        }
     }
 
     // Create tree structure
@@ -164,7 +166,8 @@ void MarkersSettingsPage::resetAllToDefaults()
         return;
     }
 
-    // Reset all markers to their registered default colors
+    // Only markers with an empty groupId are tracked in m_defaultColors
+    // (see populateMarkerTree()), so this loop implicitly scopes to non-grouped markers.
     for (auto it = m_defaultColors.constBegin(); it != m_defaultColors.constEnd(); ++it) {
         const QString &attributeKey = it.key();
         const QColor &defaultColor = it.value();

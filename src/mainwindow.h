@@ -20,6 +20,7 @@ QT_END_NAMESPACE
 
 namespace FlySight {
 
+class AltitudeMarkerManager;
 class DockFeature;
 class PlotViewSettingsModel;
 class PlotModel;
@@ -122,6 +123,9 @@ private:
 
     // Measure model for measure tool data
     MeasureModel *m_measureModel = nullptr;
+
+    // Altitude marker manager
+    AltitudeMarkerManager *m_altitudeMarkerManager = nullptr;
 
     // Helper functions for plot values
     static void registerBuiltInPlots();

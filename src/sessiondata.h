@@ -54,6 +54,10 @@ public:
     QSet<DependencyKey> setAttribute(const QString &key, const QVariant &value);
     QSet<DependencyKey> removeAttribute(const QString &key);
 
+    /// Removes a dynamically-registered calculated attribute's global registration
+    /// and flushes this session's cached value for that key.
+    void unregisterCalculatedAttribute(const QString &key);
+
     QStringList sensorKeys() const;
     bool hasSensor(const QString &key) const;
     QStringList measurementKeys(const QString &sensorKey) const;

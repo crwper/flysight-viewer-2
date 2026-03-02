@@ -264,6 +264,7 @@ set(PROJECT_SOURCES
   preferences/legendsettingspage.h  preferences/legendsettingspage.cpp
   preferences/mapsettingspage.h     preferences/mapsettingspage.cpp
   preferences/markerssettingspage.h preferences/markerssettingspage.cpp
+  preferences/altitudemarkerssettingspage.h preferences/altitudemarkerssettingspage.cpp
   preferences/plotssettingspage.h  preferences/plotssettingspage.cpp
   units/unitdefinitions.h
   units/unitconverter.h            units/unitconverter.cpp
@@ -279,6 +280,7 @@ set(PROJECT_SOURCES
   plotrangemodel.cpp         plotrangemodel.h
   markerregistry.cpp         markerregistry.h
   markermodel.cpp            markermodel.h
+  altitudemarkerfeature.cpp  altitudemarkerfeature.h
   ui/docks/AppContext.h
   ui/docks/DockFeature.h
   ui/docks/DockRegistry.h    ui/docks/DockRegistry.cpp
