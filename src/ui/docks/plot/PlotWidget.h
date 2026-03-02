@@ -164,6 +164,7 @@ private:
     bool handleBubbleRelease(QMouseEvent *event);
     void showBubbleContextMenu(QCPItemText *bubble, const QPoint &globalPos);
     void handleBubbleDoubleClick(QCPItemText *bubble);
+    void applyPinchZoom(double factor, const QPointF &centerPos);
 
     // Member Variables
     QCustomPlot *customPlot;

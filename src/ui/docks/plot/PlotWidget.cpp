@@ -17,6 +17,7 @@
 #include <QPainter>
 #include <QDebug>
 #include <QSignalBlocker>
+#include <QNativeGestureEvent>
 
 #include "plottool/plottool.h"
 #include "plottool/pantool.h"
@@ -149,9 +150,6 @@ PlotWidget::PlotWidget(SessionModel *model,
         m_cursorModel->setCursorActive(
             QStringLiteral("mouse"), !tracedSessions.isEmpty());
     });
-
-    // For example, installing event filter:
-    customPlot->installEventFilter(this);
 
     if (m_cursorModel) {
         connect(m_cursorModel, &CursorModel::cursorsChanged,
@@ -939,6 +937,17 @@ void PlotWidget::onCursorsChanged()
     m_crosshairManager->setExternalCursorMulti(xBySession, true);
 }
 
+void PlotWidget::applyPinchZoom(double factor, const QPointF &centerPos)
+{
+    if (factor <= 0.0 || qFuzzyCompare(factor, 1.0))
+        return;
+    factor = qBound(0.1, factor, 10.0);
+
+    const double centerCoord = customPlot->xAxis->pixelToCoord(centerPos.x());
+    customPlot->xAxis->scaleRange(factor, centerCoord);
+    customPlot->replot(QCustomPlot::rpQueuedReplot);
+}
+
 // Protected Methods
 bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 {
@@ -1066,6 +1075,15 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
 
             m_currentTool->leaveEvent(event);
             return false;
+        case QEvent::NativeGesture: {
+            auto *nge = static_cast<QNativeGestureEvent *>(event);
+            if (nge->gestureType() == Qt::ZoomNativeGesture) {
+                const double factor = 1.0 / (1.0 + nge->value());
+                applyPinchZoom(factor, nge->position());
+                return true;
+            }
+            break;
+        }
         default:
             break;
         }
