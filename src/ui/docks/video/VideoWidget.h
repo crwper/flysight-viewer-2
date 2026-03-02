@@ -43,6 +43,9 @@ public:
     void stepBackward();
     void stepForward();
 
+signals:
+    void urlsDropped(const QList<QUrl> &urls);
+
 protected:
     void wheelEvent(QWheelEvent *event) override;
     bool eventFilter(QObject *obj, QEvent *event) override;
@@ -72,6 +75,7 @@ private slots:
     void onSelectedSessionChanged(int index);
     void rebuildSessionSelector();
     void onDependencyChanged(const QString &sessionId, const DependencyKey &key);
+    void onQmlFilesDropped(const QVariant &urls);
 
 private:
     static QString formatTimeMs(qint64 ms);

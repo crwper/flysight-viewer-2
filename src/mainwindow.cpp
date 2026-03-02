@@ -9,6 +9,11 @@
 #include <QMouseEvent>
 #include <QStandardPaths>
 #include <QCloseEvent>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QMediaFormat>
+#include <QMimeType>
 #include <QDateTime>
 #include <optional>
 #include <kddockwidgets/LayoutSaver.h>
@@ -41,6 +46,26 @@
 #include "units/unitconverter.h"
 #include "calculations/calculatedvalueregistry.h"
 #include "plotutils.h"
+
+namespace {
+
+QSet<QString> supportedVideoSuffixes()
+{
+    QSet<QString> exts;
+    QMediaFormat defaultFmt;
+    for (auto fmt : defaultFmt.supportedFileFormats(QMediaFormat::Decode)) {
+        QMediaFormat mf;
+        mf.setFileFormat(fmt);
+        QMimeType mime = mf.mimeType();
+        if (mime.name().startsWith(QLatin1String("video/"))) {
+            for (const QString &s : mime.suffixes())
+                exts.insert(s.toLower());
+        }
+    }
+    return exts;
+}
+
+} // anonymous namespace
 
 namespace FlySight {
 
@@ -181,6 +206,12 @@ MainWindow::MainWindow(QWidget *parent)
         }
     }
 
+    // Connect video widget drop signal
+    if (videoFeature && videoFeature->videoWidget()) {
+        connect(videoFeature->videoWidget(), &VideoWidget::urlsDropped,
+                this, &MainWindow::handleDroppedUrls);
+    }
+
     // Let PlotModel own the category/plot tree (must be done after plugin initialization)
     if (plotModel) {
         plotModel->setPlots(PlotRegistry::instance().allPlots());
@@ -217,6 +248,9 @@ MainWindow::MainWindow(QWidget *parent)
             vf->videoWidget()->stepForward();
     });
     addAction(stepForwardAction);
+
+    // Accept file drops from the OS
+    setAcceptDrops(true);
 }
 
 MainWindow::~MainWindow()
@@ -228,6 +262,59 @@ void MainWindow::closeEvent(QCloseEvent *event)
 {
     saveDockLayout();
     KDDockWidgets::QtWidgets::MainWindow::closeEvent(event);
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (event->mimeData()->hasUrls())
+        event->acceptProposedAction();
+}
+
+void MainWindow::dropEvent(QDropEvent *event)
+{
+    handleDroppedUrls(event->mimeData()->urls());
+    event->acceptProposedAction();
+}
+
+void MainWindow::handleDroppedUrls(const QList<QUrl> &urls)
+{
+    if (urls.isEmpty())
+        return;
+
+    const QSet<QString> videoExts = supportedVideoSuffixes();
+
+    QStringList trackFiles;
+    QString lastVideoFile;
+
+    for (const QUrl &url : urls) {
+        if (!url.isLocalFile())
+            continue;
+
+        const QString path = url.toLocalFile();
+        const QString suffix = QFileInfo(path).suffix().toLower();
+
+        if (suffix == QLatin1String("csv")) {
+            trackFiles.append(path);
+        } else if (videoExts.contains(suffix)) {
+            lastVideoFile = path;
+        }
+    }
+
+    // Import track files
+    if (!trackFiles.isEmpty()) {
+        importFiles(trackFiles, trackFiles.size() > 5);
+    }
+
+    // Load the last video file dropped
+    if (!lastVideoFile.isEmpty()) {
+        auto *videoFeature = findFeature<VideoDockFeature>();
+        if (videoFeature && videoFeature->dock() && !videoFeature->dock()->isVisible()) {
+            videoFeature->dock()->show();
+        }
+        if (videoFeature && videoFeature->videoWidget()) {
+            videoFeature->videoWidget()->loadVideo(lastVideoFile);
+        }
+    }
 }
 
 void MainWindow::restoreDockLayout()
@@ -344,11 +431,22 @@ void MainWindow::on_action_ImportVideo_triggered()
     const QString defaultDir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
     const QString startDir = m_settings->value("videoFolder", defaultDir).toString();
 
+    // Build filter from runtime-supported video formats
+    QStringList globPatterns;
+    for (const QString &ext : supportedVideoSuffixes())
+        globPatterns.append(QStringLiteral("*.") + ext);
+    globPatterns.sort(Qt::CaseInsensitive);
+
+    QString videoFilter = tr("Video Files") + QStringLiteral(" (")
+                          + globPatterns.join(QLatin1Char(' '))
+                          + QStringLiteral(")");
+    QString filter = videoFilter + QStringLiteral(";;") + tr("All Files (*)");
+
     const QString fileName = QFileDialog::getOpenFileName(
         this,
         tr("Import Video"),
         startDir,
-        tr("Video Files (*.mp4 *.mov *.m4v *.avi *.mkv *.webm *.wmv *.mpg *.mpeg);;All Files (*)")
+        filter
         );
 
     if (fileName.isEmpty()) {

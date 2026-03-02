@@ -11,6 +11,8 @@
 
 QT_BEGIN_NAMESPACE
 class QCloseEvent;
+class QDragEnterEvent;
+class QDropEvent;
 namespace Ui {
 class MainWindow;
 }
@@ -47,6 +49,8 @@ signals:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
 
 private slots:
     void on_action_Import_triggered();
@@ -134,6 +138,9 @@ private:
 
     // Helper function for importing files
     void importFiles(const QStringList &fileNames, bool showProgress, const QString &baseDir = QString());
+
+    // Handle dropped URLs (shared by dropEvent and VideoWidget signal)
+    void handleDroppedUrls(const QList<QUrl> &urls);
 
     // Helper function for preferences
     void initializePreferences();

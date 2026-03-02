@@ -78,6 +78,7 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
         }
         m_player->setVideoOutput(voObj);
         connect(root, SIGNAL(clicked()), this, SLOT(onPlayPauseClicked()));
+        connect(root, SIGNAL(filesDropped(QVariant)), this, SLOT(onQmlFilesDropped(QVariant)));
         qDebug() << "VideoSurface: setVideoOutput succeeded";
     };
 
@@ -888,6 +889,15 @@ bool VideoWidget::eventFilter(QObject *obj, QEvent *event)
         return true;   // consumed — don't let the child handle it
     }
     return QWidget::eventFilter(obj, event);
+}
+
+void VideoWidget::onQmlFilesDropped(const QVariant &urlsVariant)
+{
+    QList<QUrl> urls;
+    for (const auto &v : urlsVariant.toList())
+        urls.append(v.toUrl());
+    if (!urls.isEmpty())
+        emit urlsDropped(urls);
 }
 
 void VideoWidget::wheelEvent(QWheelEvent *event)
