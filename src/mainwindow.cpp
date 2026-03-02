@@ -871,7 +871,7 @@ void MainWindow::registerBuiltInPlots()
     // use the exact vector you already have…
     QVector<PlotValue> defaults = {
         // Category: GNSS
-        {"GNSS", "Elevation", "m", Qt::black, "GNSS", "z", "altitude"},
+        {"GNSS", "Elevation", "m", QColor(128, 128, 128), "GNSS", "z", "altitude"},
         {"GNSS", "Horizontal speed", "m/s", Qt::red, "GNSS", "velH", "speed"},
         {"GNSS", "Vertical speed", "m/s", Qt::green, "GNSS", "velD", "vertical_speed"},
         {"GNSS", "Total speed", "m/s", Qt::blue, "GNSS", "vel", "speed"},

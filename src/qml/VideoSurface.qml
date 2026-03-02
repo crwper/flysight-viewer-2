@@ -1,8 +1,9 @@
 import QtQuick
 import QtMultimedia
 
-Item {
+Rectangle {
     id: root
+    color: "black"
     signal clicked()
     signal filesDropped(var urls)
 

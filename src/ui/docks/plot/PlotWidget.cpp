@@ -15,6 +15,7 @@
 #include <QPixmap>
 #include <QBitmap>
 #include <QPainter>
+#include <QApplication>
 #include <QDebug>
 #include <QSignalBlocker>
 #include <QNativeGestureEvent>
@@ -186,8 +187,13 @@ PlotWidget::PlotWidget(SessionModel *model,
     connect(&UnitConverter::instance(), &UnitConverter::systemChanged,
             this, &PlotWidget::updatePlot);
 
-    // Apply initial preferences
+    // Apply initial preferences and theme colors
     applyPlotPreferences();
+    applyThemeColors();
+
+    // React to system theme changes at runtime
+    connect(qApp, &QApplication::paletteChanged,
+            this, [this]() { applyThemeColors(); });
 
     // Initialize coalescing timer for dependencyChanged signals
     m_rebuildTimer.setSingleShot(true);
@@ -429,6 +435,15 @@ void PlotWidget::updatePlot()
                 newYAxis->setTicker(ticker);
             }
 
+            // Apply theme-appropriate grid colors
+            QColor gridFg = QApplication::palette().color(QPalette::Text);
+            QColor gridColor = gridFg;
+            gridColor.setAlpha(40);
+            QColor zeroLineColor = gridFg;
+            zeroLineColor.setAlpha(60);
+            newYAxis->grid()->setPen(QPen(gridColor, 0, Qt::DotLine));
+            newYAxis->grid()->setZeroLinePen(QPen(zeroLineColor, 0, Qt::SolidLine));
+
             m_plotValueAxes.insert(plotValueID, newYAxis);
         }
 
@@ -541,6 +556,40 @@ void PlotWidget::applyPlotPreferences()
         yAxis->setLabelFont(axisFont);
         yAxis->setTickLabelFont(axisFont);
     }
+}
+
+void PlotWidget::applyThemeColors()
+{
+    const QPalette pal = QApplication::palette();
+
+    // Background: Base is white in light mode, dark gray in dark mode
+    customPlot->setBackground(QBrush(pal.color(QPalette::Base)));
+
+    // X-axis foreground (the only axis not colored by data line color)
+    const QColor fgColor = pal.color(QPalette::Text);
+    customPlot->xAxis->setLabelColor(fgColor);
+    customPlot->xAxis->setTickLabelColor(fgColor);
+    customPlot->xAxis->setBasePen(QPen(fgColor, 0));
+    customPlot->xAxis->setTickPen(QPen(fgColor, 0));
+    customPlot->xAxis->setSubTickPen(QPen(fgColor, 0));
+
+    // Grid lines: text color at low alpha, adaptive to both modes
+    QColor gridColor = fgColor;
+    gridColor.setAlpha(40);
+    QColor zeroLineColor = fgColor;
+    zeroLineColor.setAlpha(60);
+
+    customPlot->xAxis->grid()->setPen(QPen(gridColor, 0, Qt::DotLine));
+    customPlot->xAxis->grid()->setZeroLinePen(QPen(zeroLineColor, 0, Qt::SolidLine));
+
+    // Apply grid colors to all existing y-axes
+    for (auto it = m_plotValueAxes.constBegin(); it != m_plotValueAxes.constEnd(); ++it) {
+        QCPAxis *yAxis = it.value();
+        yAxis->grid()->setPen(QPen(gridColor, 0, Qt::DotLine));
+        yAxis->grid()->setZeroLinePen(QPen(zeroLineColor, 0, Qt::SolidLine));
+    }
+
+    customPlot->replot(QCustomPlot::rpQueuedReplot);
 }
 
 void PlotWidget::onPreferenceChanged(const QString &key, const QVariant &value)

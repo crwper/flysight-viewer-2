@@ -138,6 +138,7 @@ private:
     void setupPlot();
     void updateXAxisTicker();
     void applyPlotPreferences();
+    void applyThemeColors();
 
     // Utility Methods
     QPen determineGraphPen(const GraphInfo &info, const QString &hoveredSessionId) const;
