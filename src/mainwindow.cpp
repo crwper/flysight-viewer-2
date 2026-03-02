@@ -871,14 +871,14 @@ void MainWindow::registerBuiltInMarkers()
     QVector<MarkerDefinition> defaults = {
         // Category: Reference
         {"Reference", "Exit",                    "Exit",   QColor(34, 131, 196),  SessionKeys::ExitTime,           {}, true},
-        {"Reference", "Manoeuvre start",         "MS",     QColor(213, 136, 43),  SessionKeys::ManoeuvreStartTime, {}, true},
+        {"Reference", "Manoeuvre start",         "Mvr",     QColor(213, 136, 43),  SessionKeys::ManoeuvreStartTime, {}, true},
         {"Reference", "Landing",                 "Land",   QColor(153, 102, 51),  SessionKeys::LandingTime,        {}, true},
         {"Reference", "Analysis start",          "AS",     QColor(179, 41, 179),  SessionKeys::AnalysisStartTime,  {}, true},
         {"Reference", "Analysis end",            "AE",     QColor(179, 41, 179),  SessionKeys::AnalysisEndTime,    {}, true},
 
         // Category: Analysis  (colours match the corresponding GNSS plots)
-        {"Analysis",  "Maximum vertical speed",   "MaxVz", QColor::fromHsl(120, 170, 115), SessionKeys::MaxVelDTime, {{"GNSS", "velD"}}, false},
-        {"Analysis",  "Maximum horizontal speed", "MaxVh", QColor::fromHsl(  0, 170, 128), SessionKeys::MaxVelHTime, {{"GNSS", "velH"}}, false},
+        {"Analysis",  "Maximum vertical speed",   "MaxV", QColor::fromHsl(120, 170, 115), SessionKeys::MaxVelDTime, {{"GNSS", "velD"}}, false},
+        {"Analysis",  "Maximum horizontal speed", "MaxH", QColor::fromHsl(  0, 170, 128), SessionKeys::MaxVelHTime, {{"GNSS", "velH"}}, false},
     };
 
     for (auto &md : defaults)
