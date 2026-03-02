@@ -104,7 +104,48 @@ void MarkerRegistry::registerMarker(const MarkerDefinition& def) {
     emit markersChanged();
 }
 
+void MarkerRegistry::registerMarkers(const QVector<MarkerDefinition> &defs) {
+    for (const MarkerDefinition &def : defs) {
+        m_markers.append(def);
+
+        for (const auto &mk : def.measurements) {
+            QString valueKey = def.attributeKey
+                + QStringLiteral(":")
+                + mk.first
+                + QStringLiteral("/")
+                + mk.second;
+
+            QList<DependencyKey> deps = {
+                DependencyKey::attribute(def.attributeKey),
+                DependencyKey::measurement(mk.first, SessionKeys::Time),
+                DependencyKey::measurement(mk.first, mk.second)
+            };
+
+            SessionData::registerCalculatedAttribute(
+                valueKey,
+                deps,
+                makeInterpolationFunction(def.attributeKey, mk.first, mk.second));
+        }
+    }
+
+    emit markersChanged();
+}
+
 void MarkerRegistry::clearMarkerGroup(const QString &groupId) {
+    // Unregister interpolation-based calculated attributes for each cleared marker
+    for (const MarkerDefinition &def : m_markers) {
+        if (def.groupId == groupId) {
+            for (const auto &mk : def.measurements) {
+                QString valueKey = def.attributeKey
+                    + QStringLiteral(":")
+                    + mk.first
+                    + QStringLiteral("/")
+                    + mk.second;
+                CalculatedValue<QString, QVariant>::unregisterCalculation(valueKey);
+            }
+        }
+    }
+
     m_markers.removeIf([&groupId](const MarkerDefinition &def) {
         return def.groupId == groupId;
     });

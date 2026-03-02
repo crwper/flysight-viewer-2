@@ -101,7 +101,7 @@ QWidget* AltitudeMarkersSettingsPage::createResetSection()
 }
 
 // ---------------------------------------------------------------------------
-// Task 4.3: loadSettings, saveSettings, updateColorButtonStyle
+// Settings persistence
 // ---------------------------------------------------------------------------
 
 void AltitudeMarkersSettingsPage::updateColorButtonStyle(const QColor &color)
@@ -176,16 +176,11 @@ void AltitudeMarkersSettingsPage::saveSettings()
 {
     PreferencesManager &prefs = PreferencesManager::instance();
 
-    // Save units
+    // Collect and validate altitude values from the list
     QString units = (m_unitsComboBox->currentIndex() == 1)
         ? QStringLiteral("Metric")
         : QStringLiteral("Imperial");
-    prefs.setValue(PreferenceKeys::AltitudeMarkersUnits, units);
 
-    // Save colour
-    prefs.setValue(PreferenceKeys::AltitudeMarkersColor, m_currentColor);
-
-    // Collect and validate altitude values from the list
     QList<int> altitudes;
     QSet<int> seen;
 
@@ -214,7 +209,7 @@ void AltitudeMarkersSettingsPage::saveSettings()
 
     std::sort(altitudes.begin(), altitudes.end());
 
-    // Write altitude array to QSettings using beginWriteArray convention
+    // Write altitude array FIRST so that any refresh() triggered below reads current data
     QSettings settings;
     settings.beginWriteArray(QStringLiteral("altitudeMarkers"), altitudes.size());
     for (int i = 0; i < altitudes.size(); ++i) {
@@ -223,12 +218,15 @@ void AltitudeMarkersSettingsPage::saveSettings()
     }
     settings.endArray();
 
-    // Write the size key to trigger preferenceChanged -> AltitudeMarkerManager::refresh()
+    // Now write scalar prefs — each may trigger preferenceChanged -> refresh(),
+    // but the array is already persisted so registerAll() reads the correct data.
+    prefs.setValue(PreferenceKeys::AltitudeMarkersUnits, units);
+    prefs.setValue(PreferenceKeys::AltitudeMarkersColor, m_currentColor);
     prefs.setValue(PreferenceKeys::AltitudeMarkersSize, altitudes.size());
 }
 
 // ---------------------------------------------------------------------------
-// Task 4.4: Interactive slot methods
+// Interactive slots
 // ---------------------------------------------------------------------------
 
 void AltitudeMarkersSettingsPage::onColorButtonClicked()
@@ -283,10 +281,7 @@ void AltitudeMarkersSettingsPage::resetToDefaults()
         return;
     }
 
-    PreferencesManager &prefs = PreferencesManager::instance();
-    prefs.setValue(PreferenceKeys::AltitudeMarkersUnits, QStringLiteral("Imperial"));
-    prefs.setValue(PreferenceKeys::AltitudeMarkersColor, QColor(0x87, 0xCE, 0xEB));
-
+    // Write altitude array FIRST so that any refresh() triggered below reads current data
     QSettings settings;
     const QList<int> defaults = {300, 600, 900};
     settings.beginWriteArray(QStringLiteral("altitudeMarkers"), defaults.size());
@@ -295,6 +290,10 @@ void AltitudeMarkersSettingsPage::resetToDefaults()
         settings.setValue(QStringLiteral("value"), defaults[i]);
     }
     settings.endArray();
+
+    PreferencesManager &prefs = PreferencesManager::instance();
+    prefs.setValue(PreferenceKeys::AltitudeMarkersUnits, QStringLiteral("Imperial"));
+    prefs.setValue(PreferenceKeys::AltitudeMarkersColor, QColor(0x87, 0xCE, 0xEB));
     prefs.setValue(PreferenceKeys::AltitudeMarkersSize, defaults.size());
 
     loadSettings();

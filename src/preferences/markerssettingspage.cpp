@@ -5,6 +5,7 @@
 #include <QMessageBox>
 #include "markerssettingspage.h"
 #include "preferencesmanager.h"
+#include "preferencekeys.h"
 #include "../markerregistry.h"
 
 namespace FlySight {
@@ -215,13 +216,13 @@ void MarkersSettingsPage::updateColorButtonStyle(QPushButton *button, const QCol
 void MarkersSettingsPage::saveMarkerColor(const QString &attributeKey, const QColor &color)
 {
     PreferencesManager &prefs = PreferencesManager::instance();
-    prefs.setValue(markerColorKey(attributeKey), color);
+    prefs.setValue(PreferenceKeys::markerColorKey(attributeKey), color);
 }
 
 QColor MarkersSettingsPage::loadMarkerColor(const QString &attributeKey, const QColor &defaultColor)
 {
     PreferencesManager &prefs = PreferencesManager::instance();
-    QString key = markerColorKey(attributeKey);
+    QString key = PreferenceKeys::markerColorKey(attributeKey);
 
     // Register preference if not already registered
     if (!prefs.getValue(key).isValid()) {
@@ -229,11 +230,6 @@ QColor MarkersSettingsPage::loadMarkerColor(const QString &attributeKey, const Q
     }
 
     return prefs.getValue(key).value<QColor>();
-}
-
-QString MarkersSettingsPage::markerColorKey(const QString &attributeKey)
-{
-    return QString("markers/%1/color").arg(attributeKey);
 }
 
 } // namespace FlySight

@@ -32,6 +32,9 @@ public:
     /// register one marker (called by C++ or future PluginHost)
     void registerMarker(const MarkerDefinition& def);
 
+    /// register a batch of markers, emitting markersChanged() once after all are added
+    void registerMarkers(const QVector<MarkerDefinition> &defs);
+
     /// returns all markers (built-in + plugins). Called by MainWindow.
     QVector<MarkerDefinition> allMarkers() const;
 

@@ -5,7 +5,6 @@
 #include "markerregistry.h"
 #include "preferences/preferencesmanager.h"
 #include "preferences/preferencekeys.h"
-#include <QSettings>
 #include <QDateTime>
 #include <QTimeZone>
 #include <QColor>
@@ -21,7 +20,7 @@ AltitudeMarkerManager::AltitudeMarkerManager(SessionModel *sessionModel, QObject
     PreferencesManager &prefs = PreferencesManager::instance();
     prefs.registerPreference(PreferenceKeys::AltitudeMarkersUnits, QStringLiteral("Imperial"));
     prefs.registerPreference(PreferenceKeys::AltitudeMarkersColor, QColor(0x87, 0xCE, 0xEB));
-    prefs.registerPreference(PreferenceKeys::AltitudeMarkersSize, 8);
+    prefs.registerPreference(PreferenceKeys::AltitudeMarkersSize, 3);
     prefs.registerPreference(PreferenceKeys::altitudeMarkerValueKey(1), 300);
     prefs.registerPreference(PreferenceKeys::altitudeMarkerValueKey(2), 600);
     prefs.registerPreference(PreferenceKeys::altitudeMarkerValueKey(3), 900);
@@ -33,6 +32,20 @@ AltitudeMarkerManager::AltitudeMarkerManager(SessionModel *sessionModel, QObject
             refresh();
         }
     });
+}
+
+AltitudeMarkerManager::~AltitudeMarkerManager()
+{
+    // Unregister all calculated attributes from every active session so that
+    // the global CalculatedValue registry and per-session caches stay clean.
+    for (const QString &key : std::as_const(m_registeredKeys)) {
+        for (int row = 0; row < m_sessionModel->rowCount(); ++row) {
+            m_sessionModel->sessionRef(row).unregisterCalculatedAttribute(key);
+        }
+    }
+
+    // Remove the marker definitions from the registry.
+    MarkerRegistry::instance()->clearMarkerGroup(QStringLiteral("altitude"));
 }
 
 void AltitudeMarkerManager::registerAll()
@@ -65,7 +78,8 @@ void AltitudeMarkerManager::registerAll()
     QString unitSuffix = isImperial ? QStringLiteral("FT") : QStringLiteral("M");
     QString unitLabel  = isImperial ? QStringLiteral("ft") : QStringLiteral("m");
 
-    // Step 4 & 5: For each altitude, register a calculated attribute and a MarkerDefinition
+    // Step 4 & 5: For each altitude, register a calculated attribute and build a MarkerDefinition
+    QVector<MarkerDefinition> defs;
     for (int value : altitudes) {
         QString attributeKey = QStringLiteral("_ALTITUDE_%1_%2").arg(value).arg(unitSuffix);
         QString displayName  = QStringLiteral("%1 %2 AGL").arg(value).arg(unitLabel);
@@ -128,7 +142,7 @@ void AltitudeMarkerManager::registerAll()
                     qint64(lastCrossingTime * 1000.0), QTimeZone::utc());
             });
 
-        // Register the MarkerDefinition
+        // Build the MarkerDefinition
         MarkerDefinition def;
         def.category     = QStringLiteral("Altitude");
         def.displayName  = displayName;
@@ -138,16 +152,20 @@ void AltitudeMarkerManager::registerAll()
         def.measurements = {};
         def.editable     = false;
         def.groupId      = QStringLiteral("altitude");
+        defs.append(def);
 
-        MarkerRegistry::instance()->registerMarker(def);
-
-        // Step 6: Write the marker color to QSettings and track the key
-        QSettings().setValue(
+        // Step 6: Write the shared marker colour so plot rendering finds it via the
+        // standard per-marker key lookup (goes through PreferencesManager like all
+        // other marker colour writes).
+        PreferencesManager::instance().setValue(
             PreferenceKeys::markerColorKey(attributeKey),
             color);
 
         m_registeredKeys.append(attributeKey);
     }
+
+    // Register all markers in one call so markersChanged() fires only once
+    MarkerRegistry::instance()->registerMarkers(defs);
 }
 
 void AltitudeMarkerManager::refresh()

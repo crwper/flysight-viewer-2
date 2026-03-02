@@ -38,8 +38,6 @@ private:
     void updateColorButtonStyle(QPushButton *button, const QColor &color);
     void saveMarkerColor(const QString &attributeKey, const QColor &color);
     QColor loadMarkerColor(const QString &attributeKey, const QColor &defaultColor);
-
-    static QString markerColorKey(const QString &attributeKey);
 };
 
 } // namespace FlySight

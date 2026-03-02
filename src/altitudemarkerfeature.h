@@ -14,6 +14,7 @@ class AltitudeMarkerManager : public QObject
 
 public:
     explicit AltitudeMarkerManager(SessionModel *sessionModel, QObject *parent = nullptr);
+    ~AltitudeMarkerManager() override;
 
     void registerAll();
     void refresh();
