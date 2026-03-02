@@ -290,20 +290,33 @@ void PlotWidget::zoomToExtent()
         if (!offset.has_value())
             continue;  // session lacks reference marker value; skip it
 
-        QVector<double> xData = const_cast<SessionData &>(session)
-            .getMeasurement(QStringLiteral("GNSS"), m_xVariable);
-        if (xData.isEmpty())
-            continue;
+        // Try analysis range first
+        auto analysisStart = markerOffsetUtcSeconds(session, SessionKeys::AnalysisStartTime);
+        auto analysisEnd   = markerOffsetUtcSeconds(session, SessionKeys::AnalysisEndTime);
 
-        if (offset.value() != 0.0) {
-            for (double &x : xData)
-                x -= offset.value();
+        if (analysisStart.has_value() && analysisEnd.has_value()) {
+            double aMin = analysisStart.value() - offset.value();
+            double aMax = analysisEnd.value()   - offset.value();
+            minX = std::min(minX, aMin);
+            maxX = std::max(maxX, aMax);
+            hasData = true;
+        } else {
+            // Fallback: use full extent of GNSS x-variable data
+            QVector<double> xData = const_cast<SessionData &>(session)
+                .getMeasurement(QStringLiteral("GNSS"), m_xVariable);
+            if (xData.isEmpty())
+                continue;
+
+            if (offset.value() != 0.0) {
+                for (double &x : xData)
+                    x -= offset.value();
+            }
+
+            auto [minIt, maxIt] = std::minmax_element(xData.begin(), xData.end());
+            minX = std::min(minX, *minIt);
+            maxX = std::max(maxX, *maxIt);
+            hasData = true;
         }
-
-        auto [minIt, maxIt] = std::minmax_element(xData.begin(), xData.end());
-        minX = std::min(minX, *minIt);
-        maxX = std::max(maxX, *maxIt);
-        hasData = true;
     }
 
     if (!hasData || minX >= maxX)
