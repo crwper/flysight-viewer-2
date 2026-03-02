@@ -187,6 +187,17 @@ void Calculations::registerAttributeCalculations()
         return std::nullopt;
     });
 
+    // Video sync time: defaults to exit time when not explicitly set by user
+    SessionData::registerCalculatedAttribute(
+        SessionKeys::SyncTime,
+        { DependencyKey::attribute(SessionKeys::ExitTime) },
+        [](SessionData& session) -> std::optional<QVariant> {
+            QVariant exitVar = session.getAttribute(SessionKeys::ExitTime);
+            if (!exitVar.canConvert<QDateTime>())
+                return std::nullopt;
+            return exitVar;
+        });
+
     // Manoeuvre start time: walk backward from the last 10 m/s crossing
     // to the local minimum in vertical speed
     SessionData::registerCalculatedAttribute(

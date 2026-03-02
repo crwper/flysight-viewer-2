@@ -25,6 +25,7 @@
 #include "plottool/zoomtool.h"
 #include "plottool/selecttool.h"
 #include "plottool/setexittool.h"
+#include "plottool/setsynctool.h"
 #include "plottool/setgroundtool.h"
 #include "plottool/measuretool.h"
 #include "plotutils.h"
@@ -125,6 +126,7 @@ PlotWidget::PlotWidget(SessionModel *model,
     m_measureTool = std::make_unique<MeasureTool>(ctx);
     m_selectTool = std::make_unique<SelectTool>(ctx);
     m_setExitTool = std::make_unique<SetExitTool>(ctx);
+    m_setSyncTool = std::make_unique<SetSyncTool>(ctx);
     m_setGroundTool = std::make_unique<SetGroundTool>(ctx);
 
     m_currentTool = m_panTool.get();
@@ -244,6 +246,9 @@ void PlotWidget::setCurrentTool(Tool tool)
         break;
     case Tool::SetExit:
         m_currentTool = m_setExitTool.get();
+        break;
+    case Tool::SetSync:
+        m_currentTool = m_setSyncTool.get();
         break;
     case Tool::SetGround:
         m_currentTool = m_setGroundTool.get();

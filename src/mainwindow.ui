@@ -60,6 +60,7 @@
     <addaction name="separator"/>
     <addaction name="action_Select"/>
     <addaction name="action_SetExit"/>
+    <addaction name="action_SetSync"/>
     <addaction name="action_SetGround"/>
    </widget>
    <widget class="QMenu" name="menuWindow">
@@ -185,6 +186,17 @@
    </property>
    <property name="shortcut">
     <string>X</string>
+   </property>
+  </action>
+  <action name="action_SetSync">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Set S&amp;ync</string>
+   </property>
+   <property name="shortcut">
+    <string>Y</string>
    </property>
   </action>
   <action name="action_SetGround">

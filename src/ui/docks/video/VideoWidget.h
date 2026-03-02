@@ -71,7 +71,7 @@ private slots:
     void onErrorOccurred(QMediaPlayer::Error error);
 #endif
 
-    void onMarkExitClicked();
+    void onMarkSyncClicked();
     void onSelectedSessionChanged(int index);
     void rebuildSessionSelector();
     void onDependencyChanged(const QString &sessionId, const DependencyKey &key);
@@ -85,13 +85,13 @@ private:
     void setControlsEnabled(bool enabled);
 
     QString selectedSessionId() const;
-    void updateMarkExitEnabled();
+    void updateMarkSyncEnabled();
 
     void seekVideo(qint64 positionMs);
     void cancelPendingSeek();
 
     // Drives CursorModel's "video" cursor while the video is synced.
-    std::optional<double> syncedExitUtcSeconds() const;
+    std::optional<double> syncedSyncUtcSeconds() const;
     void updateVideoCursorSyncState();
     void updateVideoCursorFromPositionMs(qint64 positionMs);
 
@@ -117,7 +117,7 @@ private:
     QLabel *m_sessionLabel = nullptr;
     QComboBox *m_sessionCombo = nullptr;
 
-    QPushButton *m_markExitButton = nullptr;
+    QPushButton *m_markSyncButton = nullptr;
 
     QLabel *m_frameAnchorLabel = nullptr;
     QLabel *m_utcAnchorLabel = nullptr;

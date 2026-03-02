@@ -721,6 +721,14 @@ void MainWindow::on_action_SetExit_triggered()
     }
 }
 
+void MainWindow::on_action_SetSync_triggered()
+{
+    auto* plotFeature = findFeature<PlotDockFeature>();
+    if (plotFeature && plotFeature->plotWidget()) {
+        plotFeature->plotWidget()->setCurrentTool(PlotWidget::Tool::SetSync);
+    }
+}
+
 void MainWindow::on_action_SetGround_triggered()
 {
     auto* plotFeature = findFeature<PlotDockFeature>();
@@ -860,6 +868,9 @@ void MainWindow::onPlotWidgetToolChanged(PlotWidget::Tool t)
     case PlotWidget::Tool::SetExit:
         ui->action_SetExit->setChecked(true);
         break;
+    case PlotWidget::Tool::SetSync:
+        ui->action_SetSync->setChecked(true);
+        break;
     case PlotWidget::Tool::SetGround:
         ui->action_SetGround->setChecked(true);
         break;
@@ -871,6 +882,7 @@ void MainWindow::registerBuiltInMarkers()
     QVector<MarkerDefinition> defaults = {
         // Category: Reference
         {"Reference", "Exit",                    "Exit",   QColor(34, 131, 196),  SessionKeys::ExitTime,           {}, true},
+        {"Reference", "Video sync",              "Sync",   QColor(0, 175, 175),   SessionKeys::SyncTime,           {}, true},
         {"Reference", "Manoeuvre start",         "Mvr",     QColor(213, 136, 43),  SessionKeys::ManoeuvreStartTime, {}, true},
         {"Reference", "Landing",                 "Land",   QColor(153, 102, 51),  SessionKeys::LandingTime,        {}, true},
         {"Reference", "Analysis start",          "AS",     QColor(179, 41, 179),  SessionKeys::AnalysisStartTime,  {}, true},
@@ -1216,6 +1228,7 @@ void MainWindow::setupPlotTools()
     toolActionGroup->addAction(ui->action_Measure);
     toolActionGroup->addAction(ui->action_Select);
     toolActionGroup->addAction(ui->action_SetExit);
+    toolActionGroup->addAction(ui->action_SetSync);
     toolActionGroup->addAction(ui->action_SetGround);
 
     // Set Pan as the default checked tool

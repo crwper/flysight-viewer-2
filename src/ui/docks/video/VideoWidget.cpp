@@ -138,7 +138,7 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
     m_positionSlider->setRange(0, 0);
     layout->addWidget(m_positionSlider);
 
-    // Sync controls (selector + Mark Exit + legacy tools)
+    // Sync controls (selector + Mark Sync)
     auto *syncLayout = new QVBoxLayout();
     syncLayout->setContentsMargins(0, 0, 0, 0);
     syncLayout->setSpacing(4);
@@ -151,12 +151,12 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
     syncTopRow->addWidget(m_sessionLabel);
 
     m_sessionCombo = new QComboBox(this);
-    m_sessionCombo->setToolTip(tr("Select which visible session to use for Mark Exit sync."));
+    m_sessionCombo->setToolTip(tr("Select which visible session to use for Mark Sync."));
     syncTopRow->addWidget(m_sessionCombo, 1);
 
-    m_markExitButton = new QPushButton(tr("Mark Exit"), this);
-    m_markExitButton->setToolTip(tr("Sync the current video frame to the selected session's Exit Time."));
-    syncTopRow->addWidget(m_markExitButton);
+    m_markSyncButton = new QPushButton(tr("Mark Sync"), this);
+    m_markSyncButton->setToolTip(tr("Sync the current video frame to the selected session's Sync Time."));
+    syncTopRow->addWidget(m_markSyncButton);
 
     syncTopRow->addStretch(1);
 
@@ -214,8 +214,8 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
     connect(m_positionSlider, &QSlider::sliderMoved,
             this, &VideoWidget::onSliderMoved);
 
-    connect(m_markExitButton, &QPushButton::clicked,
-            this, &VideoWidget::onMarkExitClicked);
+    connect(m_markSyncButton, &QPushButton::clicked,
+            this, &VideoWidget::onMarkSyncClicked);
 
     if (m_sessionCombo) {
         connect(m_sessionCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -320,7 +320,7 @@ void VideoWidget::loadVideo(const QString &filePath)
         onDurationChanged(0);
         onPositionChanged(0);
         updatePlayPauseButton();
-        updateMarkExitEnabled();
+        updateMarkSyncEnabled();
         return;
     }
 
@@ -334,7 +334,7 @@ void VideoWidget::loadVideo(const QString &filePath)
 
     setControlsEnabled(true);
     updatePlayPauseButton();
-    updateMarkExitEnabled();
+    updateMarkSyncEnabled();
 }
 
 void VideoWidget::onPlayPauseClicked()
@@ -614,7 +614,7 @@ void VideoWidget::onErrorOccurred(QMediaPlayer::Error error)
 }
 #endif
 
-void VideoWidget::onMarkExitClicked()
+void VideoWidget::onMarkSyncClicked()
 {
     if (!m_player)
         return;
@@ -633,7 +633,7 @@ void VideoWidget::onMarkExitClicked()
 void VideoWidget::onSelectedSessionChanged(int index)
 {
     Q_UNUSED(index);
-    updateMarkExitEnabled();
+    updateMarkSyncEnabled();
     updateVideoCursorSyncState();
 }
 
@@ -650,7 +650,7 @@ void VideoWidget::rebuildSessionSelector()
     if (!m_sessionModel) {
         m_sessionCombo->addItem(tr("No sessions"), QString());
         m_sessionCombo->setEnabled(false);
-        updateMarkExitEnabled();
+        updateMarkSyncEnabled();
         updateSyncLabels();
         return;
     }
@@ -687,7 +687,7 @@ void VideoWidget::rebuildSessionSelector()
         m_sessionCombo->setCurrentIndex(selectIndex >= 0 ? selectIndex : 0);
     }
 
-    updateMarkExitEnabled();
+    updateMarkSyncEnabled();
     updateSyncLabels();
 }
 
@@ -699,15 +699,15 @@ QString VideoWidget::selectedSessionId() const
     return m_sessionCombo->currentData().toString();
 }
 
-void VideoWidget::updateMarkExitEnabled()
+void VideoWidget::updateMarkSyncEnabled()
 {
-    if (!m_markExitButton)
+    if (!m_markSyncButton)
         return;
 
     const bool videoLoaded = !m_filePath.isEmpty();
     const bool playbackEnabled = (m_positionSlider && m_positionSlider->isEnabled());
 
-    m_markExitButton->setEnabled(videoLoaded && playbackEnabled);
+    m_markSyncButton->setEnabled(videoLoaded && playbackEnabled);
 }
 
 QString VideoWidget::formatTimeMs(qint64 ms)
@@ -767,7 +767,7 @@ void VideoWidget::updateSyncLabels()
         return;
 
     const bool hasVideoAnchor = m_anchorVideoSeconds.has_value();
-    const auto exitUtc        = syncedExitUtcSeconds();
+    const auto exitUtc        = syncedSyncUtcSeconds();
 
     const QString frameText = hasVideoAnchor
         ? formatTimeMs(static_cast<qint64>(*m_anchorVideoSeconds * 1000.0))
@@ -786,7 +786,7 @@ void VideoWidget::updateSyncLabels()
     if (hasVideoAnchor && exitUtc.has_value())
         m_syncStatusLabel->setText(tr("Synced"));
     else if (hasVideoAnchor)
-        m_syncStatusLabel->setText(tr("Waiting for exit time"));
+        m_syncStatusLabel->setText(tr("Waiting for sync time"));
     else
         m_syncStatusLabel->setText(tr("Not synced"));
 
@@ -801,10 +801,10 @@ void VideoWidget::setControlsEnabled(bool enabled)
 
     if (m_positionSlider)    m_positionSlider->setEnabled(enabled);
 
-    updateMarkExitEnabled();
+    updateMarkSyncEnabled();
 }
 
-std::optional<double> VideoWidget::syncedExitUtcSeconds() const
+std::optional<double> VideoWidget::syncedSyncUtcSeconds() const
 {
     const QString sessionId = selectedSessionId();
     if (sessionId.isEmpty() || !m_sessionModel)
@@ -815,7 +815,7 @@ std::optional<double> VideoWidget::syncedExitUtcSeconds() const
         return std::nullopt;
 
     SessionData &session = m_sessionModel->sessionRef(row);
-    const QVariant v = session.getAttribute(SessionKeys::ExitTime);
+    const QVariant v = session.getAttribute(SessionKeys::SyncTime);
     if (!v.canConvert<QDateTime>())
         return std::nullopt;
 
@@ -831,7 +831,7 @@ void VideoWidget::updateVideoCursorSyncState()
     if (!m_cursorModel)
         return;
 
-    const bool synced = m_anchorVideoSeconds.has_value() && syncedExitUtcSeconds().has_value();
+    const bool synced = m_anchorVideoSeconds.has_value() && syncedSyncUtcSeconds().has_value();
     if (!synced) {
         m_cursorModel->setCursorActive(QStringLiteral("video"), false);
         return;
@@ -858,7 +858,7 @@ void VideoWidget::updateVideoCursorFromPositionMs(qint64 positionMs)
     if (!m_cursorModel || !m_anchorVideoSeconds.has_value())
         return;
 
-    const auto exitUtc = syncedExitUtcSeconds();
+    const auto exitUtc = syncedSyncUtcSeconds();
     if (!exitUtc.has_value())
         return;
 
@@ -872,7 +872,7 @@ void VideoWidget::onDependencyChanged(const QString &sessionId, const Dependency
 {
     if (key.type != DependencyKey::Type::Attribute)
         return;
-    if (key.attributeKey != SessionKeys::ExitTime)
+    if (key.attributeKey != SessionKeys::SyncTime)
         return;
 
     // Only update if the changed session matches the selected one

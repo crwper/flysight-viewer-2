@@ -23,6 +23,7 @@ namespace SessionKeys {
     constexpr char TimeFitA[] = "_TIME_FIT_A";
     constexpr char TimeFitB[] = "_TIME_FIT_B";
     constexpr char ExitTime[] = "_EXIT_TIME";
+    constexpr char SyncTime[] = "_SYNC_TIME";
     constexpr char StartTime[] = "_START_TIME";
     constexpr char Duration[] = "_DURATION";
     constexpr char GroundElev[] = "_GROUND_ELEV";

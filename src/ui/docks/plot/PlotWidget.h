@@ -25,6 +25,7 @@ class PanTool;
 class ZoomTool;
 class SelectTool;
 class SetExitTool;
+class SetSyncTool;
 class SetGroundTool;
 class MeasureTool;
 class PlotViewSettingsModel;
@@ -45,6 +46,7 @@ public:
         Measure,
         Select,
         SetExit,
+        SetSync,
         SetGround
     };
 
@@ -184,6 +186,7 @@ private:
     std::unique_ptr<ZoomTool> m_zoomTool;
     std::unique_ptr<SelectTool> m_selectTool;
     std::unique_ptr<SetExitTool> m_setExitTool;
+    std::unique_ptr<SetSyncTool> m_setSyncTool;
     std::unique_ptr<SetGroundTool> m_setGroundTool;
     std::unique_ptr<MeasureTool> m_measureTool;
 

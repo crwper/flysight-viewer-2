@@ -252,6 +252,7 @@ set(PROJECT_SOURCES
   plottool/selecttool.cpp    plottool/selecttool.h
   plottool/zoomtool.h
   plottool/setexittool.h     plottool/setexittool.cpp
+  plottool/setsynctool.h     plottool/setsynctool.cpp
   plottool/setgroundtool.h   plottool/setgroundtool.cpp
   plottool/measuretool.h     plottool/measuretool.cpp
   measuremodel.h
