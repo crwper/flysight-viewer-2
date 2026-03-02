@@ -848,15 +848,15 @@ void MainWindow::registerBuiltInMarkers()
 {
     QVector<MarkerDefinition> defaults = {
         // Category: Reference
-        {"Reference", "Exit",                    "Exit",   QColor(0, 122, 204), SessionKeys::ExitTime,           {}, true},
-        {"Reference", "Manoeuvre start",         "MS",     QColor(255, 140, 0), SessionKeys::ManoeuvreStartTime, {}, true},
-        {"Reference", "Landing",                 "Land",   QColor(153, 102, 51), SessionKeys::LandingTime,        {}, true},
-        {"Reference", "Analysis start",          "AS",     QColor(128, 0, 128),  SessionKeys::AnalysisStartTime,  {}, true},
-        {"Reference", "Analysis end",            "AE",     QColor(128, 0, 128),  SessionKeys::AnalysisEndTime,    {}, true},
+        {"Reference", "Exit",                    "Exit",   QColor(34, 131, 196),  SessionKeys::ExitTime,           {}, true},
+        {"Reference", "Manoeuvre start",         "MS",     QColor(213, 136, 43),  SessionKeys::ManoeuvreStartTime, {}, true},
+        {"Reference", "Landing",                 "Land",   QColor(153, 102, 51),  SessionKeys::LandingTime,        {}, true},
+        {"Reference", "Analysis start",          "AS",     QColor(179, 41, 179),  SessionKeys::AnalysisStartTime,  {}, true},
+        {"Reference", "Analysis end",            "AE",     QColor(179, 41, 179),  SessionKeys::AnalysisEndTime,    {}, true},
 
-        // Category: Analysis
-        {"Analysis",  "Maximum vertical speed",   "MaxVz", Qt::green,           SessionKeys::MaxVelDTime, {{"GNSS", "velD"}}, false},
-        {"Analysis",  "Maximum horizontal speed", "MaxVh", Qt::red,            SessionKeys::MaxVelHTime, {{"GNSS", "velH"}}, false},
+        // Category: Analysis  (colours match the corresponding GNSS plots)
+        {"Analysis",  "Maximum vertical speed",   "MaxVz", QColor::fromHsl(120, 170, 115), SessionKeys::MaxVelDTime, {{"GNSS", "velD"}}, false},
+        {"Analysis",  "Maximum horizontal speed", "MaxVh", QColor::fromHsl(  0, 170, 128), SessionKeys::MaxVelHTime, {{"GNSS", "velH"}}, false},
     };
 
     for (auto &md : defaults)
@@ -868,54 +868,72 @@ void MainWindow::registerBuiltInPlots()
     // Angular spread for grouped colours
     const int group_a = 40;
 
-    // use the exact vector you already have…
+    // ── Muted palette: comfortable on both light and dark backgrounds ──
+    const int S    = 170;      // Standard saturation  (was 255)
+    const int S_dk = 150;      // Deep / accuracy-plot saturation
+
+    // Per-hue-family lightness (equalises perceived brightness)
+    const int L_w  = 128;      // Warm hues:  red, orange, pink     (H ~ 320-50)
+    const int L_c  = 115;      // Cool hues:  green, teal           (H ~ 60-180)
+    const int L_b  = 145;      // Blue hues:  blue, violet, magenta (H ~ 200-300)
+
+    // Deep variant lightness (was ~64 — invisible on dark backgrounds)
+    const int L_dw = 100;      // Deep warm
+    const int L_dc =  90;      // Deep cool
+    const int L_db = 130;      // Deep blue
+
+    // Neutral grays
+    const int L_g  = 120;      // Primary gray  (was 64)
+    const int L_gl = 145;      // Lighter gray  (was 128)
+
     QVector<PlotValue> defaults = {
-        // Category: GNSS
-        {"GNSS", "Elevation", "m", QColor(128, 128, 128), "GNSS", "z", "altitude"},
-        {"GNSS", "Horizontal speed", "m/s", Qt::red, "GNSS", "velH", "speed"},
-        {"GNSS", "Vertical speed", "m/s", Qt::green, "GNSS", "velD", "vertical_speed"},
-        {"GNSS", "Total speed", "m/s", Qt::blue, "GNSS", "vel", "speed"},
-        {"GNSS", "Vertical acceleration", "m/s^2", Qt::green, "GNSS", "accD", "acceleration"},
-        {"GNSS", "Horizontal accuracy", "m", Qt::darkRed, "GNSS", "hAcc", "distance"},
-        {"GNSS", "Vertical accuracy", "m", Qt::darkGreen, "GNSS", "vAcc", "distance"},
-        {"GNSS", "Speed accuracy", "m/s", Qt::darkBlue, "GNSS", "sAcc", "speed"},
-        {"GNSS", "Number of satellites", "", Qt::darkMagenta, "GNSS", "numSV", "count"},
+        // Category: GNSS  (hues preserved from original Qt named colours)
+        {"GNSS", "Elevation",             "m",     QColor::fromHsl(  0, 0,    135),  "GNSS", "z",     "altitude"},
+        {"GNSS", "Horizontal speed",      "m/s",   QColor::fromHsl(  0, S,    L_w),  "GNSS", "velH",  "speed"},
+        {"GNSS", "Vertical speed",        "m/s",   QColor::fromHsl(120, S,    L_c),  "GNSS", "velD",  "vertical_speed"},
+        {"GNSS", "Total speed",           "m/s",   QColor::fromHsl(240, S,    L_b),  "GNSS", "vel",   "speed"},
+        {"GNSS", "Vertical acceleration", "m/s^2", QColor::fromHsl(120, S,    L_c),  "GNSS", "accD",  "acceleration"},
+        {"GNSS", "Horizontal accuracy",   "m",     QColor::fromHsl(  0, S_dk, L_dw), "GNSS", "hAcc",  "distance"},
+        {"GNSS", "Vertical accuracy",     "m",     QColor::fromHsl(120, S_dk, L_dc), "GNSS", "vAcc",  "distance"},
+        {"GNSS", "Speed accuracy",        "m/s",   QColor::fromHsl(240, S_dk, L_db), "GNSS", "sAcc",  "speed"},
+        {"GNSS", "Number of satellites",  "",      QColor::fromHsl(300, S_dk, L_db), "GNSS", "numSV", "count"},
 
-        // Category: IMU
-        {"IMU", "Acceleration X", "g", QColor::fromHsl(360 - group_a, 255, 128), "IMU", "ax", "acceleration"},
-        {"IMU", "Acceleration Y", "g", QColor::fromHsl(0, 255, 128), "IMU", "ay", "acceleration"},
-        {"IMU", "Acceleration Z", "g", QColor::fromHsl(group_a, 255, 128), "IMU", "az", "acceleration"},
-        {"IMU", "Total acceleration", "g", QColor::fromHsl(0, 255, 128), "IMU", "aTotal", "acceleration"},
+        // Category: IMU · Acceleration (red group, H ≈ 0°)
+        {"IMU", "Acceleration X",     "g", QColor::fromHsl(360 - group_a, S, L_w), "IMU", "ax",     "acceleration"},
+        {"IMU", "Acceleration Y",     "g", QColor::fromHsl(  0,           S, L_w), "IMU", "ay",     "acceleration"},
+        {"IMU", "Acceleration Z",     "g", QColor::fromHsl(group_a,       S, L_w), "IMU", "az",     "acceleration"},
+        {"IMU", "Total acceleration", "g", QColor::fromHsl(  0,           S, L_w), "IMU", "aTotal", "acceleration"},
 
-        {"IMU", "Rotation X", "deg/s", QColor::fromHsl(120 - group_a, 255, 128), "IMU", "wx", "rotation"},
-        {"IMU", "Rotation Y", "deg/s", QColor::fromHsl(120, 255, 128), "IMU", "wy", "rotation"},
-        {"IMU", "Rotation Z", "deg/s", QColor::fromHsl(120 + group_a, 255, 128), "IMU", "wz", "rotation"},
-        {"IMU", "Total rotation", "deg/s", QColor::fromHsl(120, 255, 128), "IMU", "wTotal", "rotation"},
+        // Category: IMU · Rotation (green group, H ≈ 120°)
+        {"IMU", "Rotation X",     "deg/s", QColor::fromHsl(120 - group_a, S, L_c), "IMU", "wx",     "rotation"},
+        {"IMU", "Rotation Y",     "deg/s", QColor::fromHsl(120,           S, L_c), "IMU", "wy",     "rotation"},
+        {"IMU", "Rotation Z",     "deg/s", QColor::fromHsl(120 + group_a, S, L_c), "IMU", "wz",     "rotation"},
+        {"IMU", "Total rotation", "deg/s", QColor::fromHsl(120,           S, L_c), "IMU", "wTotal", "rotation"},
 
-        {"IMU", "Temperature", QString::fromUtf8("\302\260C"), QColor::fromHsl(45, 255, 128), "IMU", "temperature", "temperature"},
+        {"IMU", "Temperature", QString::fromUtf8("\302\260C"), QColor::fromHsl(45, S, L_w), "IMU", "temperature", "temperature"},
 
-        // Category: Magnetometer
-        {"Magnetometer", "Magnetic field X", "gauss", QColor::fromHsl(240 - group_a, 255, 128), "MAG", "x", "magnetic_field"},
-        {"Magnetometer", "Magnetic field Y", "gauss", QColor::fromHsl(240, 255, 128), "MAG", "y", "magnetic_field"},
-        {"Magnetometer", "Magnetic field Z", "gauss", QColor::fromHsl(240 + group_a, 255, 128), "MAG", "z", "magnetic_field"},
-        {"Magnetometer", "Total magnetic field", "gauss", QColor::fromHsl(240, 255, 128), "MAG", "total", "magnetic_field"},
+        // Category: Magnetometer (blue group, H ≈ 240°)
+        {"Magnetometer", "Magnetic field X",     "gauss", QColor::fromHsl(240 - group_a, S, L_b), "MAG", "x",     "magnetic_field"},
+        {"Magnetometer", "Magnetic field Y",     "gauss", QColor::fromHsl(240,           S, L_b), "MAG", "y",     "magnetic_field"},
+        {"Magnetometer", "Magnetic field Z",     "gauss", QColor::fromHsl(240 + group_a, S, L_b), "MAG", "z",     "magnetic_field"},
+        {"Magnetometer", "Total magnetic field", "gauss", QColor::fromHsl(240,           S, L_b), "MAG", "total", "magnetic_field"},
 
-        {"Magnetometer", "Temperature", QString::fromUtf8("\302\260C"), QColor::fromHsl(135, 255, 128), "MAG", "temperature", "temperature"},
+        {"Magnetometer", "Temperature", QString::fromUtf8("\302\260C"), QColor::fromHsl(135, S, L_c), "MAG", "temperature", "temperature"},
 
         // Category: Barometer
-        {"Barometer", "Air pressure", "Pa", QColor::fromHsl(0, 0, 64), "BARO", "pressure", "pressure"},
-        {"Barometer", "Temperature", QString::fromUtf8("\302\260C"), QColor::fromHsl(225, 255, 128), "BARO", "temperature", "temperature"},
+        {"Barometer", "Air pressure", "Pa",                              QColor::fromHsl(  0, 0, L_g), "BARO", "pressure",    "pressure"},
+        {"Barometer", "Temperature",  QString::fromUtf8("\302\260C"),    QColor::fromHsl(225, S, L_b), "BARO", "temperature", "temperature"},
 
         // Category: Humidity
-        {"Humidity", "Humidity", "%", QColor::fromHsl(0, 0, 128), "HUM", "humidity", "percentage"},
-        {"Humidity", "Temperature", QString::fromUtf8("\302\260C"), QColor::fromHsl(315, 255, 128), "HUM", "temperature", "temperature"},
+        {"Humidity", "Humidity",    "%",                                 QColor::fromHsl(  0, 0,  L_gl), "HUM", "humidity",    "percentage"},
+        {"Humidity", "Temperature", QString::fromUtf8("\302\260C"),      QColor::fromHsl(315, S,  L_b),  "HUM", "temperature", "temperature"},
 
         // Category: Battery
-        {"Battery", "Battery voltage", "V", QColor::fromHsl(30, 255, 128), "VBAT", "voltage", "voltage"},
+        {"Battery", "Battery voltage", "V", QColor::fromHsl(30, S, L_w), "VBAT", "voltage", "voltage"},
 
         // Category: GNSS time
-        {"GNSS time", "Time of week", "s", QColor::fromHsl(0, 0, 64), "TIME", "tow", "time"},
-        {"GNSS time", "Week number", "", QColor::fromHsl(0, 0, 128), "TIME", "week", "count"},
+        {"GNSS time", "Time of week", "s", QColor::fromHsl(0, 0, L_g),  "TIME", "tow",  "time"},
+        {"GNSS time", "Week number",  "",  QColor::fromHsl(0, 0, L_gl), "TIME", "week", "count"},
 
     };
 
