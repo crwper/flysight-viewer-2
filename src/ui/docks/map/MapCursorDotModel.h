@@ -68,6 +68,9 @@ private:
     QTimer m_rebuildTimer;
     QVector<Dot> m_dots;
 
+    double m_largeDotSize = 10.0;
+    double m_smallDotSize = 6.0;
+
     static QColor colorForSession(const QString &sessionId);
 };
 

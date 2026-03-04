@@ -18,7 +18,8 @@ void MapPreferencesBridge::loadAllPreferences()
     auto &prefs = PreferencesManager::instance();
 
     m_lineThickness = prefs.getValue(PreferenceKeys::MapLineThickness).toDouble();
-    m_markerSize = prefs.getValue(PreferenceKeys::MapMarkerSize).toInt();
+    m_largeDotSize = prefs.getValue(PreferenceKeys::MapLargeDotSize).toInt();
+    m_smallDotSize = prefs.getValue(PreferenceKeys::MapSmallDotSize).toInt();
     m_trackOpacity = prefs.getValue(PreferenceKeys::MapTrackOpacity).toDouble();
     m_mapTypeIndex = prefs.getValue(PreferenceKeys::MapType).toInt();
 }
@@ -29,9 +30,13 @@ void MapPreferencesBridge::onPreferenceChanged(const QString &key, const QVarian
         m_lineThickness = value.toDouble();
         emit lineThicknessChanged();
     }
-    else if (key == PreferenceKeys::MapMarkerSize) {
-        m_markerSize = value.toInt();
-        emit markerSizeChanged();
+    else if (key == PreferenceKeys::MapLargeDotSize) {
+        m_largeDotSize = value.toInt();
+        emit largeDotSizeChanged();
+    }
+    else if (key == PreferenceKeys::MapSmallDotSize) {
+        m_smallDotSize = value.toInt();
+        emit smallDotSizeChanged();
     }
     else if (key == PreferenceKeys::MapTrackOpacity) {
         m_trackOpacity = value.toDouble();

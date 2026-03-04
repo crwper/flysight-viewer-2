@@ -117,7 +117,7 @@ var hoverMarker = null;        // google.maps.Marker for instant JS hover
 // Preference defaults
 var prefLineThickness = 3.0;
 var prefTrackOpacity = 0.85;
-var prefMarkerSize = 10;
+var prefLargeDotSize = 10;
 
 // DPI compensation: QWebEngineView applies setZoomFactor(1/dpr) to fix
 // oversized Google Maps controls.  After that, window.devicePixelRatio
@@ -371,7 +371,7 @@ function showHoverMarker(lat, lon, sessionId) {
                 fillOpacity: 1.0,
                 strokeColor: "#ffffff",
                 strokeWeight: 2 * dpiScale,
-                scale: (prefMarkerSize / 2) * dpiScale
+                scale: (prefLargeDotSize / 2) * dpiScale
             },
             zIndex: 30,
             clickable: false
@@ -863,17 +863,9 @@ function onPreferenceChanged(key, value) {
         polylines.forEach(function(pl) {
             pl.setOptions({ strokeOpacity: value });
         });
-    } else if (key === "map/markerSize") {
-        prefMarkerSize = value;
-        cursorMarkers.forEach(function(marker) {
-            var icon = marker.getIcon();
-            if (icon) {
-                // Use the stored per-dot size rather than the global preference
-                var dotSize = marker._dotSize || 10.0;
-                icon.scale = (dotSize / 2) * dpiScale;
-                marker.setIcon(icon);
-            }
-        });
+    } else if (key === "map/largeDotSize") {
+        prefLargeDotSize = value;
+        // Cursor dots are rebuilt by C++; only the hover marker needs updating here.
         if (hoverMarker) {
             var hIcon = hoverMarker.getIcon();
             if (hIcon) {
@@ -881,6 +873,8 @@ function onPreferenceChanged(key, value) {
                 hoverMarker.setIcon(hIcon);
             }
         }
+    } else if (key === "map/smallDotSize") {
+        // Cursor dots are rebuilt by C++; nothing to update in JS.
     } else if (key === "map/type") {
         var typeId = indexToMapTypeId(value);
         if (map && map.getMapTypeId() !== typeId) {

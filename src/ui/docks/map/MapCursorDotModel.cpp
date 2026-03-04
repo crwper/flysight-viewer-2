@@ -19,8 +19,6 @@ static constexpr const char *kDefaultSensor = "Simplified";
 static constexpr const char *kLatKey = "lat";
 static constexpr const char *kLonKey = "lon";
 
-static constexpr double kLargeDotSize = 10.0;
-static constexpr double kSmallDotSize = 6.0;
 
 static bool isMonotonic(const QVector<double> &t, int n, bool ascending)
 {
@@ -204,6 +202,11 @@ MapCursorDotModel::MapCursorDotModel(SessionModel *sessionModel, MomentModel *mo
     connect(&PreferencesManager::instance(), &PreferencesManager::preferenceChanged,
             this, &MapCursorDotModel::onPreferenceChanged);
 
+    // Load initial dot sizes from preferences
+    auto &prefs = PreferencesManager::instance();
+    m_largeDotSize = prefs.getValue(PreferenceKeys::MapLargeDotSize).toDouble();
+    m_smallDotSize = prefs.getValue(PreferenceKeys::MapSmallDotSize).toDouble();
+
     rebuild();
 }
 
@@ -272,10 +275,14 @@ QColor MapCursorDotModel::colorForSession(const QString &sessionId)
 
 void MapCursorDotModel::onPreferenceChanged(const QString &key, const QVariant &value)
 {
-    Q_UNUSED(value)
-
     if (key == PreferenceKeys::MapTrackOpacity) {
-        rebuild(); // Rebuild dots with new opacity (affects color)
+        rebuild();
+    } else if (key == PreferenceKeys::MapLargeDotSize) {
+        m_largeDotSize = value.toDouble();
+        rebuild();
+    } else if (key == PreferenceKeys::MapSmallDotSize) {
+        m_smallDotSize = value.toDouble();
+        rebuild();
     }
 }
 
@@ -294,8 +301,8 @@ void MapCursorDotModel::rebuild()
 
             // Determine dot size from map presentation
             const double dotSize = (moment.traits.mapPresentation == MapPresentation::LargeDot)
-                                       ? kLargeDotSize
-                                       : kSmallDotSize;
+                                       ? m_largeDotSize
+                                       : m_smallDotSize;
 
             for (const auto &session : sessions) {
                 if (!session.isVisible())

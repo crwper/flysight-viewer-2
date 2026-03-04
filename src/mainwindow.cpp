@@ -1069,7 +1069,8 @@ void MainWindow::initializePreferences()
     // Map Preferences
     // ========================================================================
     prefs.registerPreference(PreferenceKeys::MapLineThickness, 3.0);
-    prefs.registerPreference(PreferenceKeys::MapMarkerSize, 10);
+    prefs.registerPreference(PreferenceKeys::MapLargeDotSize, 10);
+    prefs.registerPreference(PreferenceKeys::MapSmallDotSize, 6);
     prefs.registerPreference(PreferenceKeys::MapTrackOpacity, 0.85);
 }
 

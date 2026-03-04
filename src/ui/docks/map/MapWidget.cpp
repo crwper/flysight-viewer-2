@@ -103,9 +103,13 @@ MapWidget::MapWidget(SessionModel *sessionModel,
         m_bridge->pushPreference(QStringLiteral("map/lineThickness"),
                                  m_preferencesBridge->lineThickness());
     });
-    connect(m_preferencesBridge, &MapPreferencesBridge::markerSizeChanged, this, [this]() {
-        m_bridge->pushPreference(QStringLiteral("map/markerSize"),
-                                 m_preferencesBridge->markerSize());
+    connect(m_preferencesBridge, &MapPreferencesBridge::largeDotSizeChanged, this, [this]() {
+        m_bridge->pushPreference(QStringLiteral("map/largeDotSize"),
+                                 m_preferencesBridge->largeDotSize());
+    });
+    connect(m_preferencesBridge, &MapPreferencesBridge::smallDotSizeChanged, this, [this]() {
+        m_bridge->pushPreference(QStringLiteral("map/smallDotSize"),
+                                 m_preferencesBridge->smallDotSize());
     });
     connect(m_preferencesBridge, &MapPreferencesBridge::trackOpacityChanged, this, [this]() {
         m_bridge->pushPreference(QStringLiteral("map/trackOpacity"),
@@ -204,8 +208,10 @@ void MapWidget::pushAllData()
     onBoundsChanged();
     m_bridge->pushPreference(QStringLiteral("map/lineThickness"),
                              m_preferencesBridge->lineThickness());
-    m_bridge->pushPreference(QStringLiteral("map/markerSize"),
-                             m_preferencesBridge->markerSize());
+    m_bridge->pushPreference(QStringLiteral("map/largeDotSize"),
+                             m_preferencesBridge->largeDotSize());
+    m_bridge->pushPreference(QStringLiteral("map/smallDotSize"),
+                             m_preferencesBridge->smallDotSize());
     m_bridge->pushPreference(QStringLiteral("map/trackOpacity"),
                              m_preferencesBridge->trackOpacity());
     m_bridge->pushPreference(QStringLiteral("map/type"),

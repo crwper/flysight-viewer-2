@@ -38,7 +38,8 @@ inline const QString LegendTextSize = QStringLiteral("legend/textSize");
 // Map Preferences
 // ============================================================================
 inline const QString MapLineThickness = QStringLiteral("map/lineThickness");
-inline const QString MapMarkerSize = QStringLiteral("map/markerSize");
+inline const QString MapLargeDotSize = QStringLiteral("map/largeDotSize");
+inline const QString MapSmallDotSize = QStringLiteral("map/smallDotSize");
 inline const QString MapTrackOpacity = QStringLiteral("map/trackOpacity");
 inline const QString MapType = QStringLiteral("map/type");
 

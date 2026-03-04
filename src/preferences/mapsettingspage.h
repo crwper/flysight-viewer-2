@@ -28,8 +28,9 @@ private:
     QSlider *m_trackOpacitySlider;
     QLabel *m_trackOpacityLabel;
 
-    // Cursor Marker controls
-    QSpinBox *m_markerSizeSpinBox;
+    // Cursor Dots controls
+    QSpinBox *m_largeDotSizeSpinBox;
+    QSpinBox *m_smallDotSizeSpinBox;
 
     // Reset button
     QPushButton *m_resetButton;

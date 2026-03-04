@@ -11,13 +11,15 @@ namespace FlySight {
 // Preference key constants
 static const char* kLineThicknessKey = "map/lineThickness";
 static const char* kTrackOpacityKey = "map/trackOpacity";
-static const char* kMarkerSizeKey = "map/markerSize";
+static const char* kLargeDotSizeKey = "map/largeDotSize";
+static const char* kSmallDotSizeKey = "map/smallDotSize";
 static const char* kMapTypeKey = "map/type";
 
 // Default values
 static constexpr double kDefaultLineThickness = 3.0;
 static constexpr double kDefaultTrackOpacity = 0.85;
-static constexpr int kDefaultMarkerSize = 10;
+static constexpr int kDefaultLargeDotSize = 10;
+static constexpr int kDefaultSmallDotSize = 6;
 static constexpr int kDefaultMapType = 0;
 
 MapSettingsPage::MapSettingsPage(QWidget *parent)
@@ -27,7 +29,8 @@ MapSettingsPage::MapSettingsPage(QWidget *parent)
     PreferencesManager &prefs = PreferencesManager::instance();
     prefs.registerPreference(kLineThicknessKey, kDefaultLineThickness);
     prefs.registerPreference(kTrackOpacityKey, kDefaultTrackOpacity);
-    prefs.registerPreference(kMarkerSizeKey, kDefaultMarkerSize);
+    prefs.registerPreference(kLargeDotSizeKey, kDefaultLargeDotSize);
+    prefs.registerPreference(kSmallDotSizeKey, kDefaultSmallDotSize);
     prefs.registerPreference(kMapTypeKey, kDefaultMapType);
 
     // Build UI
@@ -46,7 +49,9 @@ MapSettingsPage::MapSettingsPage(QWidget *parent)
             this, &MapSettingsPage::saveSettings);
     connect(m_trackOpacitySlider, &QSlider::valueChanged,
             this, &MapSettingsPage::onOpacitySliderChanged);
-    connect(m_markerSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+    connect(m_largeDotSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &MapSettingsPage::saveSettings);
+    connect(m_smallDotSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &MapSettingsPage::saveSettings);
     connect(m_resetButton, &QPushButton::clicked,
             this, &MapSettingsPage::resetToDefaults);
@@ -91,15 +96,20 @@ QGroupBox* MapSettingsPage::createTrackAppearanceGroup()
 
 QGroupBox* MapSettingsPage::createCursorMarkerGroup()
 {
-    QGroupBox *group = new QGroupBox(tr("Cursor Marker"), this);
+    QGroupBox *group = new QGroupBox(tr("Cursor Dots"), this);
     QFormLayout *layout = new QFormLayout(group);
 
-    // Marker size spin box
-    m_markerSizeSpinBox = new QSpinBox(this);
-    m_markerSizeSpinBox->setRange(4, 30);
-    m_markerSizeSpinBox->setSuffix(tr(" px"));
-    m_markerSizeSpinBox->setToolTip(tr("Size of the cursor position marker on the map (4-30 pixels)"));
-    layout->addRow(tr("Marker size:"), m_markerSizeSpinBox);
+    m_largeDotSizeSpinBox = new QSpinBox(this);
+    m_largeDotSizeSpinBox->setRange(4, 30);
+    m_largeDotSizeSpinBox->setSuffix(tr(" px"));
+    m_largeDotSizeSpinBox->setToolTip(tr("Size of the large cursor dot on the map (4-30 pixels)"));
+    layout->addRow(tr("Large dot size:"), m_largeDotSizeSpinBox);
+
+    m_smallDotSizeSpinBox = new QSpinBox(this);
+    m_smallDotSizeSpinBox->setRange(4, 30);
+    m_smallDotSizeSpinBox->setSuffix(tr(" px"));
+    m_smallDotSizeSpinBox->setToolTip(tr("Size of the small cursor dot on the map (4-30 pixels)"));
+    layout->addRow(tr("Small dot size:"), m_smallDotSizeSpinBox);
 
     return group;
 }
@@ -124,7 +134,8 @@ void MapSettingsPage::loadSettings()
     // Block signals during load to prevent unnecessary saves
     m_lineThicknessSpinBox->blockSignals(true);
     m_trackOpacitySlider->blockSignals(true);
-    m_markerSizeSpinBox->blockSignals(true);
+    m_largeDotSizeSpinBox->blockSignals(true);
+    m_smallDotSizeSpinBox->blockSignals(true);
 
     double lineThickness = prefs.getValue(kLineThicknessKey).toDouble();
     m_lineThicknessSpinBox->setValue(lineThickness);
@@ -134,13 +145,14 @@ void MapSettingsPage::loadSettings()
     m_trackOpacitySlider->setValue(opacityPercent);
     m_trackOpacityLabel->setText(QString("%1%").arg(opacityPercent));
 
-    int markerSize = prefs.getValue(kMarkerSizeKey).toInt();
-    m_markerSizeSpinBox->setValue(markerSize);
+    m_largeDotSizeSpinBox->setValue(prefs.getValue(kLargeDotSizeKey).toInt());
+    m_smallDotSizeSpinBox->setValue(prefs.getValue(kSmallDotSizeKey).toInt());
 
     // Re-enable signals
     m_lineThicknessSpinBox->blockSignals(false);
     m_trackOpacitySlider->blockSignals(false);
-    m_markerSizeSpinBox->blockSignals(false);
+    m_largeDotSizeSpinBox->blockSignals(false);
+    m_smallDotSizeSpinBox->blockSignals(false);
 }
 
 void MapSettingsPage::saveSettings()
@@ -149,7 +161,8 @@ void MapSettingsPage::saveSettings()
 
     prefs.setValue(kLineThicknessKey, m_lineThicknessSpinBox->value());
     prefs.setValue(kTrackOpacityKey, m_trackOpacitySlider->value() / 100.0);
-    prefs.setValue(kMarkerSizeKey, m_markerSizeSpinBox->value());
+    prefs.setValue(kLargeDotSizeKey, m_largeDotSizeSpinBox->value());
+    prefs.setValue(kSmallDotSizeKey, m_smallDotSizeSpinBox->value());
 }
 
 void MapSettingsPage::onOpacitySliderChanged(int value)
@@ -181,7 +194,8 @@ void MapSettingsPage::resetToDefaults()
     // Set defaults in preferences
     prefs.setValue(kLineThicknessKey, kDefaultLineThickness);
     prefs.setValue(kTrackOpacityKey, kDefaultTrackOpacity);
-    prefs.setValue(kMarkerSizeKey, kDefaultMarkerSize);
+    prefs.setValue(kLargeDotSizeKey, kDefaultLargeDotSize);
+    prefs.setValue(kSmallDotSizeKey, kDefaultSmallDotSize);
     prefs.setValue(kMapTypeKey, kDefaultMapType);
 
     // Reload UI from preferences
