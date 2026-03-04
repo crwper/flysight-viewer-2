@@ -71,6 +71,13 @@ public:
         double positionUtc = 0.0;
         bool active = false;
         QSet<QString> targetSessions;
+
+        // Per-session UTC positions for multi-session mouse cursors.
+        // When non-empty, consumers should look up the session-specific UTC
+        // here before falling back to positionUtc. This is needed because
+        // different sessions may have different reference marker offsets,
+        // so the same plot x-coordinate maps to different UTC times.
+        QHash<QString, double> sessionPositions;
     };
 
     explicit MomentModel(QObject *parent = nullptr);
@@ -91,6 +98,9 @@ public:
 
     // ── Position updates (for MouseInput and External moments) ──
     void setMomentPosition(const QString &id, double utcSeconds,
+                           const QSet<QString> &targetSessions, bool active);
+    void setMomentPosition(const QString &id, double utcSeconds,
+                           const QHash<QString, double> &sessionPositions,
                            const QSet<QString> &targetSessions, bool active);
     void setMomentActive(const QString &id, bool active);
 

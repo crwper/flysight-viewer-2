@@ -16,6 +16,7 @@ namespace FlySight {
 
 class SessionModel;
 class MomentModel;
+class PlotRangeModel;
 
 /**
  * Exposes moment-driven dot markers for display on the Google Maps view.
@@ -37,7 +38,8 @@ public:
         MomentIdRole    // moment id string (for JS-side differentiation)
     };
 
-    explicit MapCursorDotModel(SessionModel *sessionModel, MomentModel *momentModel, QObject *parent = nullptr);
+    explicit MapCursorDotModel(SessionModel *sessionModel, MomentModel *momentModel,
+                              PlotRangeModel *rangeModel, QObject *parent = nullptr);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
@@ -62,6 +64,7 @@ private:
 
     SessionModel *m_sessionModel = nullptr;
     MomentModel *m_momentModel = nullptr;
+    PlotRangeModel *m_rangeModel = nullptr;
     QTimer m_rebuildTimer;
     QVector<Dot> m_dots;
 

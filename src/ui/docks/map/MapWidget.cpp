@@ -37,7 +37,7 @@ MapWidget::MapWidget(SessionModel *sessionModel,
     m_trackModel = new TrackMapModel(sessionModel, rangeModel, this);
 
     // Model that converts MomentModel state into per-session map dots
-    m_cursorDotModel = new MapCursorDotModel(sessionModel, momentModel, this);
+    m_cursorDotModel = new MapCursorDotModel(sessionModel, momentModel, rangeModel, this);
 
     // Proxy for JS to drive MomentModel from map hover
     m_cursorProxy = new MapCursorProxy(sessionModel, momentModel, this);

@@ -1,6 +1,8 @@
 #include "MapCursorDotModel.h"
 
 #include "momentmodel.h"
+#include "plotrangemodel.h"
+#include "plotutils.h"
 #include "sessiondata.h"
 #include "sessionmodel.h"
 
@@ -8,6 +10,7 @@
 #include <QDateTime>
 
 #include <algorithm>
+#include <limits>
 
 namespace FlySight {
 
@@ -168,10 +171,12 @@ static bool sampleLatLonAtUtc(const SessionData &session, double utcSeconds, dou
     return true;
 }
 
-MapCursorDotModel::MapCursorDotModel(SessionModel *sessionModel, MomentModel *momentModel, QObject *parent)
+MapCursorDotModel::MapCursorDotModel(SessionModel *sessionModel, MomentModel *momentModel,
+                                     PlotRangeModel *rangeModel, QObject *parent)
     : QAbstractListModel(parent)
     , m_sessionModel(sessionModel)
     , m_momentModel(momentModel)
+    , m_rangeModel(rangeModel)
 {
     // Zero-interval single-shot timer coalesces rapid momentsChanged bursts
     // into a single rebuild.
@@ -186,6 +191,11 @@ MapCursorDotModel::MapCursorDotModel(SessionModel *sessionModel, MomentModel *mo
 
     if (m_momentModel) {
         connect(m_momentModel, &MomentModel::momentsChanged,
+                this, &MapCursorDotModel::scheduleRebuild);
+    }
+
+    if (m_rangeModel) {
+        connect(m_rangeModel, &PlotRangeModel::rangeChanged,
                 this, &MapCursorDotModel::scheduleRebuild);
     }
 
@@ -310,6 +320,20 @@ void MapCursorDotModel::rebuild()
 
                     utcSeconds = dt.toMSecsSinceEpoch() / 1000.0;
 
+                    // Filter by visible plot range: skip markers outside the
+                    // current plot viewport so the map stays in sync.
+                    if (m_rangeModel && m_rangeModel->hasRange()) {
+                        const auto optOffset = markerOffsetSeconds(
+                            session, m_rangeModel->referenceMarkerKey(),
+                            QLatin1String(SessionKeys::Time));
+                        if (optOffset.has_value()) {
+                            const double lo = m_rangeModel->rangeLower() + *optOffset;
+                            const double hi = m_rangeModel->rangeUpper() + *optOffset;
+                            if (utcSeconds < lo || utcSeconds > hi)
+                                continue;
+                        }
+                    }
+
                 } else {
                     // MouseInput or External moments: use moment.positionUtc
                     if (!moment.active)
@@ -324,7 +348,12 @@ void MapCursorDotModel::rebuild()
                         continue;
                     }
 
-                    utcSeconds = moment.positionUtc;
+                    // Use per-session position when available (multi-session
+                    // mouse cursor with different reference marker offsets).
+                    auto psIt = moment.sessionPositions.constFind(sessionId);
+                    utcSeconds = (psIt != moment.sessionPositions.constEnd())
+                                     ? psIt.value()
+                                     : moment.positionUtc;
                 }
 
                 double lat = 0.0;

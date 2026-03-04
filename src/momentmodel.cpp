@@ -145,11 +145,39 @@ void MomentModel::setMomentPosition(const QString &id, double utcSeconds,
     const bool changedPos     = (m.positionUtc != utcSeconds);
     const bool changedTargets = (m.targetSessions != targetSessions);
     const bool changedActive  = (m.active != active);
+    const bool hadSessionPos  = !m.sessionPositions.isEmpty();
 
-    if (!changedPos && !changedTargets && !changedActive)
+    if (!changedPos && !changedTargets && !changedActive && !hadSessionPos)
         return;
 
     m.positionUtc = utcSeconds;
+    m.targetSessions = targetSessions;
+    m.active = active;
+    m.sessionPositions.clear();
+
+    emit momentsChanged();
+}
+
+void MomentModel::setMomentPosition(const QString &id, double utcSeconds,
+                                     const QHash<QString, double> &sessionPositions,
+                                     const QSet<QString> &targetSessions, bool active)
+{
+    const int idx = indexForId(id);
+    if (idx < 0)
+        return;
+
+    Moment &m = m_moments[idx];
+
+    const bool changedPos     = (m.positionUtc != utcSeconds);
+    const bool changedTargets = (m.targetSessions != targetSessions);
+    const bool changedActive  = (m.active != active);
+    const bool changedSessPos = (m.sessionPositions != sessionPositions);
+
+    if (!changedPos && !changedTargets && !changedActive && !changedSessPos)
+        return;
+
+    m.positionUtc = utcSeconds;
+    m.sessionPositions = sessionPositions;
     m.targetSessions = targetSessions;
     m.active = active;
 

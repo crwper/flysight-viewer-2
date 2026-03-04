@@ -898,36 +898,47 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                     const double xCoord =
                         customPlot->xAxis->pixelToCoord(me->pos().x());
 
-                    // Convert plot-axis coordinate to UTC seconds
-                    double utcSeconds = 0.0;
-                    bool converted = false;
+                    // Convert plot-axis coordinate to per-session UTC seconds.
+                    // Each session may have a different reference marker offset,
+                    // so the same plot x-coordinate maps to different UTC times.
+                    double fallbackUtc = 0.0;
+                    bool anyConverted = false;
+                    QHash<QString, double> sessionUtcMap;
 
-                    // Use the first traced session for conversion
-                    const QString firstSessionId = *tracedSessions.constBegin();
-                    const int row = model->getSessionRow(firstSessionId);
-                    if (row >= 0) {
-                        SessionData &session = model->sessionRef(row);
-                        const auto offset = referenceOffsetForSession(session);
-                        if (offset.has_value()) {
-                            const double rawX = xCoord + offset.value();
+                    for (const QString &sid : tracedSessions) {
+                        const int r = model->getSessionRow(sid);
+                        if (r < 0)
+                            continue;
+                        SessionData &sess = model->sessionRef(r);
+                        const auto offset = referenceOffsetForSession(sess);
+                        if (!offset.has_value())
+                            continue;
 
-                            if (m_xVariable == QLatin1String(SessionKeys::SystemTime)) {
-                                auto utcOpt = Calculations::systemTimeToUtc(session, rawX);
-                                if (utcOpt.has_value()) {
-                                    utcSeconds = *utcOpt;
-                                    converted = true;
+                        const double rawX = xCoord + offset.value();
+
+                        if (m_xVariable == QLatin1String(SessionKeys::SystemTime)) {
+                            auto utcOpt = Calculations::systemTimeToUtc(sess, rawX);
+                            if (utcOpt.has_value()) {
+                                sessionUtcMap.insert(sid, *utcOpt);
+                                if (!anyConverted) {
+                                    fallbackUtc = *utcOpt;
+                                    anyConverted = true;
                                 }
-                            } else {
-                                utcSeconds = rawX;
-                                converted = true;
+                            }
+                        } else {
+                            sessionUtcMap.insert(sid, rawX);
+                            if (!anyConverted) {
+                                fallbackUtc = rawX;
+                                anyConverted = true;
                             }
                         }
                     }
 
-                    if (converted) {
+                    if (anyConverted) {
                         m_momentModel->setMomentPosition(
                             QStringLiteral("mouse"),
-                            utcSeconds,
+                            fallbackUtc,
+                            sessionUtcMap,
                             tracedSessions,
                             true);
                     } else {
@@ -1763,8 +1774,15 @@ void PlotWidget::updateCrosshairFromMoments()
             return true;
         }
 
-        // MouseInput or External: use positionUtc directly
-        *outXPlot = moment.positionUtc - offset.value();
+        // MouseInput or External: check per-session positions first
+        double utcSec = moment.positionUtc;
+        if (!moment.sessionPositions.isEmpty()) {
+            const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
+            auto psIt = moment.sessionPositions.constFind(sid);
+            if (psIt != moment.sessionPositions.constEnd())
+                utcSec = psIt.value();
+        }
+        *outXPlot = utcSec - offset.value();
         return true;
     };
 

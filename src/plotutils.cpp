@@ -160,7 +160,14 @@ std::optional<double> utcSecondsForMoment(const MomentModel::Moment &moment,
         return dt.toMSecsSinceEpoch() / 1000.0;
     }
 
-    // MouseInput or External: position is stored directly as UTC seconds
+    // MouseInput or External: check per-session positions first
+    if (!moment.sessionPositions.isEmpty()) {
+        const QString sid = session.getAttribute(SessionKeys::SessionId).toString();
+        auto it = moment.sessionPositions.constFind(sid);
+        if (it != moment.sessionPositions.constEnd())
+            return it.value();
+    }
+
     return moment.positionUtc;
 }
 
