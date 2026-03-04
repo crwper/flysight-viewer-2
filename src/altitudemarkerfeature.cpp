@@ -34,20 +34,6 @@ AltitudeMarkerManager::AltitudeMarkerManager(SessionModel *sessionModel, QObject
     });
 }
 
-AltitudeMarkerManager::~AltitudeMarkerManager()
-{
-    // Unregister all calculated attributes from every active session so that
-    // the global CalculatedValue registry and per-session caches stay clean.
-    for (const QString &key : std::as_const(m_registeredKeys)) {
-        for (int row = 0; row < m_sessionModel->rowCount(); ++row) {
-            m_sessionModel->sessionRef(row).unregisterCalculatedAttribute(key);
-        }
-    }
-
-    // Remove the marker definitions from the registry.
-    MarkerRegistry::instance()->clearMarkerGroup(QStringLiteral("altitude"));
-}
-
 void AltitudeMarkerManager::registerAll()
 {
     // Step 1: Read current preferences
