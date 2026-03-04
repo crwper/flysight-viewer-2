@@ -156,6 +156,11 @@ void TrackMapModel::rebuild()
             QVariantList points;
             points.reserve(n);
 
+            int lastBeforeIdx = -1;
+            int firstInsideIdx = -1;
+            int lastInsideIdx = -1;
+            int firstAfterIdx = -1;
+
             for (int i = 0; i < n; ++i) {
                 const double la = lat[i];
                 const double lo = lon[i];
@@ -166,14 +171,25 @@ void TrackMapModel::rebuild()
                 if (la < -90.0 || la > 90.0 || lo < -180.0 || lo > 180.0)
                     continue;
 
-                // Skip points outside the visible range
-                if (tt < filterLower || tt > filterUpper)
+                if (tt < filterLower) {
+                    lastBeforeIdx = i;
                     continue;
+                }
+
+                if (tt > filterUpper) {
+                    firstAfterIdx = i;
+                    break;
+                }
+
+                // Point is inside the visible range
+                if (firstInsideIdx < 0)
+                    firstInsideIdx = i;
+                lastInsideIdx = i;
 
                 QVariantMap pt;
                 pt.insert(QStringLiteral("lat"), la);
                 pt.insert(QStringLiteral("lon"), lo);
-                pt.insert(QStringLiteral("t"), tt); // UTC seconds for JS hover interpolation
+                pt.insert(QStringLiteral("t"), tt);
                 points.push_back(pt);
 
                 if (!haveBounds) {
@@ -186,6 +202,51 @@ void TrackMapModel::rebuild()
                     minLon = qMin(minLon, lo);
                     maxLon = qMax(maxLon, lo);
                 }
+            }
+
+            // Interpolate at range boundaries so tracks extend to the
+            // plot edges instead of stopping at the last data point.
+            auto addBoundaryPoint = [&](int idxA, int idxB, double targetT, bool prepend) {
+                const double t1 = tUtc[idxA], t2 = tUtc[idxB];
+                if (t2 == t1) return;
+                const double frac = (targetT - t1) / (t2 - t1);
+                const double iLat = lat[idxA] + frac * (lat[idxB] - lat[idxA]);
+                const double iLon = lon[idxA] + frac * (lon[idxB] - lon[idxA]);
+
+                QVariantMap pt;
+                pt.insert(QStringLiteral("lat"), iLat);
+                pt.insert(QStringLiteral("lon"), iLon);
+                pt.insert(QStringLiteral("t"), targetT);
+
+                if (prepend)
+                    points.prepend(pt);
+                else
+                    points.push_back(pt);
+
+                if (!haveBounds) {
+                    haveBounds = true;
+                    minLat = maxLat = iLat;
+                    minLon = maxLon = iLon;
+                } else {
+                    minLat = qMin(minLat, iLat);
+                    maxLat = qMax(maxLat, iLat);
+                    minLon = qMin(minLon, iLon);
+                    maxLon = qMax(maxLon, iLon);
+                }
+            };
+
+            // Lower boundary interpolation
+            if (lastBeforeIdx >= 0) {
+                const int nextIdx = (firstInsideIdx >= 0) ? firstInsideIdx : firstAfterIdx;
+                if (nextIdx >= 0)
+                    addBoundaryPoint(lastBeforeIdx, nextIdx, filterLower, true);
+            }
+
+            // Upper boundary interpolation
+            if (firstAfterIdx >= 0) {
+                const int prevIdx = (lastInsideIdx >= 0) ? lastInsideIdx : lastBeforeIdx;
+                if (prevIdx >= 0)
+                    addBoundaryPoint(prevIdx, firstAfterIdx, filterUpper, false);
             }
 
             if (points.size() < 2)
