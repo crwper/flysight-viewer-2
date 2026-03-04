@@ -115,36 +115,74 @@ QString formatXAxisValue(double plotX,
     return formatValue(plotX, QStringLiteral("_time"), QString());
 }
 
-CursorModel::Cursor chooseEffectiveCursor(const CursorModel *cursorModel)
+MomentModel::Moment chooseEffectiveMoment(const MomentModel *momentModel)
 {
-    if (!cursorModel)
-        return CursorModel::Cursor{};
+    if (!momentModel)
+        return MomentModel::Moment{};
 
-    // 1) Prefer mouse cursor when active and it has usable targets
-    if (cursorModel->hasCursor(QStringLiteral("mouse"))) {
-        const CursorModel::Cursor mouse = cursorModel->cursorById(QStringLiteral("mouse"));
-        if (mouse.active) {
-            if (mouse.targetPolicy == CursorModel::TargetPolicy::Explicit && !mouse.targetSessions.isEmpty()) {
-                return mouse;
-            }
+    const QVector<MomentModel::Moment> enabled = momentModel->enabledMoments();
+
+    // 1) Prefer mouse moment when active and it has usable targets
+    for (const MomentModel::Moment &m : enabled) {
+        if (m.id == QStringLiteral("mouse")
+            && m.traits.legendVisibility == LegendVisibility::Visible
+            && m.active
+            && !m.targetSessions.isEmpty()) {
+            return m;
         }
     }
 
-    // 2) Otherwise, first active non-mouse cursor
-    const int n = cursorModel->rowCount();
-    for (int row = 0; row < n; ++row) {
-        const QModelIndex idx = cursorModel->index(row, 0);
-        const QString id = cursorModel->data(idx, CursorModel::IdRole).toString();
-        if (id.isEmpty() || id == QStringLiteral("mouse"))
+    // 2) Fall back to first active non-mouse moment with Visible legend
+    for (const MomentModel::Moment &m : enabled) {
+        if (m.id == QStringLiteral("mouse"))
             continue;
-
-        const CursorModel::Cursor c = cursorModel->cursorById(id);
-        if (c.active)
-            return c;
+        if (m.traits.legendVisibility != LegendVisibility::Visible)
+            continue;
+        if (m.active)
+            return m;
     }
 
     // 3) None
-    return CursorModel::Cursor{};
+    return MomentModel::Moment{};
+}
+
+std::optional<double> utcSecondsForMoment(const MomentModel::Moment &moment,
+                                          const SessionData &session)
+{
+    if (moment.traits.positionSource == PositionSource::Attribute) {
+        // Read the position from the session's attribute
+        const QVariant v = session.getAttribute(moment.traits.attributeKey);
+        if (!v.canConvert<QDateTime>())
+            return std::nullopt;
+        const QDateTime dt = v.toDateTime();
+        if (!dt.isValid())
+            return std::nullopt;
+        return dt.toMSecsSinceEpoch() / 1000.0;
+    }
+
+    // MouseInput or External: position is stored directly as UTC seconds
+    return moment.positionUtc;
+}
+
+std::optional<double> plotAxisXFromUtc(double utcSeconds,
+                                       const QString &xVariable,
+                                       const QString &referenceMarkerKey,
+                                       const SessionData &session)
+{
+    double absoluteX = utcSeconds;
+
+    if (xVariable == QLatin1String(SessionKeys::SystemTime)) {
+        auto st = Calculations::utcToSystemTime(session, utcSeconds);
+        if (!st.has_value())
+            return std::nullopt;
+        absoluteX = *st;
+    }
+
+    const auto optOffset = markerOffsetSeconds(session, referenceMarkerKey, xVariable);
+    if (!optOffset.has_value())
+        return std::nullopt;
+
+    return absoluteX - *optOffset;
 }
 
 } // namespace FlySight

@@ -15,14 +15,14 @@
 namespace FlySight {
 
 class SessionModel;
-class CursorModel;
+class MomentModel;
 
 /**
- * Exposes cursor-driven dot markers for display on the Google Maps view.
+ * Exposes moment-driven dot markers for display on the Google Maps view.
  *
- * Dots are derived from the effective cursor (same precedence rules as the legend)
- * and sampled from the "Simplified" GNSS track (lat/lon vs SessionKeys::Time) for
- * each targeted session.
+ * Dots are derived from all enabled moments with map presence, sampled from
+ * the "Simplified" GNSS track (lat/lon vs SessionKeys::Time) for each
+ * targeted visible session.
  */
 class MapCursorDotModel : public QAbstractListModel
 {
@@ -32,10 +32,12 @@ public:
         SessionIdRole = Qt::UserRole + 1,
         LatRole,
         LonRole,
-        ColorRole
+        ColorRole,
+        SizeRole,       // dot diameter in logical pixels (e.g. 10.0 for LargeDot, 6.0 for SmallDot)
+        MomentIdRole    // moment id string (for JS-side differentiation)
     };
 
-    explicit MapCursorDotModel(SessionModel *sessionModel, CursorModel *cursorModel, QObject *parent = nullptr);
+    explicit MapCursorDotModel(SessionModel *sessionModel, MomentModel *momentModel, QObject *parent = nullptr);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
@@ -51,13 +53,15 @@ private slots:
 private:
     struct Dot {
         QString sessionId;
+        QString momentId;
         double lat = 0.0;
         double lon = 0.0;
         QColor color;
+        double size = 10.0;   // dot diameter in logical pixels
     };
 
     SessionModel *m_sessionModel = nullptr;
-    CursorModel *m_cursorModel = nullptr;
+    MomentModel *m_momentModel = nullptr;
     QTimer m_rebuildTimer;
     QVector<Dot> m_dots;
 

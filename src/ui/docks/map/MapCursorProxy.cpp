@@ -1,27 +1,27 @@
 #include "MapCursorProxy.h"
 
 #include "sessionmodel.h"
-#include "cursormodel.h"
+#include "momentmodel.h"
 
 #include <QSet>
 #include <cmath>
 
 namespace FlySight {
 
-static const QString kMouseCursorId = QStringLiteral("mouse");
+static const QString kMouseMomentId = QStringLiteral("mouse");
 
 MapCursorProxy::MapCursorProxy(SessionModel *sessionModel,
-                               CursorModel *cursorModel,
+                               MomentModel *momentModel,
                                QObject *parent)
     : QObject(parent)
     , m_sessionModel(sessionModel)
-    , m_cursorModel(cursorModel)
+    , m_momentModel(momentModel)
 {
 }
 
 void MapCursorProxy::setMapHover(const QString &sessionId, double utcSeconds)
 {
-    if (!m_cursorModel)
+    if (!m_momentModel)
         return;
 
     if (sessionId.isEmpty() || !std::isfinite(utcSeconds)) {
@@ -29,23 +29,23 @@ void MapCursorProxy::setMapHover(const QString &sessionId, double utcSeconds)
         return;
     }
 
-    m_cursorModel->setCursorState(kMouseCursorId,
-                                   QSet<QString>{ sessionId },
-                                   utcSeconds,
-                                   true);
+    m_momentModel->setMomentPosition(kMouseMomentId,
+                                      utcSeconds,
+                                      QSet<QString>{ sessionId },
+                                      true);
 
-    // Optional (spec): keep the hovered-session highlight consistent
+    // Keep the hovered-session highlight consistent
     if (m_sessionModel)
         m_sessionModel->setHoveredSessionId(sessionId);
 }
 
 void MapCursorProxy::clearMapHover()
 {
-    if (m_cursorModel) {
-        m_cursorModel->setCursorState(kMouseCursorId,
-                                      QSet<QString>{},
-                                      0.0,
-                                      false);
+    if (m_momentModel) {
+        m_momentModel->setMomentPosition(kMouseMomentId,
+                                          0.0,
+                                          QSet<QString>{},
+                                          false);
     }
 
     if (m_sessionModel)

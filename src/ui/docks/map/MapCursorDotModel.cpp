@@ -1,10 +1,8 @@
 #include "MapCursorDotModel.h"
 
-#include "cursormodel.h"
+#include "momentmodel.h"
 #include "sessiondata.h"
 #include "sessionmodel.h"
-#include "plotutils.h"
-#include "calculations/timecalculations.h"
 
 #include <QtMath>
 #include <QDateTime>
@@ -16,6 +14,9 @@ namespace FlySight {
 static constexpr const char *kDefaultSensor = "Simplified";
 static constexpr const char *kLatKey = "lat";
 static constexpr const char *kLonKey = "lon";
+
+static constexpr double kLargeDotSize = 10.0;
+static constexpr double kSmallDotSize = 6.0;
 
 static bool isMonotonic(const QVector<double> &t, int n, bool ascending)
 {
@@ -167,45 +168,13 @@ static bool sampleLatLonAtUtc(const SessionData &session, double utcSeconds, dou
     return true;
 }
 
-static bool cursorUtcSecondsForSession(const CursorModel::Cursor &c,
-                                      const SessionData &session,
-                                      double *outUtcSeconds)
-{
-    if (!outUtcSeconds)
-        return false;
-
-    if (c.positionSpace == CursorModel::PositionSpace::UtcSeconds) {
-        *outUtcSeconds = c.positionValue;
-        return true;
-    }
-
-    if (c.positionSpace != CursorModel::PositionSpace::PlotAxisCoord)
-        return false;
-
-    const auto optOffset = markerOffsetSeconds(session, c.referenceMarkerKey, c.xVariable);
-    if (!optOffset.has_value())
-        return false;
-
-    const double rawValue = c.positionValue + *optOffset;
-
-    if (c.xVariable == SessionKeys::SystemTime) {
-        auto utc = Calculations::systemTimeToUtc(session, rawValue);
-        if (!utc.has_value())
-            return false;
-        *outUtcSeconds = *utc;
-    } else {
-        *outUtcSeconds = rawValue;
-    }
-    return true;
-}
-
-MapCursorDotModel::MapCursorDotModel(SessionModel *sessionModel, CursorModel *cursorModel, QObject *parent)
+MapCursorDotModel::MapCursorDotModel(SessionModel *sessionModel, MomentModel *momentModel, QObject *parent)
     : QAbstractListModel(parent)
     , m_sessionModel(sessionModel)
-    , m_cursorModel(cursorModel)
+    , m_momentModel(momentModel)
 {
-    // Zero-interval single-shot timer coalesces rapid cursorsChanged bursts
-    // (e.g. 3 emissions per hover event) into a single rebuild.
+    // Zero-interval single-shot timer coalesces rapid momentsChanged bursts
+    // into a single rebuild.
     m_rebuildTimer.setInterval(0);
     m_rebuildTimer.setSingleShot(true);
     connect(&m_rebuildTimer, &QTimer::timeout, this, &MapCursorDotModel::rebuild);
@@ -215,8 +184,8 @@ MapCursorDotModel::MapCursorDotModel(SessionModel *sessionModel, CursorModel *cu
                 this, &MapCursorDotModel::scheduleRebuild);
     }
 
-    if (m_cursorModel) {
-        connect(m_cursorModel, &CursorModel::cursorsChanged,
+    if (m_momentModel) {
+        connect(m_momentModel, &MomentModel::momentsChanged,
                 this, &MapCursorDotModel::scheduleRebuild);
     }
 
@@ -255,6 +224,10 @@ QVariant MapCursorDotModel::data(const QModelIndex &index, int role) const
         return d.lon;
     case ColorRole:
         return d.color;
+    case SizeRole:
+        return d.size;
+    case MomentIdRole:
+        return d.momentId;
     default:
         return QVariant();
     }
@@ -266,7 +239,9 @@ QHash<int, QByteArray> MapCursorDotModel::roleNames() const
         { SessionIdRole, "sessionId" },
         { LatRole,       "lat" },
         { LonRole,       "lon" },
-        { ColorRole,     "color" }
+        { ColorRole,     "color" },
+        { SizeRole,      "size" },
+        { MomentIdRole,  "momentId" }
     };
 }
 
@@ -297,14 +272,19 @@ void MapCursorDotModel::rebuild()
 {
     QVector<Dot> newDots;
 
-    if (m_sessionModel && m_cursorModel) {
-        const CursorModel::Cursor c = chooseEffectiveCursor(m_cursorModel);
+    if (m_sessionModel && m_momentModel) {
+        const auto moments = m_momentModel->enabledMoments();
+        const auto &sessions = m_sessionModel->getAllSessions();
 
-        if (!c.id.isEmpty() && c.active) {
-            const bool explicitTargets =
-                (c.targetPolicy == CursorModel::TargetPolicy::Explicit && !c.targetSessions.isEmpty());
+        for (const MomentModel::Moment &moment : moments) {
+            // Skip moments with no map presence
+            if (moment.traits.mapPresentation == MapPresentation::None)
+                continue;
 
-            const auto &sessions = m_sessionModel->getAllSessions();
+            // Determine dot size from map presentation
+            const double dotSize = (moment.traits.mapPresentation == MapPresentation::LargeDot)
+                                       ? kLargeDotSize
+                                       : kSmallDotSize;
 
             for (const auto &session : sessions) {
                 if (!session.isVisible())
@@ -316,23 +296,54 @@ void MapCursorDotModel::rebuild()
                 if (sessionId.isEmpty())
                     continue;
 
-                if (explicitTargets && !c.targetSessions.contains(sessionId))
-                    continue;
-
                 double utcSeconds = 0.0;
-                if (!cursorUtcSecondsForSession(c, session, &utcSeconds))
-                    continue;
+
+                if (moment.traits.positionSource == PositionSource::Attribute) {
+                    // Attribute-sourced moments: read UTC from session attribute
+                    const QVariant attrVal = session.getAttribute(moment.traits.attributeKey);
+                    if (!attrVal.canConvert<QDateTime>())
+                        continue;
+
+                    const QDateTime dt = attrVal.toDateTime();
+                    if (!dt.isValid())
+                        continue;
+
+                    utcSeconds = dt.toMSecsSinceEpoch() / 1000.0;
+
+                } else {
+                    // MouseInput or External moments: use moment.positionUtc
+                    if (!moment.active)
+                        continue;
+
+                    // For MouseInput/External: check targetSessions.
+                    // Empty targetSessions = auto-visible-overlap: show dots
+                    // on all visible sessions that have data at this position.
+                    // Non-empty targetSessions: only show for listed sessions.
+                    if (!moment.targetSessions.isEmpty()
+                        && !moment.targetSessions.contains(sessionId)) {
+                        continue;
+                    }
+
+                    utcSeconds = moment.positionUtc;
+                }
 
                 double lat = 0.0;
                 double lon = 0.0;
                 if (!sampleLatLonAtUtc(session, utcSeconds, &lat, &lon))
                     continue;
 
+                // Determine color: use traits.color if valid, else colorForSession
+                const QColor dotColor = moment.traits.color.isValid()
+                                            ? moment.traits.color
+                                            : colorForSession(sessionId);
+
                 Dot d;
                 d.sessionId = sessionId;
+                d.momentId = moment.id;
                 d.lat = lat;
                 d.lon = lon;
-                d.color = colorForSession(sessionId);
+                d.color = dotColor;
+                d.size = dotSize;
                 newDots.push_back(std::move(d));
             }
         }
@@ -344,8 +355,9 @@ void MapCursorDotModel::rebuild()
         for (int i = 0; i < newDots.size(); ++i) {
             const Dot &a = m_dots[i];
             const Dot &b = newDots[i];
-            if (a.sessionId != b.sessionId || a.lat != b.lat
-                || a.lon != b.lon || a.color != b.color) {
+            if (a.sessionId != b.sessionId || a.momentId != b.momentId
+                || a.lat != b.lat || a.lon != b.lon
+                || a.color != b.color || a.size != b.size) {
                 same = false;
                 break;
             }

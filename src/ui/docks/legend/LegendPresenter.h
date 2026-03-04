@@ -9,7 +9,7 @@ namespace FlySight {
 
 class SessionModel;
 class PlotModel;
-class CursorModel;
+class MomentModel;
 class PlotViewSettingsModel;
 class MeasureModel;
 class LegendWidget;
@@ -20,7 +20,7 @@ class LegendPresenter : public QObject
 public:
     explicit LegendPresenter(SessionModel *sessionModel,
                              PlotModel *plotModel,
-                             CursorModel *cursorModel,
+                             MomentModel *momentModel,
                              PlotViewSettingsModel *plotViewSettings,
                              MeasureModel *measureModel,
                              LegendWidget *legendWidget,
@@ -33,7 +33,7 @@ private slots:
 private:
     QPointer<SessionModel> m_sessionModel;
     QPointer<PlotModel> m_plotModel;
-    QPointer<CursorModel> m_cursorModel;
+    QPointer<MomentModel> m_momentModel;
     QPointer<PlotViewSettingsModel> m_plotViewSettings;
     QPointer<MeasureModel> m_measureModel;
     QPointer<LegendWidget> m_legendWidget;

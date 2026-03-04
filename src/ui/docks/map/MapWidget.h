@@ -14,7 +14,7 @@ class MapCursorDotModel;
 class MapCursorProxy;
 class MapPreferencesBridge;
 class MapBridge;
-class CursorModel;
+class MomentModel;
 class PlotRangeModel;
 
 /**
@@ -29,7 +29,7 @@ class MapWidget : public QWidget
     Q_OBJECT
 public:
     explicit MapWidget(SessionModel *sessionModel,
-                       CursorModel *cursorModel,
+                       MomentModel *momentModel,
                        PlotRangeModel *rangeModel,
                        QWidget *parent = nullptr);
 
@@ -44,7 +44,6 @@ private:
     MapCursorDotModel *m_cursorDotModel = nullptr;
     MapCursorProxy *m_cursorProxy = nullptr;
     MapPreferencesBridge *m_preferencesBridge = nullptr;
-    CursorModel *m_cursorModel = nullptr;
 
     QWebEngineView *m_webView = nullptr;
     QWebChannel *m_channel = nullptr;

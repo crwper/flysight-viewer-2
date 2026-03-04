@@ -1,7 +1,7 @@
 #ifndef PLOTUTILS_H
 #define PLOTUTILS_H
 
-#include "cursormodel.h"
+#include "momentmodel.h"
 
 #include <QString>
 #include <QVector>
@@ -52,7 +52,22 @@ QString formatXAxisValue(double plotX,
                          const QString &xVariable,
                          const QString &referenceMarkerKey);
 
-CursorModel::Cursor chooseEffectiveCursor(const CursorModel *cursorModel);
+// Select the highest-priority legend-visible moment from MomentModel.
+// Returns a default-constructed Moment (empty id) if no suitable moment is found.
+MomentModel::Moment chooseEffectiveMoment(const MomentModel *momentModel);
+
+// Resolve a moment's UTC position for a given session.
+// For Attribute-sourced moments: reads the attribute from the session.
+// For MouseInput/External: returns moment.positionUtc.
+std::optional<double> utcSecondsForMoment(const MomentModel::Moment &moment,
+                                          const SessionData &session);
+
+// Convert a UTC seconds value to a plot-axis x-coordinate for a given session.
+// Handles system-time conversion and reference marker offsets.
+std::optional<double> plotAxisXFromUtc(double utcSeconds,
+                                       const QString &xVariable,
+                                       const QString &referenceMarkerKey,
+                                       const SessionData &session);
 
 } // namespace FlySight
 

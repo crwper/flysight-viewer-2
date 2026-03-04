@@ -7,11 +7,11 @@
 namespace FlySight {
 
 class SessionModel;
-class CursorModel;
+class MomentModel;
 
 /**
  * Thin QObject that relays map hover events from JavaScript
- * (via MapBridge) to CursorModel.
+ * (via MapBridge) to MomentModel.
  *
  * Called by MapBridge:
  *   - setMapHover(sessionId, utcSeconds)
@@ -22,7 +22,7 @@ class MapCursorProxy : public QObject
     Q_OBJECT
 public:
     explicit MapCursorProxy(SessionModel *sessionModel,
-                            CursorModel *cursorModel,
+                            MomentModel *momentModel,
                             QObject *parent = nullptr);
 
     Q_INVOKABLE void setMapHover(const QString &sessionId, double utcSeconds);
@@ -30,7 +30,7 @@ public:
 
 private:
     SessionModel *m_sessionModel = nullptr;
-    CursorModel  *m_cursorModel = nullptr;
+    MomentModel  *m_momentModel = nullptr;
 };
 
 } // namespace FlySight

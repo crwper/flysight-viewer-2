@@ -9,6 +9,8 @@
 
 namespace FlySight {
 
+class MomentModel;
+
 using MeasurementKey = QPair<QString, QString>;
 
 // Marker definitions
@@ -29,6 +31,10 @@ class MarkerRegistry : public QObject {
 public:
     static MarkerRegistry* instance();
 
+    /// Set the MomentModel so that marker registrations are mirrored as moments.
+    /// Must be called before registerMarker / registerMarkers.
+    void setMomentModel(MomentModel *momentModel);
+
     /// register one marker (called by C++ or future PluginHost)
     void registerMarker(const MarkerDefinition& def);
 
@@ -48,6 +54,7 @@ private:
     explicit MarkerRegistry(QObject *parent = nullptr);
 
     QVector<MarkerDefinition> m_markers;
+    MomentModel *m_momentModel = nullptr;
 
     Q_DISABLE_COPY(MarkerRegistry)
 };

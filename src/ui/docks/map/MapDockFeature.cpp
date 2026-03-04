@@ -2,7 +2,6 @@
 #include "ui/docks/AppContext.h"
 #include "MapWidget.h"
 #include "sessionmodel.h"
-#include "cursormodel.h"
 #include "plotrangemodel.h"
 
 namespace FlySight {
@@ -14,7 +13,7 @@ MapDockFeature::MapDockFeature(const AppContext& ctx, QObject* parent)
     m_dock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Map"));
 
     // Create MapWidget
-    m_mapWidget = new MapWidget(ctx.sessionModel, ctx.cursorModel, ctx.rangeModel, m_dock);
+    m_mapWidget = new MapWidget(ctx.sessionModel, ctx.momentModel, ctx.rangeModel, m_dock);
     m_dock->setWidget(m_mapWidget);
 }
 

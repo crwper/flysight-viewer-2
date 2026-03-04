@@ -5,7 +5,6 @@
 #include "plotmodel.h"
 #include "markermodel.h"
 #include "plotviewsettingsmodel.h"
-#include "cursormodel.h"
 #include "plotrangemodel.h"
 
 namespace FlySight {
@@ -21,7 +20,7 @@ PlotDockFeature::PlotDockFeature(const AppContext& ctx, QObject* parent)
                                   ctx.plotModel,
                                   ctx.markerModel,
                                   ctx.plotViewSettings,
-                                  ctx.cursorModel,
+                                  ctx.momentModel,
                                   ctx.rangeModel,
                                   ctx.measureModel,
                                   m_dock);

@@ -2,8 +2,8 @@
 #include "plotmodel.h"
 #include "plotregistry.h"
 #include "markermodel.h"
+#include "momentmodel.h"
 #include "plotviewsettingsmodel.h"
-#include "cursormodel.h"
 #include "plotrangemodel.h"
 #include "preferences/preferencesmanager.h"
 #include "preferences/preferencekeys.h"
@@ -29,6 +29,7 @@
 #include "plottool/setgroundtool.h"
 #include "plottool/measuretool.h"
 #include "plotutils.h"
+#include "calculations/timecalculations.h"
 
 namespace {
 
@@ -79,7 +80,7 @@ PlotWidget::PlotWidget(SessionModel *model,
                        PlotModel *plotModel,
                        MarkerModel *markerModel,
                        PlotViewSettingsModel *viewSettingsModel,
-                       CursorModel *cursorModel,
+                       MomentModel *momentModel,
                        PlotRangeModel *rangeModel,
                        MeasureModel *measureModel,
                        QWidget *parent)
@@ -89,7 +90,7 @@ PlotWidget::PlotWidget(SessionModel *model,
     , plotModel(plotModel)
     , markerModel(markerModel)
     , m_viewSettingsModel(viewSettingsModel)
-    , m_cursorModel(cursorModel)
+    , m_momentModel(momentModel)
     , m_rangeModel(rangeModel)
     , m_xVariable(SessionKeys::Time)
     , m_referenceMarkerKey(SessionKeys::ExitTime)
@@ -146,20 +147,24 @@ PlotWidget::PlotWidget(SessionModel *model,
         this
         );
 
-    // Update cursor model when traced sessions change (e.g. Shift press/release)
+    // Update MomentModel when traced sessions change (e.g. Shift press/release)
     connect(m_crosshairManager.get(), &CrosshairManager::tracedSessionsChanged,
             this, [this](const QSet<QString> &tracedSessions) {
-        if (!m_cursorModel || !m_mouseInPlotArea)
+        if (!m_momentModel || !m_mouseInPlotArea)
             return;
-        m_cursorModel->setCursorTargetsExplicit(
-            QStringLiteral("mouse"), tracedSessions);
-        m_cursorModel->setCursorActive(
-            QStringLiteral("mouse"), !tracedSessions.isEmpty());
+
+        // Read the current mouse moment position to preserve it
+        const auto mouseMoment = m_momentModel->momentById(QStringLiteral("mouse"));
+        m_momentModel->setMomentPosition(
+            QStringLiteral("mouse"),
+            mouseMoment.positionUtc,
+            tracedSessions,
+            !tracedSessions.isEmpty());
     });
 
-    if (m_cursorModel) {
-        connect(m_cursorModel, &CursorModel::cursorsChanged,
-                this, &PlotWidget::onCursorsChanged);
+    if (m_momentModel) {
+        connect(m_momentModel, &MomentModel::momentsChanged,
+                this, &PlotWidget::scheduleMomentUpdate);
     }
 
     // connect signals to slots for updates and interactions
@@ -209,6 +214,11 @@ PlotWidget::PlotWidget(SessionModel *model,
     m_markerUpdateTimer.setSingleShot(true);
     m_markerUpdateTimer.setInterval(0);
     connect(&m_markerUpdateTimer, &QTimer::timeout, this, &PlotWidget::updateMarkersOnly);
+
+    // Initialize coalescing timer for moment-driven updates
+    m_momentUpdateTimer.setSingleShot(true);
+    m_momentUpdateTimer.setInterval(0);
+    connect(&m_momentUpdateTimer, &QTimer::timeout, this, &PlotWidget::onMomentsChanged);
 
     // update the plot with initial data
     updatePlot();
@@ -812,7 +822,7 @@ void PlotWidget::onReferenceMarkerKeyChanged(const QString &oldKey, const QStrin
     }
 
     // Re-apply external cursors under the new axis mode
-    onCursorsChanged();
+    scheduleMomentUpdate();
 }
 
 void PlotWidget::onHoveredSessionChanged(const QString &sessionId)
@@ -831,183 +841,6 @@ void PlotWidget::onHoveredSessionChanged(const QString &sessionId)
     }
 
     customPlot->replot();
-}
-
-void PlotWidget::onCursorsChanged()
-{
-    if (!m_cursorModel || !m_crosshairManager)
-        return;
-
-    // While the mouse is inside the plot area, PlotWidget owns cursor visuals.
-    if (m_mouseInPlotArea)
-        return;
-
-    // Choose the effective cursor using the same precedence rules as the legend:
-    // 1) usable "mouse" (active + explicit non-empty targets)
-    // 2) first active non-mouse cursor (CursorModel insertion order)
-    // 3) none
-    CursorModel::Cursor effective;
-
-    auto mouseUsable = [](const CursorModel::Cursor &c) -> bool {
-        return c.active &&
-               c.targetPolicy == CursorModel::TargetPolicy::Explicit &&
-               !c.targetSessions.isEmpty();
-    };
-
-    if (m_cursorModel->hasCursor(QStringLiteral("mouse"))) {
-        const CursorModel::Cursor mouse = m_cursorModel->cursorById(QStringLiteral("mouse"));
-        if (mouseUsable(mouse)) {
-            effective = mouse;
-        }
-    }
-
-    if (effective.id.isEmpty()) {
-        const int n = m_cursorModel->rowCount();
-        for (int row = 0; row < n; ++row) {
-            const QModelIndex idx = m_cursorModel->index(row, 0);
-            const QString id = m_cursorModel->data(idx, CursorModel::IdRole).toString();
-            if (id.isEmpty() || id == QStringLiteral("mouse"))
-                continue;
-
-            const CursorModel::Cursor c = m_cursorModel->cursorById(id);
-            if (c.active) {
-                effective = c;
-                break;
-            }
-        }
-    }
-
-    if (effective.id.isEmpty() || !effective.active) {
-        m_crosshairManager->clearExternalCursor();
-        return;
-    }
-
-    const QVector<SessionData> &sessions = model->getAllSessions();
-
-    // Build a fast id → session lookup.
-    QHash<QString, const SessionData *> sessionById;
-    sessionById.reserve(sessions.size());
-    for (const auto &s : sessions) {
-        const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
-        if (!sid.isEmpty())
-            sessionById.insert(sid, &s);
-    }
-
-    auto xPlotForSession = [&](const CursorModel::Cursor &c,
-                              const SessionData &s,
-                              double *outXPlot) -> bool {
-        if (!outXPlot)
-            return false;
-
-        if (c.positionSpace == CursorModel::PositionSpace::PlotAxisCoord) {
-            if (c.xVariable != m_xVariable || c.referenceMarkerKey != m_referenceMarkerKey)
-                return false;
-
-            *outXPlot = c.positionValue;
-            return true;
-        }
-
-        if (c.positionSpace == CursorModel::PositionSpace::UtcSeconds) {
-            auto offset = referenceOffsetForSession(s);
-            if (!offset.has_value())
-                return false;
-
-            // UTC-to-plot: subtract offset
-            *outXPlot = c.positionValue - offset.value();
-            return true;
-        }
-
-        return false;
-    };
-
-    auto sessionOverlapsAtXPlot = [&](const QString &sessionId, double xPlot) -> bool {
-        for (auto it = m_graphInfoMap.cbegin(); it != m_graphInfoMap.cend(); ++it) {
-            if (it.value().sessionId != sessionId)
-                continue;
-
-            QCPGraph *g = it.key();
-            if (!g || !g->visible())
-                continue;
-
-            const double yPlot = PlotWidget::interpolateY(g, xPlot);
-            if (!std::isnan(yPlot))
-                return true;
-        }
-        return false;
-    };
-
-    // Case 1: Map hover (existing behavior): "mouse" + exactly one explicit target session.
-    if (effective.id == QStringLiteral("mouse")) {
-        if (effective.targetPolicy != CursorModel::TargetPolicy::Explicit ||
-            effective.targetSessions.size() != 1) {
-            m_crosshairManager->clearExternalCursor();
-            return;
-        }
-
-        const QString sessionId = *effective.targetSessions.constBegin();
-        const SessionData *sessionPtr = sessionById.value(sessionId, nullptr);
-        if (!sessionPtr) {
-            m_crosshairManager->clearExternalCursor();
-            return;
-        }
-
-        double xPlot = 0.0;
-        if (!xPlotForSession(effective, *sessionPtr, &xPlot)) {
-            m_crosshairManager->clearExternalCursor();
-            return;
-        }
-
-        m_crosshairManager->setExternalCursor(sessionId, xPlot);
-        return;
-    }
-
-    // Case 2: Non-mouse effective cursor (video playback / pinned / etc.): multi-session external cursor.
-    QHash<QString, double> xBySession;
-
-    const bool explicitTargets =
-        (effective.targetPolicy == CursorModel::TargetPolicy::Explicit &&
-         !effective.targetSessions.isEmpty());
-
-    if (explicitTargets) {
-        for (const QString &sid : effective.targetSessions) {
-            const SessionData *s = sessionById.value(sid, nullptr);
-            if (!s || !s->isVisible())
-                continue;
-
-            double xPlot = 0.0;
-            if (!xPlotForSession(effective, *s, &xPlot))
-                continue;
-
-            xBySession.insert(sid, xPlot);
-        }
-    } else {
-        // Auto-visible-overlap: derive from visible sessions that overlap at the cursor time.
-        for (const auto &s : sessions) {
-            if (!s.isVisible())
-                continue;
-
-            const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
-            if (sid.isEmpty())
-                continue;
-
-            double xPlot = 0.0;
-            if (!xPlotForSession(effective, s, &xPlot))
-                continue;
-
-            if (!sessionOverlapsAtXPlot(sid, xPlot))
-                continue;
-
-            xBySession.insert(sid, xPlot);
-        }
-    }
-
-    if (xBySession.isEmpty()) {
-        m_crosshairManager->clearExternalCursor();
-        return;
-    }
-
-    // Show a vertical line only when all sessions share the same xPlot.
-    m_crosshairManager->setExternalCursorMulti(xBySession, true);
 }
 
 void PlotWidget::applyPinchZoom(double factor, const QPointF &centerPos)
@@ -1055,40 +888,62 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                 m_crosshairManager->handleMouseMove(me->pos());
             }
 
-            // Step 3: write mouse cursor state into CursorModel
-            if (m_cursorModel) {
+            // Write mouse position to MomentModel (UTC seconds)
+            if (m_momentModel) {
                 const QSet<QString> tracedSessions =
                     m_crosshairManager ? m_crosshairManager->getTracedSessionIds()
                                        : QSet<QString>{};
 
-                if (inPlotArea) {
+                if (inPlotArea && !tracedSessions.isEmpty()) {
                     const double xCoord =
                         customPlot->xAxis->pixelToCoord(me->pos().x());
 
-                    m_cursorModel->setCursorPositionPlotAxis(
-                        QStringLiteral("mouse"),
-                        m_xVariable,
-                        m_referenceMarkerKey,
-                        xCoord
-                    );
+                    // Convert plot-axis coordinate to UTC seconds
+                    double utcSeconds = 0.0;
+                    bool converted = false;
+
+                    // Use the first traced session for conversion
+                    const QString firstSessionId = *tracedSessions.constBegin();
+                    const int row = model->getSessionRow(firstSessionId);
+                    if (row >= 0) {
+                        SessionData &session = model->sessionRef(row);
+                        const auto offset = referenceOffsetForSession(session);
+                        if (offset.has_value()) {
+                            const double rawX = xCoord + offset.value();
+
+                            if (m_xVariable == QLatin1String(SessionKeys::SystemTime)) {
+                                auto utcOpt = Calculations::systemTimeToUtc(session, rawX);
+                                if (utcOpt.has_value()) {
+                                    utcSeconds = *utcOpt;
+                                    converted = true;
+                                }
+                            } else {
+                                utcSeconds = rawX;
+                                converted = true;
+                            }
+                        }
+                    }
+
+                    if (converted) {
+                        m_momentModel->setMomentPosition(
+                            QStringLiteral("mouse"),
+                            utcSeconds,
+                            tracedSessions,
+                            true);
+                    } else {
+                        m_momentModel->setMomentPosition(
+                            QStringLiteral("mouse"), 0.0, {}, false);
+                    }
+                } else {
+                    m_momentModel->setMomentPosition(
+                        QStringLiteral("mouse"), 0.0, tracedSessions, false);
                 }
-
-                m_cursorModel->setCursorTargetsExplicit(
-                    QStringLiteral("mouse"),
-                    tracedSessions
-                );
-
-                // v1 semantics: mouse cursor is "usable" only when in plot AND has targets
-                m_cursorModel->setCursorActive(
-                    QStringLiteral("mouse"),
-                    inPlotArea && !tracedSessions.isEmpty()
-                );
             }
 
-            // If the mouse just left the plot area, force a re-evaluation of the effective cursor
-            // so external (e.g., video) cursors re-appear immediately even if CursorModel didn't change.
+            // If the mouse just left the plot area, force a re-evaluation of moments
+            // so external (e.g., video) cursors re-appear immediately.
             if (wasInPlotArea && !inPlotArea) {
-                onCursorsChanged();
+                scheduleMomentUpdate();
             }
 
             // also forward to the current tool
@@ -1131,20 +986,14 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
                 m_crosshairManager->handleMouseLeave();
             }
 
-            // Step 3: mark mouse cursor inactive and clear targets on leave
-            if (m_cursorModel) {
-                m_cursorModel->setCursorTargetsExplicit(
-                    QStringLiteral("mouse"),
-                    QSet<QString>{}
-                );
-                m_cursorModel->setCursorActive(
-                    QStringLiteral("mouse"),
-                    false
-                );
+            // Mark mouse moment inactive and clear targets on leave
+            if (m_momentModel) {
+                m_momentModel->setMomentPosition(
+                    QStringLiteral("mouse"), 0.0, {}, false);
             }
 
             // Force re-evaluation so external (e.g., video) cursors come back immediately.
-            onCursorsChanged();
+            scheduleMomentUpdate();
 
             m_currentTool->leaveEvent(event);
             return false;
@@ -1307,27 +1156,72 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
         clearAllItems();
     }
 
-    const QVector<MarkerDefinition> enabledDefs =
-        markerModel ? markerModel->enabledMarkers() : QVector<MarkerDefinition>{};
+    // A BubbleMoment unifies the data needed for bubble lane rendering.
+    // Built from MomentModel when available, MarkerModel as fallback.
+    struct BubbleMoment {
+        QString attributeKey;
+        QString shortLabel;
+        QColor color;
+        bool editable = false;
+        QVector<MeasurementKey> measurements;
+    };
 
-    // Step 5: One lane per enabled marker type; always keep a small minimum so
+    QVector<BubbleMoment> bubbleMoments;
+
+    if (m_momentModel) {
+        // Build measurement lookup from MarkerRegistry (needed for annotation computation)
+        QHash<QString, QVector<MeasurementKey>> measurementsByKey;
+        const QVector<MarkerDefinition> allDefs = MarkerRegistry::instance()->allMarkers();
+        for (const auto &def : allDefs) {
+            measurementsByKey.insert(def.attributeKey, def.measurements);
+        }
+
+        const QVector<MomentModel::Moment> moments = m_momentModel->enabledMoments();
+        for (const auto &moment : moments) {
+            if (moment.traits.plotBubble != PlotBubble::Bubble)
+                continue;
+
+            BubbleMoment bm;
+            bm.attributeKey = moment.traits.attributeKey;
+            bm.shortLabel = moment.traits.shortLabel;
+            bm.color = moment.traits.color;
+            bm.editable = (moment.traits.interaction == Interaction::Drag);
+            bm.measurements = measurementsByKey.value(moment.traits.attributeKey);
+            bubbleMoments.append(bm);
+        }
+    } else {
+        // Fallback: read from MarkerModel
+        const QVector<MarkerDefinition> enabledDefs =
+            markerModel ? markerModel->enabledMarkers() : QVector<MarkerDefinition>{};
+        for (const auto &def : enabledDefs) {
+            BubbleMoment bm;
+            bm.attributeKey = def.attributeKey;
+            bm.shortLabel = def.shortLabel;
+            bm.color = def.color;
+            bm.editable = def.editable;
+            bm.measurements = def.measurements;
+            bubbleMoments.append(bm);
+        }
+    }
+
+    // One lane per enabled bubble moment; always keep a small minimum so
     // the topmost y-axis tick label is not clipped when no lanes are present.
-    const int topMargin = qMax(kLaneHeightPx * static_cast<int>(enabledDefs.size()),
+    const int topMargin = qMax(kLaneHeightPx * static_cast<int>(bubbleMoments.size()),
                                kMinTopMarginPx);
     customPlot->axisRect()->setMinimumMargins(QMargins(0, topMargin, 0, 0));
 
-    if (enabledDefs.isEmpty()) {
+    if (bubbleMoments.isEmpty()) {
         if (!m_markerItemsByLane.isEmpty() || !m_markerBubbleMeta.isEmpty())
             clearAllItems();
         return;
     }
 
-    // Ensure lane storage matches the enabled marker count
-    if (m_markerItemsByLane.size() != enabledDefs.size()) {
+    // Ensure lane storage matches the enabled bubble moment count
+    if (m_markerItemsByLane.size() != bubbleMoments.size()) {
         clearAllItems();
-        m_markerItemsByLane.resize(enabledDefs.size());
+        m_markerItemsByLane.resize(bubbleMoments.size());
     } else if (m_markerItemsByLane.isEmpty()) {
-        m_markerItemsByLane.resize(enabledDefs.size());
+        m_markerItemsByLane.resize(bubbleMoments.size());
     }
 
     // Only draw markers that are currently within the visible x range
@@ -1353,14 +1247,14 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
         };
 
     // Compute annotation string for a single-session marker bubble
-    auto computeAnnotation = [this](const MarkerDefinition &def,
+    auto computeAnnotation = [this](const BubbleMoment &bm,
                                     const QString &sessionId) -> QString
     {
-        if (def.measurements.isEmpty())
+        if (bm.measurements.isEmpty())
             return QString();
 
-        const auto &primaryMk = def.measurements.first();
-        QString valueKey = def.attributeKey
+        const auto &primaryMk = bm.measurements.first();
+        QString valueKey = bm.attributeKey
             + QStringLiteral(":")
             + primaryMk.first
             + QStringLiteral("/")
@@ -1397,8 +1291,8 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
     const int pointerBaseWidthPx = 10;
     const int bubbleGapPx = 0;
 
-    for (int laneIndex = 0; laneIndex < enabledDefs.size(); ++laneIndex) {
-        const MarkerDefinition &def = enabledDefs[laneIndex];
+    for (int laneIndex = 0; laneIndex < bubbleMoments.size(); ++laneIndex) {
+        const BubbleMoment &def = bubbleMoments[laneIndex];
 
         struct DrawableInstance {
             double xPixel = 0.0;
@@ -1771,6 +1665,324 @@ void PlotWidget::scheduleMarkerUpdate()
     if (m_pendingRebuildLevel == RebuildLevel::Full)
         return;
     m_markerUpdateTimer.start();
+}
+
+void PlotWidget::scheduleMomentUpdate()
+{
+    if (m_pendingRebuildLevel == RebuildLevel::Full)
+        return;
+    m_momentUpdateTimer.start();
+}
+
+// ─────────────────────────────── Moment-driven rendering
+
+void PlotWidget::onMomentsChanged()
+{
+    if (!m_momentModel)
+        return;
+
+    updateCrosshairFromMoments();
+    updateMarkersOnly();  // reads from MomentModel per Task 3.3
+    updateMomentVLines();
+}
+
+void PlotWidget::updateCrosshairFromMoments()
+{
+    if (!m_momentModel || !m_crosshairManager)
+        return;
+
+    // While the mouse is inside the plot area, PlotWidget owns cursor visuals.
+    if (m_mouseInPlotArea)
+        return;
+
+    const QVector<MomentModel::Moment> moments = m_momentModel->enabledMoments();
+
+    // Choose effective moment using precedence rules:
+    // 1) Mouse moment that is active with non-empty targets
+    // 2) First active non-mouse moment
+    // 3) None (clear crosshair)
+    const MomentModel::Moment *effective = nullptr;
+
+    for (const auto &m : moments) {
+        if (m.id == QStringLiteral("mouse")) {
+            if (m.active && !m.targetSessions.isEmpty()) {
+                effective = &m;
+                break;  // Mouse moment has highest priority
+            }
+            continue;
+        }
+        if (m.active && !effective) {
+            effective = &m;
+            // Don't break -- mouse moment could still appear later in the list.
+            // But since mouse priority is highest, once found we stop.
+        }
+    }
+
+    // If we found a non-mouse but no active mouse, effective is the non-mouse.
+    // If we found an active mouse, effective is the mouse.
+    // If nothing found, clear.
+
+    if (!effective || !effective->active) {
+        m_crosshairManager->clearExternalCursor();
+        return;
+    }
+
+    const QVector<SessionData> &sessions = model->getAllSessions();
+
+    // Build a fast id -> session lookup.
+    QHash<QString, const SessionData *> sessionById;
+    sessionById.reserve(sessions.size());
+    for (const auto &s : sessions) {
+        const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
+        if (!sid.isEmpty())
+            sessionById.insert(sid, &s);
+    }
+
+    // Convert moment UTC position to plot-axis coordinate for a given session.
+    auto xPlotForMoment = [&](const MomentModel::Moment &moment,
+                              const SessionData &s,
+                              double *outXPlot) -> bool {
+        if (!outXPlot)
+            return false;
+
+        auto offset = referenceOffsetForSession(s);
+        if (!offset.has_value())
+            return false;
+
+        if (moment.traits.positionSource == PositionSource::Attribute) {
+            // Attribute-sourced: read position from session attribute
+            QVariant v = s.getAttribute(moment.traits.attributeKey);
+            if (!v.canConvert<QDateTime>())
+                return false;
+            QDateTime dt = v.toDateTime();
+            if (!dt.isValid())
+                return false;
+            dt = dt.toUTC();
+            double utcSec = dt.toMSecsSinceEpoch() / 1000.0;
+            *outXPlot = utcSec - offset.value();
+            return true;
+        }
+
+        // MouseInput or External: use positionUtc directly
+        *outXPlot = moment.positionUtc - offset.value();
+        return true;
+    };
+
+    // Case 1: Mouse moment with exactly one explicit target session.
+    if (effective->id == QStringLiteral("mouse")) {
+        if (effective->targetSessions.size() != 1) {
+            m_crosshairManager->clearExternalCursor();
+            return;
+        }
+
+        const QString sessionId = *effective->targetSessions.constBegin();
+        const SessionData *sessionPtr = sessionById.value(sessionId, nullptr);
+        if (!sessionPtr) {
+            m_crosshairManager->clearExternalCursor();
+            return;
+        }
+
+        double xPlot = 0.0;
+        if (!xPlotForMoment(*effective, *sessionPtr, &xPlot)) {
+            m_crosshairManager->clearExternalCursor();
+            return;
+        }
+
+        m_crosshairManager->setExternalCursor(sessionId, xPlot);
+        return;
+    }
+
+    // Case 2: Non-mouse moment: multi-session external cursor.
+    QHash<QString, double> xBySession;
+
+    if (!effective->targetSessions.isEmpty()) {
+        // Explicit targets
+        for (const QString &sid : effective->targetSessions) {
+            const SessionData *s = sessionById.value(sid, nullptr);
+            if (!s || !s->isVisible())
+                continue;
+
+            double xPlot = 0.0;
+            if (!xPlotForMoment(*effective, *s, &xPlot))
+                continue;
+
+            xBySession.insert(sid, xPlot);
+        }
+    } else if (effective->traits.positionSource == PositionSource::Attribute) {
+        // Attribute-sourced without explicit targets: all visible sessions
+        for (const auto &s : sessions) {
+            if (!s.isVisible())
+                continue;
+
+            const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
+            if (sid.isEmpty())
+                continue;
+
+            double xPlot = 0.0;
+            if (!xPlotForMoment(*effective, s, &xPlot))
+                continue;
+
+            xBySession.insert(sid, xPlot);
+        }
+    } else {
+        // Non-attribute without explicit targets: all visible sessions that overlap
+        for (const auto &s : sessions) {
+            if (!s.isVisible())
+                continue;
+
+            const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
+            if (sid.isEmpty())
+                continue;
+
+            double xPlot = 0.0;
+            if (!xPlotForMoment(*effective, s, &xPlot))
+                continue;
+
+            // Check if any graph for this session has data at this x position
+            bool overlaps = false;
+            for (auto it = m_graphInfoMap.cbegin(); it != m_graphInfoMap.cend(); ++it) {
+                if (it.value().sessionId != sid)
+                    continue;
+                QCPGraph *g = it.key();
+                if (!g || !g->visible())
+                    continue;
+                const double yPlot = PlotWidget::interpolateY(g, xPlot);
+                if (!std::isnan(yPlot)) {
+                    overlaps = true;
+                    break;
+                }
+            }
+            if (!overlaps)
+                continue;
+
+            xBySession.insert(sid, xPlot);
+        }
+    }
+
+    if (xBySession.isEmpty()) {
+        m_crosshairManager->clearExternalCursor();
+        return;
+    }
+
+    m_crosshairManager->setExternalCursorMulti(xBySession, true);
+}
+
+void PlotWidget::updateMomentVLines()
+{
+    if (!m_momentModel)
+        return;
+
+    const QVector<MomentModel::Moment> moments = m_momentModel->enabledMoments();
+
+    // Collect moment IDs that should have lines
+    QSet<QString> activeMomentIds;
+
+    for (const auto &moment : moments) {
+        // Skip MouseInput moments (handled by CrosshairManager)
+        if (moment.traits.positionSource == PositionSource::MouseInput)
+            continue;
+
+        // Skip DashedLineOnDrag (deferred to Phase 5)
+        if (moment.traits.plotPresentation == PlotPresentation::DashedLineOnDrag)
+            continue;
+
+        // Only VerticalLine and DashedLine are handled
+        if (moment.traits.plotPresentation != PlotPresentation::VerticalLine &&
+            moment.traits.plotPresentation != PlotPresentation::DashedLine)
+            continue;
+
+        // Only draw if the moment is active
+        if (!moment.active)
+            continue;
+
+        activeMomentIds.insert(moment.id);
+
+        // Compute the x-axis position. For attribute-sourced moments, we need
+        // to pick a representative session (use the first visible session that
+        // has the attribute). For MouseInput/External, use positionUtc directly.
+        double xPlot = 0.0;
+        bool havePosition = false;
+
+        if (moment.traits.positionSource == PositionSource::Attribute) {
+            // Use the first visible session that has the attribute
+            for (const auto &s : model->getAllSessions()) {
+                if (!s.isVisible())
+                    continue;
+                auto offset = referenceOffsetForSession(s);
+                if (!offset.has_value())
+                    continue;
+
+                QVariant v = s.getAttribute(moment.traits.attributeKey);
+                if (!v.canConvert<QDateTime>())
+                    continue;
+                QDateTime dt = v.toDateTime();
+                if (!dt.isValid())
+                    continue;
+                dt = dt.toUTC();
+                double utcSec = dt.toMSecsSinceEpoch() / 1000.0;
+                xPlot = utcSec - offset.value();
+                havePosition = true;
+                break;
+            }
+        } else {
+            // External source
+            const SessionData *refSession = referenceSession();
+            if (refSession) {
+                auto offset = referenceOffsetForSession(*refSession);
+                if (offset.has_value()) {
+                    xPlot = moment.positionUtc - offset.value();
+                    havePosition = true;
+                }
+            }
+        }
+
+        if (!havePosition)
+            continue;
+
+        // Get or create the QCPItemLine
+        QCPItemLine *line = m_momentVLines.value(moment.id, nullptr);
+        if (!line) {
+            line = new QCPItemLine(customPlot);
+            line->setClipToAxisRect(true);
+            line->setSelectable(false);
+            m_momentVLines.insert(moment.id, line);
+        }
+
+        // Configure line style based on presentation trait
+        QPen pen(moment.traits.color.isValid() ? moment.traits.color : QColor(128, 128, 128));
+        pen.setWidthF(1.0);
+        if (moment.traits.plotPresentation == PlotPresentation::DashedLine) {
+            pen.setStyle(Qt::DashLine);
+        } else {
+            pen.setStyle(Qt::SolidLine);
+        }
+        line->setPen(pen);
+
+        // Position the line vertically across the plot area
+        line->start->setTypeX(QCPItemPosition::ptPlotCoords);
+        line->start->setTypeY(QCPItemPosition::ptAxisRectRatio);
+        line->start->setCoords(xPlot, 0.0);
+
+        line->end->setTypeX(QCPItemPosition::ptPlotCoords);
+        line->end->setTypeY(QCPItemPosition::ptAxisRectRatio);
+        line->end->setCoords(xPlot, 1.0);
+
+        line->setVisible(true);
+    }
+
+    // Remove lines for moments no longer present or no longer active
+    QMutableHashIterator<QString, QCPItemLine*> it(m_momentVLines);
+    while (it.hasNext()) {
+        it.next();
+        if (!activeMomentIds.contains(it.key())) {
+            if (it.value()) {
+                customPlot->removeItem(it.value());
+            }
+            it.remove();
+        }
+    }
+
+    customPlot->replot(QCustomPlot::rpQueuedReplot);
 }
 
 void PlotWidget::onDependencyChanged(const QString &sessionId, const DependencyKey &key)

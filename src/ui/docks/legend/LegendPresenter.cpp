@@ -2,7 +2,7 @@
 
 #include "sessionmodel.h"
 #include "plotmodel.h"
-#include "cursormodel.h"
+#include "momentmodel.h"
 #include "plotviewsettingsmodel.h"
 #include "measuremodel.h"
 #include "LegendWidget.h"
@@ -23,65 +23,6 @@
 
 namespace FlySight {
 namespace {
-
-std::optional<double> plotAxisXForSession(const CursorModel::Cursor &cursor,
-                                         const QString &xVariable,
-                                         const QString &referenceMarkerKey,
-                                         const SessionData &session)
-{
-    using PS = CursorModel::PositionSpace;
-
-    if (cursor.positionSpace == PS::PlotAxisCoord) {
-        // Match both xVariable and referenceMarkerKey
-        if (cursor.xVariable != xVariable || cursor.referenceMarkerKey != referenceMarkerKey)
-            return std::nullopt;
-        return cursor.positionValue;
-    }
-
-    // UtcSeconds -> convert to plot-axis coordinate: plotCoord = absoluteX - offset
-    // When xVariable is _system_time, convert the UTC cursor value to system time first.
-    const double utc = cursor.positionValue;
-    double absoluteX = utc;
-
-    if (xVariable == SessionKeys::SystemTime) {
-        auto st = Calculations::utcToSystemTime(session, utc);
-        if (!st.has_value())
-            return std::nullopt;
-        absoluteX = *st;
-    }
-
-    const auto optOffset = markerOffsetSeconds(session, referenceMarkerKey, xVariable);
-    if (!optOffset.has_value())
-        return std::nullopt;
-
-    return absoluteX - *optOffset;
-}
-
-std::optional<double> utcSecondsForHeader(const CursorModel::Cursor &cursor,
-                                         const QString &referenceMarkerKey,
-                                         const QString &xVariable,
-                                         const SessionData &session,
-                                         double plotAxisX)
-{
-    using PS = CursorModel::PositionSpace;
-
-    if (cursor.positionSpace == PS::UtcSeconds) {
-        return cursor.positionValue;
-    }
-
-    // PlotAxisCoord -> convert to UTC: reconstruct absolute value, then convert
-    // to UTC if needed (when xVariable is _system_time).
-    const auto optOffset = markerOffsetSeconds(session, referenceMarkerKey, xVariable);
-    if (!optOffset.has_value())
-        return std::nullopt;
-
-    const double rawValue = plotAxisX + *optOffset;
-
-    if (xVariable == SessionKeys::SystemTime) {
-        return Calculations::systemTimeToUtc(session, rawValue);
-    }
-    return rawValue;
-}
 
 bool sessionOverlapsAtX(const SessionData &session,
                         const QVector<PlotValue> &enabledPlots,
@@ -118,7 +59,7 @@ bool sessionOverlapsAtX(const SessionData &session,
 
 LegendPresenter::LegendPresenter(SessionModel *sessionModel,
                                  PlotModel *plotModel,
-                                 CursorModel *cursorModel,
+                                 MomentModel *momentModel,
                                  PlotViewSettingsModel *plotViewSettings,
                                  MeasureModel *measureModel,
                                  LegendWidget *legendWidget,
@@ -126,7 +67,7 @@ LegendPresenter::LegendPresenter(SessionModel *sessionModel,
     : QObject(parent)
     , m_sessionModel(sessionModel)
     , m_plotModel(plotModel)
-    , m_cursorModel(cursorModel)
+    , m_momentModel(momentModel)
     , m_plotViewSettings(plotViewSettings)
     , m_measureModel(measureModel)
     , m_legendWidget(legendWidget)
@@ -149,8 +90,8 @@ LegendPresenter::LegendPresenter(SessionModel *sessionModel,
                 this, &LegendPresenter::scheduleUpdate);
     }
 
-    if (m_cursorModel) {
-        connect(m_cursorModel, &CursorModel::cursorsChanged,
+    if (m_momentModel) {
+        connect(m_momentModel, &MomentModel::momentsChanged,
                 this, &LegendPresenter::scheduleUpdate);
     }
 
@@ -224,7 +165,7 @@ void LegendPresenter::recompute()
         return;
     }
 
-    if (!m_sessionModel || !m_plotModel || !m_cursorModel || !m_plotViewSettings) {
+    if (!m_sessionModel || !m_plotModel || !m_momentModel || !m_plotViewSettings) {
         m_legendWidget->clear();
         return;
     }
@@ -238,16 +179,8 @@ void LegendPresenter::recompute()
         return;
     }
 
-    const CursorModel::Cursor cursor = chooseEffectiveCursor(m_cursorModel);
-    if (cursor.id.isEmpty() || !cursor.active) {
-        m_legendWidget->clear();
-        return;
-    }
-
-    // If cursor is in plot-axis space, it must match the current axis mode.
-    if (cursor.positionSpace == CursorModel::PositionSpace::PlotAxisCoord &&
-        (cursor.xVariable != xVariable ||
-         cursor.referenceMarkerKey != referenceMarkerKey)) {
+    const MomentModel::Moment moment = chooseEffectiveMoment(m_momentModel);
+    if (moment.id.isEmpty() || !moment.active) {
         m_legendWidget->clear();
         return;
     }
@@ -266,11 +199,10 @@ void LegendPresenter::recompute()
 
     // Resolve target sessions.
     QSet<QString> targets;
-    const bool explicitTargets =
-        (cursor.targetPolicy == CursorModel::TargetPolicy::Explicit && !cursor.targetSessions.isEmpty());
+    const bool explicitTargets = !moment.targetSessions.isEmpty();
 
     if (explicitTargets) {
-        for (const QString &sid : cursor.targetSessions) {
+        for (const QString &sid : moment.targetSessions) {
             auto it = sessionById.constFind(sid);
             if (it == sessionById.constEnd())
                 continue;
@@ -279,7 +211,7 @@ void LegendPresenter::recompute()
             targets.insert(sid);
         }
     } else {
-        // Auto-visible-overlap (or explicit with empty targets): derive from visible sessions.
+        // Auto-visible-overlap: derive from visible sessions that overlap at the moment's position.
         for (const auto &s : sessions) {
             if (!s.isVisible())
                 continue;
@@ -288,7 +220,11 @@ void LegendPresenter::recompute()
             if (sid.isEmpty())
                 continue;
 
-            const auto xOpt = plotAxisXForSession(cursor, xVariable, referenceMarkerKey, s);
+            const auto utcOpt = utcSecondsForMoment(moment, s);
+            if (!utcOpt.has_value())
+                continue;
+
+            const auto xOpt = plotAxisXFromUtc(*utcOpt, xVariable, referenceMarkerKey, s);
             if (!xOpt.has_value())
                 continue;
 
@@ -323,7 +259,14 @@ void LegendPresenter::recompute()
             return;
         }
 
-        const auto xOpt = plotAxisXForSession(cursor, xVariable, referenceMarkerKey, *session);
+        const auto utcOpt = utcSecondsForMoment(moment, *session);
+        if (!utcOpt.has_value()) {
+            m_legendWidget->clear();
+            return;
+        }
+        const double utcSecs = *utcOpt;
+
+        const auto xOpt = plotAxisXFromUtc(utcSecs, xVariable, referenceMarkerKey, *session);
         if (!xOpt.has_value()) {
             m_legendWidget->clear();
             return;
@@ -372,33 +315,29 @@ void LegendPresenter::recompute()
         QString utcText;
         QString coordsText;
 
-        const auto utcOpt = utcSecondsForHeader(cursor, referenceMarkerKey, xVariable, *session, plotX);
-        if (utcOpt.has_value()) {
-            const double utcSecs = *utcOpt;
+        // UTC text comes directly from the moment's UTC position (no conversion needed)
+        utcText = QStringLiteral("%1 UTC")
+                      .arg(QDateTime::fromMSecsSinceEpoch(
+                               qint64(utcSecs * 1000.0),
+                               Qt::UTC)
+                               .toString(QStringLiteral("yy-MM-dd HH:mm:ss.zzz")));
 
-            utcText = QStringLiteral("%1 UTC")
-                          .arg(QDateTime::fromMSecsSinceEpoch(
-                                   qint64(utcSecs * 1000.0),
-                                   Qt::UTC)
-                                   .toString(QStringLiteral("yy-MM-dd HH:mm:ss.zzz")));
+        const double lat = interpolateSessionMeasurement(*session, QStringLiteral("GNSS"), SessionKeys::Time, QStringLiteral("lat"), utcSecs);
+        const double lon = interpolateSessionMeasurement(*session, QStringLiteral("GNSS"), SessionKeys::Time, QStringLiteral("lon"), utcSecs);
+        const double alt = interpolateSessionMeasurement(*session, QStringLiteral("GNSS"), SessionKeys::Time, QStringLiteral("hMSL"), utcSecs);
 
-            const double lat = interpolateSessionMeasurement(*session, QStringLiteral("GNSS"), SessionKeys::Time, QStringLiteral("lat"), utcSecs);
-            const double lon = interpolateSessionMeasurement(*session, QStringLiteral("GNSS"), SessionKeys::Time, QStringLiteral("lon"), utcSecs);
-            const double alt = interpolateSessionMeasurement(*session, QStringLiteral("GNSS"), SessionKeys::Time, QStringLiteral("hMSL"), utcSecs);
+        if (!std::isnan(lat) && !std::isnan(lon) && !std::isnan(alt)) {
+            // Convert altitude to display units
+            double displayAlt = UnitConverter::instance().convert(alt, QStringLiteral("altitude"));
+            QString altUnit = UnitConverter::instance().getUnitLabel(QStringLiteral("altitude"));
+            int altPrecision = UnitConverter::instance().getPrecision(QStringLiteral("altitude"));
+            if (altPrecision < 0) altPrecision = 1; // Fallback
 
-            if (!std::isnan(lat) && !std::isnan(lon) && !std::isnan(alt)) {
-                // Convert altitude to display units
-                double displayAlt = UnitConverter::instance().convert(alt, QStringLiteral("altitude"));
-                QString altUnit = UnitConverter::instance().getUnitLabel(QStringLiteral("altitude"));
-                int altPrecision = UnitConverter::instance().getPrecision(QStringLiteral("altitude"));
-                if (altPrecision < 0) altPrecision = 1; // Fallback
-
-                coordsText = QStringLiteral("(%1 deg, %2 deg, %3 %4)")
-                                 .arg(lat, 0, 'f', 7)
-                                 .arg(lon, 0, 'f', 7)
-                                 .arg(displayAlt, 0, 'f', altPrecision)
-                                 .arg(altUnit);
-            }
+            coordsText = QStringLiteral("(%1 deg, %2 deg, %3 %4)")
+                             .arg(lat, 0, 'f', 7)
+                             .arg(lon, 0, 'f', 7)
+                             .arg(displayAlt, 0, 'f', altPrecision)
+                             .arg(altUnit);
         }
 
         m_legendWidget->setMode(LegendWidget::PointDataMode);
@@ -429,7 +368,11 @@ void LegendPresenter::recompute()
             if (!session)
                 continue;
 
-            const auto xOpt = plotAxisXForSession(cursor, xVariable, referenceMarkerKey, *session);
+            const auto utcOpt = utcSecondsForMoment(moment, *session);
+            if (!utcOpt.has_value())
+                continue;
+
+            const auto xOpt = plotAxisXFromUtc(*utcOpt, xVariable, referenceMarkerKey, *session);
             if (!xOpt.has_value())
                 continue;
 

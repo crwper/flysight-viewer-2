@@ -276,10 +276,10 @@ set(PROJECT_SOURCES
   plotregistry.cpp           plotregistry.h
   python_output_redirector.h
   plotmodel.cpp              plotmodel.h
-  cursormodel.cpp            cursormodel.h
   plotrangemodel.cpp         plotrangemodel.h
   markerregistry.cpp         markerregistry.h
   markermodel.cpp            markermodel.h
+  momentmodel.cpp            momentmodel.h
   altitudemarkerfeature.cpp  altitudemarkerfeature.h
   ui/docks/AppContext.h
   ui/docks/DockFeature.h

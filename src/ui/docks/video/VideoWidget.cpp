@@ -1,6 +1,6 @@
 #include "VideoWidget.h"
 
-#include "cursormodel.h"
+#include "momentmodel.h"
 #include "sessionmodel.h"
 
 #include <QQuickWidget>
@@ -44,11 +44,11 @@ static constexpr int   kSeekWatchdogMs = 300;        // Failsafe timeout for fra
 static constexpr int   kWheelPixelsPerStep = 40;     // Approx pixels per "notch" for trackpads
 
 VideoWidget::VideoWidget(SessionModel *sessionModel,
-                         CursorModel *cursorModel,
+                         MomentModel *momentModel,
                          QWidget *parent)
     : QWidget(parent)
     , m_sessionModel(sessionModel)
-    , m_cursorModel(cursorModel)
+    , m_momentModel(momentModel)
     , m_player(new QMediaPlayer(this))
 {
 #if QT_VERSION_MAJOR >= 6
@@ -828,25 +828,16 @@ std::optional<double> VideoWidget::syncedSyncUtcSeconds() const
 
 void VideoWidget::updateVideoCursorSyncState()
 {
-    if (!m_cursorModel)
+    if (!m_momentModel)
         return;
 
     const bool synced = m_anchorVideoSeconds.has_value() && syncedSyncUtcSeconds().has_value();
     if (!synced) {
-        m_cursorModel->setCursorActive(QStringLiteral("video"), false);
+        m_momentModel->setMomentActive(QStringLiteral("video"), false);
         return;
     }
 
-    const QString sessionId = selectedSessionId();
-    if (!sessionId.isEmpty()) {
-        QSet<QString> targets;
-        targets.insert(sessionId);
-        m_cursorModel->setCursorTargetsExplicit(QStringLiteral("video"), targets);
-    } else {
-        m_cursorModel->setCursorTargetPolicy(QStringLiteral("video"), CursorModel::TargetPolicy::AutoVisibleOverlap);
-    }
-
-    m_cursorModel->setCursorActive(QStringLiteral("video"), true);
+    m_momentModel->setMomentActive(QStringLiteral("video"), true);
 
     if (m_player) {
         updateVideoCursorFromPositionMs(m_player->position());
@@ -855,7 +846,7 @@ void VideoWidget::updateVideoCursorSyncState()
 
 void VideoWidget::updateVideoCursorFromPositionMs(qint64 positionMs)
 {
-    if (!m_cursorModel || !m_anchorVideoSeconds.has_value())
+    if (!m_momentModel || !m_anchorVideoSeconds.has_value())
         return;
 
     const auto exitUtc = syncedSyncUtcSeconds();
@@ -865,7 +856,13 @@ void VideoWidget::updateVideoCursorFromPositionMs(qint64 positionMs)
     const double videoNowSeconds = static_cast<double>(positionMs) / 1000.0;
     const double utcNow = *exitUtc + (videoNowSeconds - *m_anchorVideoSeconds);
 
-    m_cursorModel->setCursorPositionUtc(QStringLiteral("video"), utcNow);
+    // Preserve existing target sessions from the video moment.
+    // Empty targets = auto-visible-overlap (consumers already handle this).
+    const auto current = m_momentModel->momentById(QStringLiteral("video"));
+    m_momentModel->setMomentPosition(QStringLiteral("video"),
+                                      utcNow,
+                                      current.targetSessions,
+                                      true);
 }
 
 void VideoWidget::onDependencyChanged(const QString &sessionId, const DependencyKey &key)

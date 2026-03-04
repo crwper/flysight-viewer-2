@@ -25,7 +25,7 @@ class DockFeature;
 class PlotViewSettingsModel;
 class PlotModel;
 class MarkerModel;
-class CursorModel;
+class MomentModel;
 class PlotRangeModel;
 class MeasureModel;
 
@@ -115,8 +115,8 @@ private:
     // Plot view settings
     PlotViewSettingsModel *m_plotViewSettingsModel;
 
-    // Cursor model
-    CursorModel *m_cursorModel = nullptr;
+    // Moment model (single source of truth for positioned-in-time elements)
+    MomentModel *m_momentModel = nullptr;
 
     // Range model for synchronizing plot x-axis range with other docks
     PlotRangeModel *m_rangeModel = nullptr;

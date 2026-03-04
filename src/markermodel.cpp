@@ -2,6 +2,7 @@
 
 #include <QVariant>
 
+#include "momentmodel.h"
 #include "sessiondata.h" // for SessionKeys::ExitTime default enabled marker
 
 namespace FlySight {
@@ -16,6 +17,11 @@ MarkerModel::MarkerModel(QObject *parent)
 void MarkerModel::setSettings(QSettings *settings)
 {
     m_settings = settings;
+}
+
+void MarkerModel::setMomentModel(MomentModel *momentModel)
+{
+    m_momentModel = momentModel;
 }
 
 void MarkerModel::onMarkersChanged()
@@ -130,6 +136,14 @@ void MarkerModel::setMarkers(const QVector<MarkerDefinition>& defs)
     }
 
     endResetModel();
+
+    // Propagate all enabled states to MomentModel after rebuild
+    if (m_momentModel) {
+        for (auto it = m_markersByKey.constBegin(); it != m_markersByKey.constEnd(); ++it) {
+            if (it.value())
+                m_momentModel->setMomentEnabled(it.key(), it.value()->enabled);
+        }
+    }
 }
 
 QVector<MarkerDefinition> MarkerModel::enabledMarkers() const
@@ -161,6 +175,10 @@ void MarkerModel::setMarkerEnabled(const QString& attributeKey, bool enabled)
 
     if (m_settings)
         m_settings->setValue(settingsKey(key), enabled);
+
+    // Propagate enablement change to MomentModel
+    if (m_momentModel)
+        m_momentModel->setMomentEnabled(key, enabled);
 
     const QModelIndex idx = indexForMarker(node);
     if (idx.isValid()) {
@@ -330,6 +348,10 @@ bool MarkerModel::setData(const QModelIndex& index, const QVariant& value, int r
 
     if (m_settings)
         m_settings->setValue(settingsKey(makeMarkerId(marker->def)), enabled);
+
+    // Propagate enablement change to MomentModel
+    if (m_momentModel)
+        m_momentModel->setMomentEnabled(makeMarkerId(marker->def), enabled);
 
     emit dataChanged(index, index, {Qt::CheckStateRole});
     return true;

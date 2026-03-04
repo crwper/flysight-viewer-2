@@ -31,7 +31,7 @@ class MeasureTool;
 class PlotViewSettingsModel;
 class PlotModel;
 class MarkerModel;
-class CursorModel;
+class MomentModel;
 class PlotRangeModel;
 class MeasureModel;
 
@@ -74,7 +74,7 @@ public:
             PlotModel *plotModel,
             MarkerModel *markerModel,
             PlotViewSettingsModel *viewSettingsModel,
-            CursorModel *cursorModel,
+            MomentModel *momentModel,
             PlotRangeModel *rangeModel,
             MeasureModel *measureModel,
             QWidget *parent = nullptr);
@@ -131,7 +131,7 @@ protected:
 
 private slots:
     void onHoveredSessionChanged(const QString& sessionId);
-    void onCursorsChanged();
+    void onMomentsChanged();
     void onPreferenceChanged(const QString &key, const QVariant &value);
     void onDependencyChanged(const QString &sessionId, const DependencyKey &key);
 
@@ -149,6 +149,11 @@ private:
     // Coalescing rebuild helpers
     void schedulePlotRebuild();
     void scheduleMarkerUpdate();
+    void scheduleMomentUpdate();
+
+    // Moment-driven rendering helpers
+    void updateCrosshairFromMoments();
+    void updateMomentVLines();
 
     // View management
     const SessionData* referenceSession() const;
@@ -175,7 +180,7 @@ private:
     PlotModel *plotModel;
     MarkerModel *markerModel;
     PlotViewSettingsModel* m_viewSettingsModel;
-    CursorModel* m_cursorModel = nullptr;
+    MomentModel* m_momentModel = nullptr;
     PlotRangeModel* m_rangeModel = nullptr;
 
     // Tools
@@ -218,6 +223,7 @@ private:
     RebuildLevel m_pendingRebuildLevel = RebuildLevel::None;
     QTimer m_rebuildTimer;
     QTimer m_markerUpdateTimer;
+    QTimer m_momentUpdateTimer;
 
     // Viewport shift state for reference marker changes
     QString m_lastRefSessionId;
@@ -228,6 +234,9 @@ private:
     QString      m_dragSessionId;
     QString      m_dragAttributeKey;
     double       m_dragXCoordOffset = 0.0;  // x-axis offset between click point and bubble anchor
+
+    // Moment-driven vertical lines (keyed by moment id)
+    QHash<QString, QCPItemLine*> m_momentVLines;
 };
 
 } // namespace FlySight

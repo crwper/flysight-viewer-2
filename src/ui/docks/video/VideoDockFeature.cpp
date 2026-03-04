@@ -2,7 +2,7 @@
 #include "ui/docks/AppContext.h"
 #include "VideoWidget.h"
 #include "sessionmodel.h"
-#include "cursormodel.h"
+#include "momentmodel.h"
 
 namespace FlySight {
 
@@ -13,7 +13,7 @@ VideoDockFeature::VideoDockFeature(const AppContext& ctx, QObject* parent)
     m_dock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Video"));
 
     // Create VideoWidget
-    m_videoWidget = new VideoWidget(ctx.sessionModel, ctx.cursorModel, m_dock);
+    m_videoWidget = new VideoWidget(ctx.sessionModel, ctx.momentModel, m_dock);
     m_dock->setWidget(m_videoWidget);
 }
 

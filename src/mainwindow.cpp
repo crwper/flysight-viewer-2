@@ -40,7 +40,7 @@
 #include "plotmodel.h"
 #include "markermodel.h"
 #include "markerregistry.h"
-#include "cursormodel.h"
+#include "momentmodel.h"
 #include "plotrangemodel.h"
 #include "measuremodel.h"
 #include "units/unitconverter.h"
@@ -79,7 +79,6 @@ MainWindow::MainWindow(QWidget *parent)
           parent)
     , m_settings(new QSettings(this))
     , m_plotViewSettingsModel(new PlotViewSettingsModel(m_settings, this))
-    , m_cursorModel(new CursorModel(this))
     , ui(new Ui::MainWindow)
     , model(new SessionModel(this))
     , plotModel (new PlotModel(this))
@@ -91,6 +90,39 @@ MainWindow::MainWindow(QWidget *parent)
     // Give models access to QSettings for persisting enabled state
     plotModel->setSettings(m_settings);
     markerModel->setSettings(m_settings);
+
+    // Create MomentModel and wire it to SessionModel for dependency tracking
+    m_momentModel = new MomentModel(this);
+    m_momentModel->setSessionModel(model);
+
+    // Give MarkerRegistry and MarkerModel access to MomentModel so that
+    // marker registration and enablement changes propagate to the moment system.
+    MarkerRegistry::instance()->setMomentModel(m_momentModel);
+    markerModel->setMomentModel(m_momentModel);
+
+    // Register the mouse cursor as a moment (always enabled, always visible)
+    {
+        MomentTraits mouseTraits;
+        mouseTraits.positionSource = PositionSource::MouseInput;
+        mouseTraits.interaction = Interaction::None;
+        mouseTraits.plotPresentation = PlotPresentation::VerticalLine;
+        mouseTraits.plotBubble = PlotBubble::None;
+        mouseTraits.mapPresentation = MapPresentation::LargeDot;
+        mouseTraits.legendVisibility = LegendVisibility::Visible;
+        m_momentModel->registerMoment(QStringLiteral("mouse"), tr("Mouse"), mouseTraits);
+    }
+
+    // Register the video cursor as a moment
+    {
+        MomentTraits videoTraits;
+        videoTraits.positionSource = PositionSource::External;
+        videoTraits.interaction = Interaction::PlaybackAndDrag;
+        videoTraits.plotPresentation = PlotPresentation::VerticalLine;
+        videoTraits.plotBubble = PlotBubble::None;
+        videoTraits.mapPresentation = MapPresentation::LargeDot;
+        videoTraits.legendVisibility = LegendVisibility::Visible;
+        m_momentModel->registerMoment(QStringLiteral("video"), tr("Video"), videoTraits);
+    }
 
     // Register built-in plots and markers BEFORE initializing preferences
     // so that we can dynamically register per-plot and per-marker preferences
@@ -122,47 +154,12 @@ MainWindow::MainWindow(QWidget *parent)
     // Create measure model for measure tool data
     m_measureModel = new MeasureModel(this);
 
-    // Initialize cursor entries
-    if (m_cursorModel) {
-        // Mouse
-        CursorModel::Cursor mouse;
-        mouse.id = QStringLiteral("mouse");
-        mouse.label = tr("Mouse");
-        mouse.type = CursorModel::CursorType::MouseHover;
-        mouse.active = false;
-        mouse.positionSpace = CursorModel::PositionSpace::PlotAxisCoord;
-        mouse.positionValue = 0.0;
-        mouse.xVariable = m_plotViewSettingsModel
-            ? m_plotViewSettingsModel->xVariable()
-            : SessionKeys::Time;
-        mouse.referenceMarkerKey = m_plotViewSettingsModel
-            ? m_plotViewSettingsModel->referenceMarkerKey()
-            : QLatin1String(SessionKeys::ExitTime);
-        mouse.targetPolicy = CursorModel::TargetPolicy::Explicit;
-
-        m_cursorModel->ensureCursor(mouse);
-
-        // Video
-        CursorModel::Cursor video;
-        video.id = QStringLiteral("video");
-        video.label = tr("Video");
-        video.type = CursorModel::CursorType::VideoPlayback;
-        video.active = false;
-        video.positionSpace = CursorModel::PositionSpace::UtcSeconds;
-        video.positionValue = 0.0;
-        video.xVariable.clear();          // unused when positionSpace == UtcSeconds
-        video.referenceMarkerKey.clear(); // unused when positionSpace == UtcSeconds
-        video.targetPolicy = CursorModel::TargetPolicy::AutoVisibleOverlap;
-
-        m_cursorModel->ensureCursor(video);
-    }
-
     // Create all docks via registry
     AppContext ctx;
     ctx.sessionModel = model;
     ctx.plotModel = plotModel;
     ctx.markerModel = markerModel;
-    ctx.cursorModel = m_cursorModel;
+    ctx.momentModel = m_momentModel;
     ctx.rangeModel = m_rangeModel;
     ctx.plotViewSettings = m_plotViewSettingsModel;
     ctx.measureModel = m_measureModel;

@@ -24,11 +24,10 @@
 namespace FlySight {
 
 MapWidget::MapWidget(SessionModel *sessionModel,
-                     CursorModel *cursorModel,
+                     MomentModel *momentModel,
                      PlotRangeModel *rangeModel,
                      QWidget *parent)
     : QWidget(parent)
-    , m_cursorModel(cursorModel)
 {
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -37,11 +36,11 @@ MapWidget::MapWidget(SessionModel *sessionModel,
     // Range model is used to filter tracks to only show the visible plot range
     m_trackModel = new TrackMapModel(sessionModel, rangeModel, this);
 
-    // Model that converts CursorModel ("mouse") state into per-session map dots
-    m_cursorDotModel = new MapCursorDotModel(sessionModel, m_cursorModel, this);
+    // Model that converts MomentModel state into per-session map dots
+    m_cursorDotModel = new MapCursorDotModel(sessionModel, momentModel, this);
 
-    // Proxy for JS to drive CursorModel from map hover
-    m_cursorProxy = new MapCursorProxy(sessionModel, m_cursorModel, this);
+    // Proxy for JS to drive MomentModel from map hover
+    m_cursorProxy = new MapCursorProxy(sessionModel, momentModel, this);
 
     // Create preferences bridge
     m_preferencesBridge = new MapPreferencesBridge(this);
@@ -169,12 +168,18 @@ void MapWidget::onCursorDotsReset()
             m_cursorDotModel->data(idx, MapCursorDotModel::LonRole).toDouble();
         const QColor color =
             m_cursorDotModel->data(idx, MapCursorDotModel::ColorRole).value<QColor>();
+        const double size =
+            m_cursorDotModel->data(idx, MapCursorDotModel::SizeRole).toDouble();
+        const QString momentId =
+            m_cursorDotModel->data(idx, MapCursorDotModel::MomentIdRole).toString();
 
         QJsonObject dot;
         dot.insert(QStringLiteral("sessionId"), sessionId);
         dot.insert(QStringLiteral("lat"), lat);
         dot.insert(QStringLiteral("lon"), lon);
         dot.insert(QStringLiteral("color"), color.name(QColor::HexArgb));
+        dot.insert(QStringLiteral("size"), size);
+        dot.insert(QStringLiteral("momentId"), momentId);
         dots.append(dot);
     }
 

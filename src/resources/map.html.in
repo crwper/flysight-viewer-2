@@ -280,26 +280,46 @@ function onTracksChanged(tracks) {
 // Task 4.6: Cursor Dot Markers
 // ===========================================================================
 function onCursorDotsChanged(dots) {
-    // Build a set of session IDs present in the new data
+    // Build a set of composite keys (momentId:sessionId) present in the new data
     var incoming = new Set();
 
     if (dots) {
         for (var i = 0; i < dots.length; i++) {
             var dot = dots[i];
+            var momentId = dot.momentId || "";
 
-            // Skip — JS hover marker is handling this session
-            if (hoverSessionId !== "" && dot.sessionId === hoverSessionId) {
+            // Suppress only mouse-moment dots for the hovered session
+            // (marker dots should still be visible)
+            if (hoverSessionId !== "" && dot.sessionId === hoverSessionId && momentId === "mouse") {
                 continue;
             }
 
-            incoming.add(dot.sessionId);
+            var markerKey = momentId + ":" + dot.sessionId;
+            incoming.add(markerKey);
 
-            var existing = cursorMarkers.get(dot.sessionId);
+            // Determine per-dot size and z-index
+            var dotSize = dot.size || 10.0;
+            var dotZIndex = (dotSize >= 10) ? 25 : 20;
+            var dotScale = (dotSize / 2) * dpiScale;
+
+            var existing = cursorMarkers.get(markerKey);
             if (existing) {
                 // Update position of existing marker (no flicker)
                 existing.setPosition({ lat: dot.lat, lng: dot.lon });
+
+                // Update icon if size changed
+                if (existing._dotSize !== dotSize) {
+                    var icon = existing.getIcon();
+                    if (icon) {
+                        icon.scale = dotScale;
+                        icon.fillColor = qtColorRGB(dot.color);
+                        existing.setIcon(icon);
+                    }
+                    existing.setZIndex(dotZIndex);
+                    existing._dotSize = dotSize;
+                }
             } else {
-                // Create marker for new session
+                // Create marker for new moment+session combination
                 var marker = new google.maps.Marker({
                     position: { lat: dot.lat, lng: dot.lon },
                     map: map,
@@ -309,21 +329,22 @@ function onCursorDotsChanged(dots) {
                         fillOpacity: 1.0,
                         strokeColor: "#ffffff",
                         strokeWeight: 2 * dpiScale,
-                        scale: (prefMarkerSize / 2) * dpiScale
+                        scale: dotScale
                     },
-                    zIndex: 20,
+                    zIndex: dotZIndex,
                     clickable: false
                 });
-                cursorMarkers.set(dot.sessionId, marker);
+                marker._dotSize = dotSize;
+                cursorMarkers.set(markerKey, marker);
             }
         }
     }
 
-    // Remove markers for sessions no longer present
-    cursorMarkers.forEach(function(marker, sessionId) {
-        if (!incoming.has(sessionId)) {
+    // Remove markers for keys no longer present
+    cursorMarkers.forEach(function(marker, key) {
+        if (!incoming.has(key)) {
             marker.setMap(null);
-            cursorMarkers.delete(sessionId);
+            cursorMarkers.delete(key);
         }
     });
 }
@@ -847,7 +868,9 @@ function onPreferenceChanged(key, value) {
         cursorMarkers.forEach(function(marker) {
             var icon = marker.getIcon();
             if (icon) {
-                icon.scale = (value / 2) * dpiScale;
+                // Use the stored per-dot size rather than the global preference
+                var dotSize = marker._dotSize || 10.0;
+                icon.scale = (dotSize / 2) * dpiScale;
                 marker.setIcon(icon);
             }
         });

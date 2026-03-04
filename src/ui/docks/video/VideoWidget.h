@@ -25,7 +25,7 @@ QT_END_NAMESPACE
 
 namespace FlySight {
 
-class CursorModel;
+class MomentModel;
 class SessionModel;
 
 class VideoWidget : public QWidget
@@ -33,7 +33,7 @@ class VideoWidget : public QWidget
     Q_OBJECT
 public:
     explicit VideoWidget(SessionModel *sessionModel,
-                         CursorModel *cursorModel,
+                         MomentModel *momentModel,
                          QWidget *parent = nullptr);
     ~VideoWidget() override;
 
@@ -90,14 +90,14 @@ private:
     void seekVideo(qint64 positionMs);
     void cancelPendingSeek();
 
-    // Drives CursorModel's "video" cursor while the video is synced.
+    // Drives MomentModel's "video" moment while the video is synced.
     std::optional<double> syncedSyncUtcSeconds() const;
     void updateVideoCursorSyncState();
     void updateVideoCursorFromPositionMs(qint64 positionMs);
 
 private:
     SessionModel *m_sessionModel = nullptr;
-    CursorModel *m_cursorModel = nullptr;
+    MomentModel *m_momentModel = nullptr;
 
     QMediaPlayer *m_player = nullptr;
 #if QT_VERSION_MAJOR >= 6

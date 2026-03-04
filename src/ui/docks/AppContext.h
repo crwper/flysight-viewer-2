@@ -8,7 +8,7 @@ namespace FlySight {
 class SessionModel;
 class PlotModel;
 class MarkerModel;
-class CursorModel;
+class MomentModel;
 class PlotRangeModel;
 class PlotViewSettingsModel;
 class MeasureModel;
@@ -22,7 +22,7 @@ struct AppContext {
     SessionModel* sessionModel = nullptr;
     PlotModel* plotModel = nullptr;
     MarkerModel* markerModel = nullptr;
-    CursorModel* cursorModel = nullptr;
+    MomentModel* momentModel = nullptr;
     PlotRangeModel* rangeModel = nullptr;
     PlotViewSettingsModel* plotViewSettings = nullptr;
     MeasureModel* measureModel = nullptr;

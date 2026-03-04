@@ -4,7 +4,7 @@
 #include "LegendPresenter.h"
 #include "sessionmodel.h"
 #include "plotmodel.h"
-#include "cursormodel.h"
+#include "momentmodel.h"
 #include "plotviewsettingsmodel.h"
 
 namespace FlySight {
@@ -22,7 +22,7 @@ LegendDockFeature::LegendDockFeature(const AppContext& ctx, QObject* parent)
     // Create LegendPresenter to drive legend updates
     m_presenter = new LegendPresenter(ctx.sessionModel,
                                       ctx.plotModel,
-                                      ctx.cursorModel,
+                                      ctx.momentModel,
                                       ctx.plotViewSettings,
                                       ctx.measureModel,
                                       m_legendWidget,

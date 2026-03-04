@@ -1,4 +1,5 @@
 #include "markerregistry.h"
+#include "momentmodel.h"
 #include "sessiondata.h"
 #include "dependencykey.h"
 
@@ -65,6 +66,27 @@ SessionData::AttributeFunction makeInterpolationFunction(
     };
 }
 
+/// Translate a MarkerDefinition into MomentTraits.
+/// Trait mapping follows the overview spec tables:
+///   - editable == true  -> Interaction::Drag
+///   - editable == false -> Interaction::None
+///   - All markers get DashedLineOnDrag, Bubble, SmallDot, Hidden legend
+///   - PositionSource: Attribute with the marker's attributeKey
+MomentTraits markerTraitsFromDef(const MarkerDefinition &def)
+{
+    MomentTraits traits;
+    traits.positionSource = PositionSource::Attribute;
+    traits.attributeKey = def.attributeKey;
+    traits.interaction = def.editable ? Interaction::Drag : Interaction::None;
+    traits.plotPresentation = PlotPresentation::DashedLineOnDrag;
+    traits.plotBubble = PlotBubble::Bubble;
+    traits.mapPresentation = MapPresentation::SmallDot;
+    traits.legendVisibility = LegendVisibility::Hidden;
+    traits.shortLabel = def.shortLabel;
+    traits.color = def.color;
+    return traits;
+}
+
 } // anonymous namespace
 
 MarkerRegistry* MarkerRegistry::instance() {
@@ -75,6 +97,11 @@ MarkerRegistry* MarkerRegistry::instance() {
 MarkerRegistry::MarkerRegistry(QObject *parent)
     : QObject(parent)
 {
+}
+
+void MarkerRegistry::setMomentModel(MomentModel *momentModel)
+{
+    m_momentModel = momentModel;
 }
 
 void MarkerRegistry::registerMarker(const MarkerDefinition& def) {
@@ -101,10 +128,19 @@ void MarkerRegistry::registerMarker(const MarkerDefinition& def) {
             makeInterpolationFunction(def.attributeKey, mk.first, mk.second));
     }
 
+    // Mirror this marker as a moment in MomentModel
+    if (m_momentModel) {
+        m_momentModel->registerMoment(def.attributeKey, def.displayName,
+                                      markerTraitsFromDef(def), def.groupId);
+    }
+
     emit markersChanged();
 }
 
 void MarkerRegistry::registerMarkers(const QVector<MarkerDefinition> &defs) {
+    QVector<MomentRegistration> momentRegs;
+    momentRegs.reserve(defs.size());
+
     for (const MarkerDefinition &def : defs) {
         m_markers.append(def);
 
@@ -126,6 +162,19 @@ void MarkerRegistry::registerMarkers(const QVector<MarkerDefinition> &defs) {
                 deps,
                 makeInterpolationFunction(def.attributeKey, mk.first, mk.second));
         }
+
+        // Accumulate moment registrations for batch registration
+        MomentRegistration reg;
+        reg.id = def.attributeKey;
+        reg.label = def.displayName;
+        reg.traits = markerTraitsFromDef(def);
+        reg.groupId = def.groupId;
+        momentRegs.append(reg);
+    }
+
+    // Batch-register all marker moments with a single momentsChanged() emission
+    if (m_momentModel && !momentRegs.isEmpty()) {
+        m_momentModel->registerMoments(momentRegs);
     }
 
     emit markersChanged();
@@ -149,6 +198,11 @@ void MarkerRegistry::clearMarkerGroup(const QString &groupId) {
     m_markers.removeIf([&groupId](const MarkerDefinition &def) {
         return def.groupId == groupId;
     });
+
+    // Remove the corresponding moment group from MomentModel
+    if (m_momentModel) {
+        m_momentModel->unregisterMomentGroup(groupId);
+    }
 
     emit markersChanged();
 }

@@ -13,6 +13,8 @@
 
 namespace FlySight {
 
+class MomentModel;
+
 class MarkerModel : public QAbstractItemModel
 {
     Q_OBJECT
@@ -27,6 +29,7 @@ public:
     explicit MarkerModel(QObject *parent = nullptr);
 
     void setSettings(QSettings *settings);
+    void setMomentModel(MomentModel *momentModel);
 
     // Public API (minimum)
     void setMarkers(const QVector<MarkerDefinition>& defs);
@@ -89,6 +92,7 @@ private:
     QModelIndex indexForMarker(const MarkerNode* node) const;
 
     QSettings *m_settings = nullptr;
+    MomentModel *m_momentModel = nullptr;
     std::vector<std::unique_ptr<CategoryNode>> m_categories;
     QHash<QString, MarkerNode*> m_markersByKey;
 };
