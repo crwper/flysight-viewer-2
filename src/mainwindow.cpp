@@ -648,6 +648,25 @@ void MainWindow::importFiles(
     // Batch merge all imported sessions
     model->mergeSessions(importedSessions);
 
+    // Optionally hide all other tracks so only the imported ones are visible
+    if (PreferencesManager::instance().getValue(PreferenceKeys::ImportHideOthersOnImport).toBool()
+        && !importedSessions.isEmpty()) {
+        // Collect session IDs of newly imported sessions
+        QSet<QString> importedIds;
+        for (const SessionData &s : importedSessions) {
+            importedIds.insert(s.getAttribute(SessionKeys::SessionId).toString());
+        }
+
+        // Build visibility map: hide everything except imported sessions
+        QMap<int, bool> visibilityMap;
+        const auto &allSessions = model->getAllSessions();
+        for (int row = 0; row < allSessions.size(); ++row) {
+            QString id = allSessions[row].getAttribute(SessionKeys::SessionId).toString();
+            visibilityMap.insert(row, importedIds.contains(id));
+        }
+        model->setRowsVisibility(visibilityMap);
+    }
+
     // Emit the new time range if valid
     if (newMinTime != std::numeric_limits<double>::max() && newMaxTime != std::numeric_limits<double>::lowest()) {
         emit newTimeRange(newMinTime, newMaxTime);
@@ -993,6 +1012,7 @@ void MainWindow::initializePreferences()
     prefs.registerPreference(PreferenceKeys::ImportGroundReferenceMode, QStringLiteral("Automatic"));
     prefs.registerPreference(PreferenceKeys::ImportFixedElevation, 0.0);
     prefs.registerPreference(PreferenceKeys::ImportDescentPauseSeconds, 30.0);
+    prefs.registerPreference(PreferenceKeys::ImportHideOthersOnImport, false);
 
     // ========================================================================
     // Global Plot Preferences

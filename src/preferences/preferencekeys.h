@@ -18,6 +18,7 @@ inline const QString GeneralLogbookFolder = QStringLiteral("general/logbookFolde
 inline const QString ImportGroundReferenceMode = QStringLiteral("import/groundReferenceMode");
 inline const QString ImportFixedElevation = QStringLiteral("import/fixedElevation");
 inline const QString ImportDescentPauseSeconds = QStringLiteral("import/descentPauseSeconds");
+inline const QString ImportHideOthersOnImport = QStringLiteral("import/hideOthersOnImport");
 
 // ============================================================================
 // Plots Preferences (global)

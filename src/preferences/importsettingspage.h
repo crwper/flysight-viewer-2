@@ -2,6 +2,7 @@
 #define IMPORTSETTINGSPAGE_H
 
 #include <QWidget>
+#include <QCheckBox>
 #include <QRadioButton>
 #include <QGroupBox>
 #include <QLineEdit>
@@ -25,9 +26,11 @@ private:
     QRadioButton *fixedRadioButton;
     QLineEdit *fixedElevationLineEdit;
     QDoubleSpinBox *descentPauseSpinBox;
+    QCheckBox *hideOthersCheckBox;
 
     QGroupBox* createGroundReferenceGroup();
     QGroupBox* createDescentPauseGroup();
+    QGroupBox* createTrackVisibilityGroup();
 };
 
 } // namespace FlySight

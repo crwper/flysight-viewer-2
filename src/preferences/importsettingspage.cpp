@@ -1,3 +1,4 @@
+#include <QCheckBox>
 #include <QLabel>
 #include <QSpacerItem>
 #include "importsettingspage.h"
@@ -12,12 +13,14 @@ ImportSettingsPage::ImportSettingsPage(QWidget *parent)
 
     layout->addWidget(createGroundReferenceGroup());
     layout->addWidget(createDescentPauseGroup());
+    layout->addWidget(createTrackVisibilityGroup());
     layout->addStretch();
 
     connect(automaticRadioButton, &QRadioButton::toggled, this, &ImportSettingsPage::saveSettings);
     connect(fixedRadioButton, &QRadioButton::toggled, this, &ImportSettingsPage::saveSettings);
     connect(fixedElevationLineEdit, &QLineEdit::textChanged, this, &ImportSettingsPage::saveSettings);
     connect(descentPauseSpinBox, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &ImportSettingsPage::saveSettings);
+    connect(hideOthersCheckBox, &QCheckBox::toggled, this, &ImportSettingsPage::saveSettings);
 }
 
 QGroupBox* ImportSettingsPage::createGroundReferenceGroup() {
@@ -75,6 +78,20 @@ QGroupBox* ImportSettingsPage::createDescentPauseGroup() {
     return descentPauseGroup;
 }
 
+QGroupBox* ImportSettingsPage::createTrackVisibilityGroup() {
+    QGroupBox *group = new QGroupBox(tr("Track visibility"), this);
+    QVBoxLayout *groupLayout = new QVBoxLayout(group);
+
+    hideOthersCheckBox = new QCheckBox(tr("Hide other tracks on import"), this);
+    groupLayout->addWidget(hideOthersCheckBox);
+
+    // Initialize from preferences
+    PreferencesManager &prefs = PreferencesManager::instance();
+    hideOthersCheckBox->setChecked(prefs.getValue(PreferenceKeys::ImportHideOthersOnImport).toBool());
+
+    return group;
+}
+
 void ImportSettingsPage::saveSettings() {
     PreferencesManager &prefs = PreferencesManager::instance();
 
@@ -85,6 +102,7 @@ void ImportSettingsPage::saveSettings() {
     }
     prefs.setValue(PreferenceKeys::ImportFixedElevation, fixedElevationLineEdit->text().toDouble());
     prefs.setValue(PreferenceKeys::ImportDescentPauseSeconds, descentPauseSpinBox->value());
+    prefs.setValue(PreferenceKeys::ImportHideOthersOnImport, hideOthersCheckBox->isChecked());
 }
 
 } // namespace FlySight
