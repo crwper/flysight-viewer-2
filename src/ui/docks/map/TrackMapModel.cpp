@@ -4,6 +4,7 @@
 #include "sessiondata.h"
 #include "plotrangemodel.h"
 #include "plotutils.h"
+#include "calculations/timecalculations.h"
 
 #include <QtMath>
 #include <QVariantMap>
@@ -103,13 +104,28 @@ bool TrackMapModel::computeSessionUtcRange(const SessionData &session,
         return false;
 
     const QString refKey = m_rangeModel->referenceMarkerKey();
-    const auto optOffset = markerOffsetSeconds(session, refKey, QLatin1String(SessionKeys::Time));
+    const QString xVar = m_rangeModel->xVariable();
+    const auto optOffset = markerOffsetSeconds(session, refKey, xVar);
     if (!optOffset.has_value())
         return false;
     const double offset = *optOffset;
 
-    *outLower = m_rangeModel->rangeLower() + offset;
-    *outUpper = m_rangeModel->rangeUpper() + offset;
+    // Convert from plot coordinates to absolute time in the x-variable's domain
+    double absLower = m_rangeModel->rangeLower() + offset;
+    double absUpper = m_rangeModel->rangeUpper() + offset;
+
+    // If in system time mode, convert to UTC for filtering against UTC track data
+    if (xVar == QLatin1String(SessionKeys::SystemTime)) {
+        auto utcLower = Calculations::systemTimeToUtc(session, absLower);
+        auto utcUpper = Calculations::systemTimeToUtc(session, absUpper);
+        if (!utcLower.has_value() || !utcUpper.has_value())
+            return false;
+        *outLower = *utcLower;
+        *outUpper = *utcUpper;
+    } else {
+        *outLower = absLower;
+        *outUpper = absUpper;
+    }
     return true;
 }
 

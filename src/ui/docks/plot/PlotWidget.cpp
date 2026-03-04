@@ -1263,11 +1263,11 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
             if (!tryAttributeUtcSeconds(s, def.attributeKey, &markerUtcSeconds))
                 continue;
 
-            auto offset = referenceOffsetForSession(s);
-            if (!offset.has_value())
+            auto optX = plotAxisXFromUtc(markerUtcSeconds, m_xVariable, m_referenceMarkerKey, s);
+            if (!optX.has_value())
                 continue;
 
-            double xCoord = markerUtcSeconds - offset.value();
+            double xCoord = *optX;
 
             if (xCoord < xRange.lower || xCoord > xRange.upper)
                 continue;
@@ -1697,10 +1697,6 @@ void PlotWidget::updateCrosshairFromMoments()
         if (!outXPlot)
             return false;
 
-        auto offset = referenceOffsetForSession(s);
-        if (!offset.has_value())
-            return false;
-
         if (moment.traits.positionSource == PositionSource::Attribute) {
             // Attribute-sourced: read position from session attribute
             QVariant v = s.getAttribute(moment.traits.attributeKey);
@@ -1711,7 +1707,10 @@ void PlotWidget::updateCrosshairFromMoments()
                 return false;
             dt = dt.toUTC();
             double utcSec = dt.toMSecsSinceEpoch() / 1000.0;
-            *outXPlot = utcSec - offset.value();
+            auto opt = plotAxisXFromUtc(utcSec, m_xVariable, m_referenceMarkerKey, s);
+            if (!opt.has_value())
+                return false;
+            *outXPlot = *opt;
             return true;
         }
 
@@ -1723,7 +1722,10 @@ void PlotWidget::updateCrosshairFromMoments()
             if (psIt != moment.sessionPositions.constEnd())
                 utcSec = psIt.value();
         }
-        *outXPlot = utcSec - offset.value();
+        auto opt = plotAxisXFromUtc(utcSec, m_xVariable, m_referenceMarkerKey, s);
+        if (!opt.has_value())
+            return false;
+        *outXPlot = *opt;
         return true;
     };
 
@@ -1930,9 +1932,6 @@ void PlotWidget::updateMomentVLines()
             for (const auto &s : model->getAllSessions()) {
                 if (!s.isVisible())
                     continue;
-                auto offset = referenceOffsetForSession(s);
-                if (!offset.has_value())
-                    continue;
 
                 QVariant v = s.getAttribute(moment.traits.attributeKey);
                 if (!v.canConvert<QDateTime>())
@@ -1942,7 +1941,10 @@ void PlotWidget::updateMomentVLines()
                     continue;
                 dt = dt.toUTC();
                 double utcSec = dt.toMSecsSinceEpoch() / 1000.0;
-                xPlot = utcSec - offset.value();
+                auto opt = plotAxisXFromUtc(utcSec, m_xVariable, m_referenceMarkerKey, s);
+                if (!opt.has_value())
+                    continue;
+                xPlot = *opt;
                 havePosition = true;
                 break;
             }
@@ -1950,9 +1952,10 @@ void PlotWidget::updateMomentVLines()
             // External source
             const SessionData *refSession = referenceSession();
             if (refSession) {
-                auto offset = referenceOffsetForSession(*refSession);
-                if (offset.has_value()) {
-                    xPlot = moment.positionUtc - offset.value();
+                auto opt = plotAxisXFromUtc(moment.positionUtc, m_xVariable,
+                                            m_referenceMarkerKey, *refSession);
+                if (opt.has_value()) {
+                    xPlot = *opt;
                     havePosition = true;
                 }
             }

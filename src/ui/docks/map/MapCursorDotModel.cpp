@@ -5,6 +5,7 @@
 #include "plotutils.h"
 #include "sessiondata.h"
 #include "sessionmodel.h"
+#include "calculations/timecalculations.h"
 
 #include <QtMath>
 #include <QDateTime>
@@ -323,12 +324,20 @@ void MapCursorDotModel::rebuild()
                     // Filter by visible plot range: skip markers outside the
                     // current plot viewport so the map stays in sync.
                     if (m_rangeModel && m_rangeModel->hasRange()) {
+                        const QString xVar = m_rangeModel->xVariable();
                         const auto optOffset = markerOffsetSeconds(
-                            session, m_rangeModel->referenceMarkerKey(),
-                            QLatin1String(SessionKeys::Time));
+                            session, m_rangeModel->referenceMarkerKey(), xVar);
                         if (optOffset.has_value()) {
-                            const double lo = m_rangeModel->rangeLower() + *optOffset;
-                            const double hi = m_rangeModel->rangeUpper() + *optOffset;
+                            double lo = m_rangeModel->rangeLower() + *optOffset;
+                            double hi = m_rangeModel->rangeUpper() + *optOffset;
+                            if (xVar == QLatin1String(SessionKeys::SystemTime)) {
+                                auto utcLo = Calculations::systemTimeToUtc(session, lo);
+                                auto utcHi = Calculations::systemTimeToUtc(session, hi);
+                                if (utcLo.has_value() && utcHi.has_value()) {
+                                    lo = *utcLo;
+                                    hi = *utcHi;
+                                }
+                            }
                             if (utcSeconds < lo || utcSeconds > hi)
                                 continue;
                         }
