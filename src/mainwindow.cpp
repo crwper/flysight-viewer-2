@@ -498,8 +498,8 @@ void MainWindow::importFiles(
     double newMaxTime = std::numeric_limits<double>::lowest();
 
     // Helper to compute the reference offset for a session
-    auto computeOffset = [&refKey](SessionData &session) -> std::optional<double> {
-        return markerOffsetUtcSeconds(session, refKey);
+    auto computeOffset = [&refKey, &xVar](SessionData &session) -> std::optional<double> {
+        return markerOffsetSeconds(session, refKey, xVar);
     };
 
     if (showProgress) {
@@ -536,8 +536,8 @@ void MainWindow::importFiles(
                     const double offset = *optOffset;
 
                     // Try analysis range first
-                    auto analysisStart = markerOffsetUtcSeconds(tempSessionData, SessionKeys::AnalysisStartTime);
-                    auto analysisEnd   = markerOffsetUtcSeconds(tempSessionData, SessionKeys::AnalysisEndTime);
+                    auto analysisStart = markerOffsetSeconds(tempSessionData, SessionKeys::AnalysisStartTime, xVar);
+                    auto analysisEnd   = markerOffsetSeconds(tempSessionData, SessionKeys::AnalysisEndTime, xVar);
 
                     if (analysisStart.has_value() && analysisEnd.has_value()) {
                         newMinTime = std::min(newMinTime, analysisStart.value() - offset);
@@ -603,8 +603,8 @@ void MainWindow::importFiles(
                     const double offset = *optOffset;
 
                     // Try analysis range first
-                    auto analysisStart = markerOffsetUtcSeconds(tempSessionData, SessionKeys::AnalysisStartTime);
-                    auto analysisEnd   = markerOffsetUtcSeconds(tempSessionData, SessionKeys::AnalysisEndTime);
+                    auto analysisStart = markerOffsetSeconds(tempSessionData, SessionKeys::AnalysisStartTime, xVar);
+                    auto analysisEnd   = markerOffsetSeconds(tempSessionData, SessionKeys::AnalysisEndTime, xVar);
 
                     if (analysisStart.has_value() && analysisEnd.has_value()) {
                         newMinTime = std::min(newMinTime, analysisStart.value() - offset);
@@ -1069,20 +1069,32 @@ void MainWindow::initializeXAxisMenu()
     QActionGroup *axisGroup = new QActionGroup(this);
     axisGroup->setExclusive(true);
 
-    // For now, the only independent variable is "Time"
-    QAction *timeAction = xAxisMenu->addAction(tr("Time"));
-    timeAction->setCheckable(true);
-    timeAction->setChecked(true);
-    axisGroup->addAction(timeAction);
+    // Read the persisted x-variable so the checked action matches QSettings
+    const QString currentXVar = m_plotViewSettingsModel
+        ? m_plotViewSettingsModel->xVariable()
+        : SessionKeys::Time;
 
-    connect(timeAction, &QAction::triggered, this, [this]() {
+    // "UTC time" — maps to SessionKeys::Time
+    QAction *utcTimeAction = xAxisMenu->addAction(tr("UTC time"));
+    utcTimeAction->setCheckable(true);
+    utcTimeAction->setChecked(currentXVar == SessionKeys::Time);
+    axisGroup->addAction(utcTimeAction);
+
+    connect(utcTimeAction, &QAction::triggered, this, [this]() {
         if (m_plotViewSettingsModel)
             m_plotViewSettingsModel->setXVariable(SessionKeys::Time);
     });
 
-    // Ensure the model has the correct xVariable
-    if (m_plotViewSettingsModel)
-        m_plotViewSettingsModel->setXVariable(SessionKeys::Time);
+    // "System time" — maps to SessionKeys::SystemTime
+    QAction *systemTimeAction = xAxisMenu->addAction(tr("System time"));
+    systemTimeAction->setCheckable(true);
+    systemTimeAction->setChecked(currentXVar == SessionKeys::SystemTime);
+    axisGroup->addAction(systemTimeAction);
+
+    connect(systemTimeAction, &QAction::triggered, this, [this]() {
+        if (m_plotViewSettingsModel)
+            m_plotViewSettingsModel->setXVariable(SessionKeys::SystemTime);
+    });
 }
 
 void MainWindow::initializePlotsMenu()

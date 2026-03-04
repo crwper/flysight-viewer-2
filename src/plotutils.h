@@ -17,13 +17,17 @@ struct PlotValue;
 
 constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 
-// Returns the UTC-seconds value of the given marker attribute for a session,
-// or std::nullopt if the attribute is missing / not a valid QDateTime.
+// Returns the offset (in seconds) of the given marker attribute for a session,
+// in the coordinate space of xVariable.
 // When referenceMarkerKey is empty, returns 0.0 (absolute mode).
-// Note: QDateTime::toMSecsSinceEpoch() always returns ms since Unix epoch
-// regardless of the QDateTime's timespec, so an explicit toUTC() is unnecessary.
-std::optional<double> markerOffsetUtcSeconds(const SessionData &session,
-                                             const QString &referenceMarkerKey);
+// When xVariable is SessionKeys::Time, the offset is in UTC seconds.
+// When xVariable is SessionKeys::SystemTime, the UTC offset is converted
+// to system time via Calculations::utcToSystemTime.
+// Returns std::nullopt if the attribute is missing / not a valid QDateTime,
+// or if the conversion to system time is unavailable.
+std::optional<double> markerOffsetSeconds(const SessionData &session,
+                                          const QString &referenceMarkerKey,
+                                          const QString &xVariable);
 
 QString seriesDisplayName(const PlotValue &pv);
 

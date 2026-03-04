@@ -296,8 +296,8 @@ void PlotWidget::zoomToExtent()
             continue;  // session lacks reference marker value; skip it
 
         // Try analysis range first
-        auto analysisStart = markerOffsetUtcSeconds(session, SessionKeys::AnalysisStartTime);
-        auto analysisEnd   = markerOffsetUtcSeconds(session, SessionKeys::AnalysisEndTime);
+        auto analysisStart = markerOffsetSeconds(session, SessionKeys::AnalysisStartTime, m_xVariable);
+        auto analysisEnd   = markerOffsetSeconds(session, SessionKeys::AnalysisEndTime, m_xVariable);
 
         if (analysisStart.has_value() && analysisEnd.has_value()) {
             double aMin = analysisStart.value() - offset.value();
@@ -771,8 +771,8 @@ void PlotWidget::onReferenceMarkerKeyChanged(const QString &oldKey, const QStrin
         if (!session.isVisible())
             continue;
 
-        auto oldOffset = markerOffsetUtcSeconds(session, oldKey);
-        auto newOffset = markerOffsetUtcSeconds(session, newKey);
+        auto oldOffset = markerOffsetSeconds(session, oldKey, m_xVariable);
+        auto newOffset = markerOffsetSeconds(session, newKey, m_xVariable);
         if (!oldOffset.has_value() || !newOffset.has_value())
             continue;
 
@@ -1270,7 +1270,7 @@ const SessionData* PlotWidget::referenceSession() const
 
 std::optional<double> PlotWidget::referenceOffsetForSession(const SessionData &session) const
 {
-    return markerOffsetUtcSeconds(session, m_referenceMarkerKey);
+    return markerOffsetSeconds(session, m_referenceMarkerKey, m_xVariable);
 }
 
 void PlotWidget::updateReferenceMarkers(UpdateMode mode)

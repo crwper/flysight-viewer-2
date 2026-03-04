@@ -28,7 +28,7 @@ double SetGroundTool::computeGroundElevation(SessionData &session, double xCoord
     constexpr char measH[]  = "hMSL";
 
     // Compute offset to convert plot-space xCoord to raw data space
-    const double offset = markerOffsetUtcSeconds(session, refKey).value_or(0.0);
+    const double offset = markerOffsetSeconds(session, refKey, xVar).value_or(0.0);
     const double rawX = xCoord + offset;
 
     const auto times      = session.getMeasurement(sensor, xVar);

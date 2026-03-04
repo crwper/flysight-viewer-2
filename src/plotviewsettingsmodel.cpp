@@ -56,8 +56,17 @@ QString PlotViewSettingsModel::referenceMarkerKey() const
 
 QString PlotViewSettingsModel::xAxisLabel() const
 {
-    if (m_referenceMarkerKey.isEmpty()) {
+    // Helper: absolute label based on the current x-variable
+    auto absoluteLabel = [this]() -> QString {
+        if (m_xVariable == SessionKeys::Time)
+            return tr("UTC time (s)");
+        if (m_xVariable == SessionKeys::SystemTime)
+            return tr("System time (s)");
         return tr("Time (s)");
+    };
+
+    if (m_referenceMarkerKey.isEmpty()) {
+        return absoluteLabel();
     }
 
     // Look up the marker's display name from MarkerRegistry
@@ -68,8 +77,8 @@ QString PlotViewSettingsModel::xAxisLabel() const
         }
     }
 
-    // Marker not found in registry: fall back to simple label
-    return tr("Time (s)");
+    // Marker not found in registry: fall back to absolute label
+    return absoluteLabel();
 }
 
 void PlotViewSettingsModel::setXVariable(const QString &xVariable)

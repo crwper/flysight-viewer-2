@@ -5,6 +5,7 @@
 #include "../crosshairmanager.h"
 #include "../units/unitconverter.h"
 #include "../plotutils.h"
+#include "../calculations/timecalculations.h"
 
 #include <QDateTime>
 #include <algorithm>
@@ -16,14 +17,24 @@ namespace FlySight {
 namespace {
 
 // Convert plot-axis X to UTC seconds for header display.
+// When xVariable is _system_time, the reconstructed absolute value is in
+// system-time space and must be converted back to UTC via systemTimeToUtc.
 double plotAxisXToUtcSeconds(double plotAxisX,
                              const QString &referenceMarkerKey,
+                             const QString &xVariable,
                              const SessionData &session)
 {
-    const auto optOffset = markerOffsetUtcSeconds(session, referenceMarkerKey);
+    const auto optOffset = markerOffsetSeconds(session, referenceMarkerKey, xVariable);
     if (!optOffset.has_value())
         return kNaN;
-    return plotAxisX + *optOffset;
+
+    const double rawValue = plotAxisX + *optOffset;
+
+    if (xVariable == SessionKeys::SystemTime) {
+        auto utc = Calculations::systemTimeToUtc(session, rawValue);
+        return utc.has_value() ? *utc : kNaN;
+    }
+    return rawValue;
 }
 
 } // anonymous namespace
@@ -193,8 +204,8 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
     const double xHi = qMax(m_startX, currentX);
 
     // Helper: compute the reference offset for a given session
-    auto offsetForSession = [&referenceMarkerKey](const SessionData &s) -> double {
-        return markerOffsetUtcSeconds(s, referenceMarkerKey).value_or(0.0);
+    auto offsetForSession = [&referenceMarkerKey, &xVariable](const SessionData &s) -> double {
+        return markerOffsetSeconds(s, referenceMarkerKey, xVariable).value_or(0.0);
     };
 
     if (m_multiTrack) {
@@ -400,7 +411,7 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
     QString utcText;
     QString coordsText;
 
-    const double utcSecs = plotAxisXToUtcSeconds(currentX, referenceMarkerKey, *session);
+    const double utcSecs = plotAxisXToUtcSeconds(currentX, referenceMarkerKey, xVariable, *session);
     if (!std::isnan(utcSecs)) {
         utcText = QStringLiteral("%1 UTC")
                       .arg(QDateTime::fromMSecsSinceEpoch(

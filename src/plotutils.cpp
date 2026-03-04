@@ -2,6 +2,7 @@
 #include "sessiondata.h"
 #include "plotregistry.h"
 #include "units/unitconverter.h"
+#include "calculations/timecalculations.h"
 
 #include <QDateTime>
 #include <QVariant>
@@ -11,8 +12,9 @@
 
 namespace FlySight {
 
-std::optional<double> markerOffsetUtcSeconds(const SessionData &session,
-                                             const QString &referenceMarkerKey)
+std::optional<double> markerOffsetSeconds(const SessionData &session,
+                                          const QString &referenceMarkerKey,
+                                          const QString &xVariable)
 {
     if (referenceMarkerKey.isEmpty())
         return 0.0;
@@ -22,7 +24,14 @@ std::optional<double> markerOffsetUtcSeconds(const SessionData &session,
     QDateTime dt = v.toDateTime();
     if (!dt.isValid())
         return std::nullopt;
-    return dt.toMSecsSinceEpoch() / 1000.0;
+    const double utcSeconds = dt.toMSecsSinceEpoch() / 1000.0;
+
+    if (xVariable == QLatin1String(SessionKeys::SystemTime)) {
+        return Calculations::utcToSystemTime(session, utcSeconds);
+    }
+
+    // Default: SessionKeys::Time or any other x-variable — return UTC seconds
+    return utcSeconds;
 }
 
 QString seriesDisplayName(const PlotValue &pv)

@@ -103,7 +103,7 @@ bool TrackMapModel::computeSessionUtcRange(const SessionData &session,
         return false;
 
     const QString refKey = m_rangeModel->referenceMarkerKey();
-    const auto optOffset = markerOffsetUtcSeconds(session, refKey);
+    const auto optOffset = markerOffsetSeconds(session, refKey, QLatin1String(SessionKeys::Time));
     if (!optOffset.has_value())
         return false;
     const double offset = *optOffset;

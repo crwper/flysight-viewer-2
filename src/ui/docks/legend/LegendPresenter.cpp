@@ -9,6 +9,7 @@
 #include "sessiondata.h"
 #include "units/unitconverter.h"
 #include "plotutils.h"
+#include "calculations/timecalculations.h"
 
 #include <QHash>
 #include <QDateTime>
@@ -37,18 +38,28 @@ std::optional<double> plotAxisXForSession(const CursorModel::Cursor &cursor,
         return cursor.positionValue;
     }
 
-    // UtcSeconds -> convert to plot-axis coordinate: plotCoord = utcSeconds - offset
+    // UtcSeconds -> convert to plot-axis coordinate: plotCoord = absoluteX - offset
+    // When xVariable is _system_time, convert the UTC cursor value to system time first.
     const double utc = cursor.positionValue;
+    double absoluteX = utc;
 
-    const auto optOffset = markerOffsetUtcSeconds(session, referenceMarkerKey);
+    if (xVariable == SessionKeys::SystemTime) {
+        auto st = Calculations::utcToSystemTime(session, utc);
+        if (!st.has_value())
+            return std::nullopt;
+        absoluteX = *st;
+    }
+
+    const auto optOffset = markerOffsetSeconds(session, referenceMarkerKey, xVariable);
     if (!optOffset.has_value())
         return std::nullopt;
 
-    return utc - *optOffset;
+    return absoluteX - *optOffset;
 }
 
 std::optional<double> utcSecondsForHeader(const CursorModel::Cursor &cursor,
                                          const QString &referenceMarkerKey,
+                                         const QString &xVariable,
                                          const SessionData &session,
                                          double plotAxisX)
 {
@@ -58,12 +69,18 @@ std::optional<double> utcSecondsForHeader(const CursorModel::Cursor &cursor,
         return cursor.positionValue;
     }
 
-    // PlotAxisCoord -> convert to UTC: utcSeconds = plotAxisX + offset
-    const auto optOffset = markerOffsetUtcSeconds(session, referenceMarkerKey);
+    // PlotAxisCoord -> convert to UTC: reconstruct absolute value, then convert
+    // to UTC if needed (when xVariable is _system_time).
+    const auto optOffset = markerOffsetSeconds(session, referenceMarkerKey, xVariable);
     if (!optOffset.has_value())
         return std::nullopt;
 
-    return plotAxisX + *optOffset;
+    const double rawValue = plotAxisX + *optOffset;
+
+    if (xVariable == SessionKeys::SystemTime) {
+        return Calculations::systemTimeToUtc(session, rawValue);
+    }
+    return rawValue;
 }
 
 bool sessionOverlapsAtX(const SessionData &session,
@@ -73,7 +90,7 @@ bool sessionOverlapsAtX(const SessionData &session,
                         double plotAxisX)
 {
     // Compute offset: plot-to-raw conversion is rawX = plotAxisX + offset
-    const double offset = markerOffsetUtcSeconds(session, referenceMarkerKey).value_or(0.0);
+    const double offset = markerOffsetSeconds(session, referenceMarkerKey, xVariable).value_or(0.0);
     const double rawX = plotAxisX + offset;
 
     for (const PlotValue &pv : enabledPlots) {
@@ -287,8 +304,8 @@ void LegendPresenter::recompute()
     }
 
     // Helper: compute the reference offset for a given session
-    auto offsetForSession = [&referenceMarkerKey](const SessionData &s) -> double {
-        return markerOffsetUtcSeconds(s, referenceMarkerKey).value_or(0.0);
+    auto offsetForSession = [&referenceMarkerKey, &xVariable](const SessionData &s) -> double {
+        return markerOffsetSeconds(s, referenceMarkerKey, xVariable).value_or(0.0);
     };
 
     const bool pointMode = (targets.size() == 1);
@@ -345,7 +362,7 @@ void LegendPresenter::recompute()
         QString utcText;
         QString coordsText;
 
-        const auto utcOpt = utcSecondsForHeader(cursor, referenceMarkerKey, *session, plotX);
+        const auto utcOpt = utcSecondsForHeader(cursor, referenceMarkerKey, xVariable, *session, plotX);
         if (utcOpt.has_value()) {
             const double utcSecs = *utcOpt;
 

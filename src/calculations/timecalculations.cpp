@@ -7,6 +7,31 @@
 
 using namespace FlySight;
 
+std::optional<double> Calculations::systemTimeToUtc(const SessionData &session, double systemTime)
+{
+    if (!session.hasAttribute(SessionKeys::TimeFitA) ||
+        !session.hasAttribute(SessionKeys::TimeFitB)) {
+        return std::nullopt;
+    }
+    double a = session.getAttribute(SessionKeys::TimeFitA).toDouble();
+    double b = session.getAttribute(SessionKeys::TimeFitB).toDouble();
+    return a * systemTime + b;
+}
+
+std::optional<double> Calculations::utcToSystemTime(const SessionData &session, double utc)
+{
+    if (!session.hasAttribute(SessionKeys::TimeFitA) ||
+        !session.hasAttribute(SessionKeys::TimeFitB)) {
+        return std::nullopt;
+    }
+    double a = session.getAttribute(SessionKeys::TimeFitA).toDouble();
+    double b = session.getAttribute(SessionKeys::TimeFitB).toDouble();
+    if (a == 0.0) {
+        return std::nullopt;  // Cannot invert: degenerate fit
+    }
+    return (utc - b) / a;
+}
+
 void Calculations::registerTimeCalculations()
 {
     // Helper lambda to compute _time for non-GNSS sensors
@@ -17,11 +42,10 @@ void Calculations::registerTimeCalculations()
             return std::nullopt;
         }
 
-        // We need TIME sensor data and a linear fit
+        // Ensure fit coefficients are cached in session attributes
         bool haveFit = session.hasAttribute(SessionKeys::TimeFitA) && session.hasAttribute(SessionKeys::TimeFitB);
-        double a = 0.0, b = 0.0;
         if (!haveFit) {
-            // Attempt to compute the fit
+            // Attempt to compute the fit from TIME sensor data
             if (!session.hasMeasurement("TIME", "time") ||
                 !session.hasMeasurement("TIME", "tow") ||
                 !session.hasMeasurement("TIME", "week")) {
@@ -62,16 +86,12 @@ void Calculations::registerTimeCalculations()
                 return std::nullopt;
             }
 
-            a = (N * sumSU - sumS * sumU) / denom;
-            b = (sumU - a * sumS) / N;
+            double a = (N * sumSU - sumS * sumU) / denom;
+            double b = (sumU - a * sumS) / N;
 
             // Store fit parameters
             session.setAttribute(SessionKeys::TimeFitA, QString::number(a, 'g', 17));
             session.setAttribute(SessionKeys::TimeFitB, QString::number(b, 'g', 17));
-        } else {
-            // Already computed fit
-            a = session.getAttribute(SessionKeys::TimeFitA).toDouble();
-            b = session.getAttribute(SessionKeys::TimeFitB).toDouble();
         }
 
         // Now convert the sensor's 'time' measurement using the linear fit
@@ -82,7 +102,11 @@ void Calculations::registerTimeCalculations()
         QVector<double> sensorSystemTime = session.getMeasurement(sensorKey, "time");
         QVector<double> result(sensorSystemTime.size());
         for (int i = 0; i < sensorSystemTime.size(); ++i) {
-            result[i] = a * sensorSystemTime[i] + b;
+            auto utc = systemTimeToUtc(session, sensorSystemTime[i]);
+            if (!utc.has_value()) {
+                return std::nullopt;
+            }
+            result[i] = utc.value();
         }
         return result;
     };
@@ -118,6 +142,48 @@ void Calculations::registerTimeCalculations()
             [compute_time, sens](SessionData &s) -> std::optional<QVector<double>> {
             return compute_time(s, sens);
         });
+    }
+
+    // Register _system_time for GNSS (inverse fit: UTC -> system time)
+    SessionData::registerCalculatedMeasurement(
+        "GNSS", SessionKeys::SystemTime,
+        {
+            DependencyKey::measurement("GNSS", "time"),
+            DependencyKey::attribute(SessionKeys::TimeFitA),
+            DependencyKey::attribute(SessionKeys::TimeFitB)
+        },
+        [](SessionData &session) -> std::optional<QVector<double>> {
+            QVector<double> utcTime = session.getMeasurement("GNSS", "time");
+            if (utcTime.isEmpty()) {
+                return std::nullopt;
+            }
+
+            QVector<double> result(utcTime.size());
+            for (int i = 0; i < utcTime.size(); ++i) {
+                auto st = utcToSystemTime(session, utcTime[i]);
+                if (!st.has_value()) {
+                    return std::nullopt;
+                }
+                result[i] = st.value();
+            }
+            return result;
+        });
+
+    // Register _system_time for non-GNSS sensors (passthrough of raw 'time')
+    const QStringList nonGnssSensors = {"BARO", "HUM", "MAG", "IMU", "TIME", "VBAT"};
+    for (const QString &sens : nonGnssSensors) {
+        SessionData::registerCalculatedMeasurement(
+            sens, SessionKeys::SystemTime,
+            {
+                DependencyKey::measurement(sens, "time")
+            },
+            [sens](SessionData &session) -> std::optional<QVector<double>> {
+                QVector<double> sensTime = session.getMeasurement(sens, "time");
+                if (sensTime.isEmpty()) {
+                    return std::nullopt;
+                }
+                return sensTime;
+            });
     }
 
 }

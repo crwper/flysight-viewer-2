@@ -4,6 +4,7 @@
 #include "sessiondata.h"
 #include "sessionmodel.h"
 #include "plotutils.h"
+#include "calculations/timecalculations.h"
 
 #include <QtMath>
 #include <QDateTime>
@@ -181,11 +182,20 @@ static bool cursorUtcSecondsForSession(const CursorModel::Cursor &c,
     if (c.positionSpace != CursorModel::PositionSpace::PlotAxisCoord)
         return false;
 
-    const auto optOffset = markerOffsetUtcSeconds(session, c.referenceMarkerKey);
+    const auto optOffset = markerOffsetSeconds(session, c.referenceMarkerKey, c.xVariable);
     if (!optOffset.has_value())
         return false;
 
-    *outUtcSeconds = c.positionValue + *optOffset;
+    const double rawValue = c.positionValue + *optOffset;
+
+    if (c.xVariable == SessionKeys::SystemTime) {
+        auto utc = Calculations::systemTimeToUtc(session, rawValue);
+        if (!utc.has_value())
+            return false;
+        *outUtcSeconds = *utc;
+    } else {
+        *outUtcSeconds = rawValue;
+    }
     return true;
 }
 
