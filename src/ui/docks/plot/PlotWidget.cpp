@@ -306,21 +306,24 @@ void PlotWidget::zoomToExtent()
             maxX = std::max(maxX, aMax);
             hasData = true;
         } else {
-            // Fallback: use full extent of GNSS x-variable data
-            QVector<double> xData = const_cast<SessionData &>(session)
-                .getMeasurement(QStringLiteral("GNSS"), m_xVariable);
-            if (xData.isEmpty())
-                continue;
+            // Fallback: scan all sensors for x-variable data extent
+            for (const QString &sensorKey : session.sensorKeys()) {
+                QVector<double> xData = const_cast<SessionData &>(session)
+                    .getMeasurement(sensorKey, m_xVariable);
+                if (xData.isEmpty())
+                    continue;
 
-            if (offset.value() != 0.0) {
-                for (double &x : xData)
-                    x -= offset.value();
+                QVector<double> adjusted = xData;
+                if (offset.value() != 0.0) {
+                    for (double &x : adjusted)
+                        x -= offset.value();
+                }
+
+                auto [minIt, maxIt] = std::minmax_element(adjusted.begin(), adjusted.end());
+                minX = std::min(minX, *minIt);
+                maxX = std::max(maxX, *maxIt);
+                hasData = true;
             }
-
-            auto [minIt, maxIt] = std::minmax_element(xData.begin(), xData.end());
-            minX = std::min(minX, *minIt);
-            maxX = std::max(maxX, *maxIt);
-            hasData = true;
         }
     }
 
