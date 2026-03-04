@@ -67,6 +67,9 @@ private:
     int m_precision = -1;
 };
 
+constexpr int kLaneHeightPx    = 32;   // height of one marker lane above the plot
+constexpr int kMinTopMarginPx  = 10;   // clearance so the topmost y-axis tick label isn't clipped
+
 } // anonymous namespace
 
 namespace FlySight {
@@ -1178,8 +1181,7 @@ void PlotWidget::setupPlot()
     customPlot->axisRect()->setRangeZoom(Qt::Horizontal);
 
     // Reserve top margin for the reference marker lane
-    const int laneHeightPx = 32;
-    customPlot->axisRect()->setMinimumMargins(QMargins(0, laneHeightPx, 0, 0));
+    customPlot->axisRect()->setMinimumMargins(QMargins(0, kLaneHeightPx, 0, 0));
 
     // create a dedicated layer for highlighted graphs
     customPlot->addLayer("highlighted", customPlot->layer("main"), QCustomPlot::limAbove);
@@ -1308,9 +1310,11 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
     const QVector<MarkerDefinition> enabledDefs =
         markerModel ? markerModel->enabledMarkers() : QVector<MarkerDefinition>{};
 
-    // Step 5: One lane per enabled marker type (single marker parity: 1 lane == 32px)
-    const int laneHeightPx = 32;
-    customPlot->axisRect()->setMinimumMargins(QMargins(0, laneHeightPx * enabledDefs.size(), 0, 0));
+    // Step 5: One lane per enabled marker type; always keep a small minimum so
+    // the topmost y-axis tick label is not clipped when no lanes are present.
+    const int topMargin = qMax(kLaneHeightPx * static_cast<int>(enabledDefs.size()),
+                               kMinTopMarginPx);
+    customPlot->axisRect()->setMinimumMargins(QMargins(0, topMargin, 0, 0));
 
     if (enabledDefs.isEmpty()) {
         if (!m_markerItemsByLane.isEmpty() || !m_markerBubbleMeta.isEmpty())
@@ -1535,7 +1539,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
         }
 
         // Geometry per lane (lane 0 is closest to plot)
-        const int laneBottomY = axisRectPx.top() - laneIndex * laneHeightPx;
+        const int laneBottomY = axisRectPx.top() - laneIndex * kLaneHeightPx;
         const int bubbleBottomY = laneBottomY - pointerHeightPx - bubbleGapPx;
 
         // Lazily create marker items (one pointer + one bubble per cluster)
