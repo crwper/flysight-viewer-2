@@ -311,7 +311,7 @@ void LegendPresenter::recompute()
     const bool pointMode = (targets.size() == 1);
 
     QVector<LegendWidget::Row> rows;
-    rows.reserve(enabledPlots.size());
+    rows.reserve(enabledPlots.size() + 1);
 
     bool hasData = false;
 
@@ -333,6 +333,16 @@ void LegendPresenter::recompute()
         // Convert plot coordinate to raw data space for interpolation
         const double offset = offsetForSession(*session);
         const double rawX = plotX + offset;
+
+        // Prepend a Time row showing the x-axis value.
+        {
+            LegendWidget::Row timeRow;
+            timeRow.name  = QStringLiteral("Time (s)");
+            timeRow.color = QColor(128, 128, 128);
+            timeRow.value = formatXAxisValue(plotX, xVariable, referenceMarkerKey);
+            rows.push_back(timeRow);
+            hasData = true;
+        }
 
         // Rows
         for (const PlotValue &pv : enabledPlots) {
@@ -396,6 +406,14 @@ void LegendPresenter::recompute()
         m_legendWidget->setRows(rows);
 
         return;
+    }
+
+    // Prepend a Time row (no min/avg/max for time).
+    {
+        LegendWidget::Row timeRow;
+        timeRow.name  = QStringLiteral("Time (s)");
+        timeRow.color = QColor(128, 128, 128);
+        rows.push_back(timeRow);
     }
 
     // RangeStatsMode

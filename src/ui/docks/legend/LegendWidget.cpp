@@ -65,6 +65,7 @@ LegendWidget::LegendWidget(QWidget *parent)
     m_table->verticalHeader()->setVisible(false);
     m_table->horizontalHeader()->setHighlightSections(false);
     m_table->horizontalHeader()->setStretchLastSection(false);
+    m_table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
     layout->addWidget(m_table, 1);
 
@@ -87,23 +88,18 @@ void LegendWidget::configureTableForMode(Mode mode)
     // Keep model and widget mode aligned
     m_tableModel->setMode(toModelMode(mode));
 
-    // Keep the same resize behavior you had before
+    // All columns stretch to fill the widget width.
+    // Column 0 (label) is given a larger stretch via Interactive + explicit
+    // proportion; the remaining data columns share space equally.
     auto *hh = m_table->horizontalHeader();
-    hh->setSectionResizeMode(0, QHeaderView::Stretch);
 
-    if (mode == PointDataMode) {
-        hh->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    } else if (mode == MeasureMode) {
-        hh->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-        hh->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-        hh->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-        hh->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-        hh->setSectionResizeMode(5, QHeaderView::ResizeToContents);
-    } else {
-        hh->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-        hh->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-        hh->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-    }
+    int cols;
+    if (mode == PointDataMode) cols = 2;
+    else if (mode == MeasureMode) cols = 6;
+    else cols = 4; // RangeStatsMode
+
+    for (int i = 0; i < cols; ++i)
+        hh->setSectionResizeMode(i, QHeaderView::Stretch);
 }
 
 bool LegendWidget::headerAllowed() const

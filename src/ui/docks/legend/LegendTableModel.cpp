@@ -69,8 +69,8 @@ QVariant LegendTableModel::headerData(int section,
 
     if (m_mode == MeasureMode) {
         switch (section) {
-        case 1: return tr("Delta");
-        case 2: return tr("Value");
+        case 1: return tr("Value");
+        case 2: return tr("Change");
         case 3: return tr("Min");
         case 4: return tr("Avg");
         case 5: return tr("Max");
@@ -111,8 +111,8 @@ QVariant LegendTableModel::data(const QModelIndex &index, int role) const
 
         if (m_mode == MeasureMode) {
             switch (c) {
-            case 1: return row.deltaValue.isEmpty() ? QStringLiteral("--") : row.deltaValue;
-            case 2: return row.value.isEmpty()      ? QStringLiteral("--") : row.value;
+            case 1: return row.value.isEmpty()      ? QStringLiteral("--") : row.value;
+            case 2: return row.deltaValue.isEmpty() ? QStringLiteral("--") : row.deltaValue;
             case 3: return row.minValue.isEmpty()    ? QStringLiteral("--") : row.minValue;
             case 4: return row.avgValue.isEmpty()    ? QStringLiteral("--") : row.avgValue;
             case 5: return row.maxValue.isEmpty()    ? QStringLiteral("--") : row.maxValue;

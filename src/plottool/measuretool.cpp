@@ -233,8 +233,16 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
         }
 
         QVector<MeasureModel::Row> rows;
-        rows.reserve(enabledPlots.size());
+        rows.reserve(enabledPlots.size() + 1);
         bool hasData = false;
+
+        // Always prepend a Time row at the top (x-axis value, no min/avg/max).
+        {
+            MeasureModel::Row timeRow;
+            timeRow.name  = QStringLiteral("Time (s)");
+            timeRow.color = QColor(128, 128, 128);
+            rows.push_back(timeRow);
+        }
 
         for (const PlotValue &pv : enabledPlots) {
             MeasureModel::Row row;
@@ -325,8 +333,19 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
 
     // Build rows for each enabled plot value.
     QVector<MeasureModel::Row> rows;
-    rows.reserve(enabledPlots.size());
+    rows.reserve(enabledPlots.size() + 1);
     bool hasData = false;
+
+    // Always prepend a Time row at the top (x-axis values, no min/avg/max).
+    {
+        MeasureModel::Row timeRow;
+        timeRow.name  = QStringLiteral("Time (s)");
+        timeRow.color = QColor(128, 128, 128);
+        timeRow.deltaValue = formatValue(currentX - m_startX, QStringLiteral("_time"), QString());
+        timeRow.finalValue = formatXAxisValue(currentX, xVariable, referenceMarkerKey);
+        hasData = true;
+        rows.push_back(timeRow);
+    }
 
     for (const PlotValue &pv : enabledPlots) {
         MeasureModel::Row row;

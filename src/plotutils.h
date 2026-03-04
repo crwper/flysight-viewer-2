@@ -45,6 +45,13 @@ QString formatValue(double value,
                     const QString &measurementId,
                     const QString &measurementType);
 
+// Format a plot x-axis value for display.
+// In absolute UTC mode (no reference marker, xVariable == _time) the value
+// is rendered as a UTC timestamp; otherwise it is shown as seconds.
+QString formatXAxisValue(double plotX,
+                         const QString &xVariable,
+                         const QString &referenceMarkerKey);
+
 CursorModel::Cursor chooseEffectiveCursor(const CursorModel *cursorModel);
 
 } // namespace FlySight

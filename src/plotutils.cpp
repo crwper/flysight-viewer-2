@@ -99,6 +99,22 @@ QString formatValue(double value, const QString &measurementId, const QString &m
     return QString::number(value, 'f', precision);
 }
 
+QString formatXAxisValue(double plotX,
+                         const QString &xVariable,
+                         const QString &referenceMarkerKey)
+{
+    if (std::isnan(plotX))
+        return QStringLiteral("--");
+
+    // Absolute UTC mode: no reference marker and x-variable is _time.
+    if (referenceMarkerKey.isEmpty() && xVariable == QLatin1String(SessionKeys::Time)) {
+        return QDateTime::fromMSecsSinceEpoch(qint64(plotX * 1000.0), Qt::UTC)
+                   .toString(QStringLiteral("HH:mm:ss.zzz"));
+    }
+
+    return formatValue(plotX, QStringLiteral("_time"), QString());
+}
+
 CursorModel::Cursor chooseEffectiveCursor(const CursorModel *cursorModel)
 {
     if (!cursorModel)
