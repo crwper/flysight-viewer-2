@@ -153,13 +153,9 @@ PlotWidget::PlotWidget(SessionModel *model,
         if (!m_momentModel || !m_mouseInPlotArea)
             return;
 
-        // Read the current mouse moment position to preserve it
-        const auto mouseMoment = m_momentModel->momentById(QStringLiteral("mouse"));
-        m_momentModel->setMomentPosition(
-            QStringLiteral("mouse"),
-            mouseMoment.positionUtc,
-            tracedSessions,
-            !tracedSessions.isEmpty());
+        // Recompute per-session UTC positions from current cursor location
+        const QPoint pos = customPlot->mapFromGlobal(QCursor::pos());
+        writeMouseMoment(pos, tracedSessions);
     });
 
     if (m_momentModel) {
@@ -889,66 +885,11 @@ bool PlotWidget::eventFilter(QObject *obj, QEvent *event)
             }
 
             // Write mouse position to MomentModel (UTC seconds)
-            if (m_momentModel) {
+            {
                 const QSet<QString> tracedSessions =
                     m_crosshairManager ? m_crosshairManager->getTracedSessionIds()
                                        : QSet<QString>{};
-
-                if (inPlotArea && !tracedSessions.isEmpty()) {
-                    const double xCoord =
-                        customPlot->xAxis->pixelToCoord(me->pos().x());
-
-                    // Convert plot-axis coordinate to per-session UTC seconds.
-                    // Each session may have a different reference marker offset,
-                    // so the same plot x-coordinate maps to different UTC times.
-                    double fallbackUtc = 0.0;
-                    bool anyConverted = false;
-                    QHash<QString, double> sessionUtcMap;
-
-                    for (const QString &sid : tracedSessions) {
-                        const int r = model->getSessionRow(sid);
-                        if (r < 0)
-                            continue;
-                        SessionData &sess = model->sessionRef(r);
-                        const auto offset = referenceOffsetForSession(sess);
-                        if (!offset.has_value())
-                            continue;
-
-                        const double rawX = xCoord + offset.value();
-
-                        if (m_xVariable == QLatin1String(SessionKeys::SystemTime)) {
-                            auto utcOpt = Calculations::systemTimeToUtc(sess, rawX);
-                            if (utcOpt.has_value()) {
-                                sessionUtcMap.insert(sid, *utcOpt);
-                                if (!anyConverted) {
-                                    fallbackUtc = *utcOpt;
-                                    anyConverted = true;
-                                }
-                            }
-                        } else {
-                            sessionUtcMap.insert(sid, rawX);
-                            if (!anyConverted) {
-                                fallbackUtc = rawX;
-                                anyConverted = true;
-                            }
-                        }
-                    }
-
-                    if (anyConverted) {
-                        m_momentModel->setMomentPosition(
-                            QStringLiteral("mouse"),
-                            fallbackUtc,
-                            sessionUtcMap,
-                            tracedSessions,
-                            true);
-                    } else {
-                        m_momentModel->setMomentPosition(
-                            QStringLiteral("mouse"), 0.0, {}, false);
-                    }
-                } else {
-                    m_momentModel->setMomentPosition(
-                        QStringLiteral("mouse"), 0.0, tracedSessions, false);
-                }
+                writeMouseMoment(me->pos(), tracedSessions);
             }
 
             // If the mouse just left the plot area, force a re-evaluation of moments
@@ -1883,6 +1824,69 @@ void PlotWidget::updateCrosshairFromMoments()
     }
 
     m_crosshairManager->setExternalCursorMulti(xBySession, true);
+}
+
+void PlotWidget::writeMouseMoment(const QPoint &pixelPos, const QSet<QString> &tracedSessions)
+{
+    if (!m_momentModel)
+        return;
+
+    const bool inPlotArea = customPlot->axisRect()->rect().contains(pixelPos);
+
+    if (inPlotArea && !tracedSessions.isEmpty()) {
+        const double xCoord = customPlot->xAxis->pixelToCoord(pixelPos.x());
+
+        // Convert plot-axis coordinate to per-session UTC seconds.
+        // Each session may have a different reference marker offset,
+        // so the same plot x-coordinate maps to different UTC times.
+        double fallbackUtc = 0.0;
+        bool anyConverted = false;
+        QHash<QString, double> sessionUtcMap;
+
+        for (const QString &sid : tracedSessions) {
+            const int r = model->getSessionRow(sid);
+            if (r < 0)
+                continue;
+            SessionData &sess = model->sessionRef(r);
+            const auto offset = referenceOffsetForSession(sess);
+            if (!offset.has_value())
+                continue;
+
+            const double rawX = xCoord + offset.value();
+
+            if (m_xVariable == QLatin1String(SessionKeys::SystemTime)) {
+                auto utcOpt = Calculations::systemTimeToUtc(sess, rawX);
+                if (utcOpt.has_value()) {
+                    sessionUtcMap.insert(sid, *utcOpt);
+                    if (!anyConverted) {
+                        fallbackUtc = *utcOpt;
+                        anyConverted = true;
+                    }
+                }
+            } else {
+                sessionUtcMap.insert(sid, rawX);
+                if (!anyConverted) {
+                    fallbackUtc = rawX;
+                    anyConverted = true;
+                }
+            }
+        }
+
+        if (anyConverted) {
+            m_momentModel->setMomentPosition(
+                QStringLiteral("mouse"),
+                fallbackUtc,
+                sessionUtcMap,
+                tracedSessions,
+                true);
+        } else {
+            m_momentModel->setMomentPosition(
+                QStringLiteral("mouse"), 0.0, {}, false);
+        }
+    } else {
+        m_momentModel->setMomentPosition(
+            QStringLiteral("mouse"), 0.0, tracedSessions, false);
+    }
 }
 
 void PlotWidget::updateMomentVLines()

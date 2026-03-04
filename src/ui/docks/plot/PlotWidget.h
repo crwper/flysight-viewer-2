@@ -154,6 +154,7 @@ private:
     // Moment-driven rendering helpers
     void updateCrosshairFromMoments();
     void updateMomentVLines();
+    void writeMouseMoment(const QPoint &pixelPos, const QSet<QString> &tracedSessions);
 
     // View management
     const SessionData* referenceSession() const;
