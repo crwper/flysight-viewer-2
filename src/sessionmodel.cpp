@@ -19,18 +19,6 @@ inline int compareStrings(const QVariant &a, const QVariant &b) {
     return QString::compare(sa, sb, Qt::CaseInsensitive);
 }
 
-inline int compareDateTimes(const QVariant &a, const QVariant &b) {
-    if (!a.canConvert<QDateTime>() && !b.canConvert<QDateTime>())
-        return 0; // Both invalid, consider them equal
-    if (!a.canConvert<QDateTime>())
-        return -1;
-    if (!b.canConvert<QDateTime>())
-        return 1;
-    QDateTime da = a.toDateTime();
-    QDateTime db = b.toDateTime();
-    return da < db ? -1 : (da == db ? 0 : 1);
-}
-
 inline int compareDoubles(const QVariant &a, const QVariant &b) {
     bool okA = false, okB = false;
     double da = a.toDouble(&okA);
@@ -57,10 +45,12 @@ auto setStringAttribute = [](SessionData &s, const char *key, const QVariant &va
 
 auto getFormattedDateTime = [](const SessionData &s, const char *key) -> QVariant {
     QVariant var = s.getAttribute(key);
-    if (!var.canConvert<QDateTime>()) {
+    bool ok = false;
+    double utcSeconds = var.toDouble(&ok);
+    if (!ok)
         return QVariant();
-    }
-    QDateTime dt = var.toDateTime();
+    QDateTime dt = QDateTime::fromMSecsSinceEpoch(
+        qint64(utcSeconds * 1000.0), QTimeZone::utc());
     return dt.toString("yyyy/MM/dd HH:mm:ss");
 };
 
@@ -119,8 +109,8 @@ static const QVector<SessionColumn>& columns()
             [](const SessionData &s) { return getFormattedDateTime(s, SessionKeys::StartTime); },
             nullptr,
             [](const SessionData &a, const SessionData &b) {
-                return compareDateTimes(a.getAttribute(SessionKeys::StartTime),
-                                        b.getAttribute(SessionKeys::StartTime));
+                return compareDoubles(a.getAttribute(SessionKeys::StartTime),
+                                      b.getAttribute(SessionKeys::StartTime));
             },
             false
         },
@@ -139,8 +129,8 @@ static const QVector<SessionColumn>& columns()
             [](const SessionData &s) { return getFormattedDateTime(s, SessionKeys::ExitTime); },
             nullptr,
             [](const SessionData &a, const SessionData &b) {
-                return compareDateTimes(a.getAttribute(SessionKeys::ExitTime),
-                                        b.getAttribute(SessionKeys::ExitTime));
+                return compareDoubles(a.getAttribute(SessionKeys::ExitTime),
+                                      b.getAttribute(SessionKeys::ExitTime));
             },
             false
         },

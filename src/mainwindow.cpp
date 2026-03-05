@@ -905,8 +905,8 @@ void MainWindow::registerBuiltInMarkers()
         {"Reference", "Analysis end",            "AE",     QColor(179, 41, 179),  SessionKeys::AnalysisEndTime,    {}, true},
 
         // Category: Analysis  (colours match the corresponding GNSS plots)
-        {"Analysis",  "Maximum vertical speed",   "MaxV", QColor::fromHsl(120, 170, 115), SessionKeys::MaxVelDTime, {{"GNSS", "velD"}}, false},
-        {"Analysis",  "Maximum horizontal speed", "MaxH", QColor::fromHsl(  0, 170, 128), SessionKeys::MaxVelHTime, {{"GNSS", "velH"}}, false},
+        {"Analysis",  "Maximum vertical speed",   "MaxV", QColor::fromHsl(120, 170, 115), SessionKeys::MaxVelDTime, {{"GNSS", "_time", "velD"}}, false},
+        {"Analysis",  "Maximum horizontal speed", "MaxH", QColor::fromHsl(  0, 170, 128), SessionKeys::MaxVelHTime, {{"GNSS", "_time", "velH"}}, false},
     };
 
     for (auto &md : defaults)

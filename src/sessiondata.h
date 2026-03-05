@@ -88,6 +88,7 @@ private:
     DependencyManager m_dependencyManager;
 
     QVariant computeAttribute(const QString &key) const;
+    QVariant synthesizeInterpolation(const QString &key) const;
     QVector<double> computeMeasurement(const QString &sensorKey, const QString &measurementKey) const;
 
     friend class DataImporter;

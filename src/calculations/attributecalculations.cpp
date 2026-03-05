@@ -3,8 +3,6 @@
 #include "../dependencykey.h"
 #include "../preferences/preferencesmanager.h"
 #include "../preferences/preferencekeys.h"
-#include <QDateTime>
-#include <QTimeZone>
 #include <QVector>
 #include <algorithm>
 
@@ -86,14 +84,9 @@ void Calculations::registerAttributeCalculations()
             double startSec = std::max(time[bestHighIdx] - timeout, time[0]);
             double endSec = std::min(time[bestLowIdx] + timeout, time[n - 1]);
 
-            QDateTime analysisStartTime = QDateTime::fromMSecsSinceEpoch(
-                qint64(startSec * 1000.0), QTimeZone::utc());
-            QDateTime analysisEndTime = QDateTime::fromMSecsSinceEpoch(
-                qint64(endSec * 1000.0), QTimeZone::utc());
-
-            // Store both results
-            session.setAttribute(SessionKeys::AnalysisStartTime, analysisStartTime);
-            session.setAttribute(SessionKeys::AnalysisEndTime, analysisEndTime);
+            // Store both results as double (UTC seconds)
+            session.setAttribute(SessionKeys::AnalysisStartTime, startSec);
+            session.setAttribute(SessionKeys::AnalysisEndTime, endSec);
 
             return session.getAttribute(outputKey);
         }
@@ -136,14 +129,14 @@ void Calculations::registerAttributeCalculations()
         [](SessionData& session) -> std::optional<QVariant> {
         // Retrieve analysis window to constrain the search
         QVariant asVar = session.getAttribute(SessionKeys::AnalysisStartTime);
-        if (!asVar.canConvert<QDateTime>())
+        if (!asVar.canConvert<double>())
             return std::nullopt;
-        double analysisStartSec = asVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+        double analysisStartSec = asVar.toDouble();
 
         QVariant aeVar = session.getAttribute(SessionKeys::AnalysisEndTime);
-        if (!aeVar.canConvert<QDateTime>())
+        if (!aeVar.canConvert<double>())
             return std::nullopt;
-        double analysisEndSec = aeVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+        double analysisEndSec = aeVar.toDouble();
 
         // Find the first timestamp where vertical speed drops below a threshold
         QVector<double> velD = session.getMeasurement("GNSS", "velD");
@@ -180,7 +173,7 @@ void Calculations::registerAttributeCalculations()
 
             // Determine exit
             const double tExit = time[i - 1] + a * (time[i] - time[i - 1]) - vThreshold / az;
-            return QDateTime::fromMSecsSinceEpoch((qint64)(tExit * 1000.0), QTimeZone::utc());
+            return QVariant(tExit);
         }
 
         qWarning() << "Exit time could not be determined based on current data.";
@@ -193,7 +186,7 @@ void Calculations::registerAttributeCalculations()
         { DependencyKey::attribute(SessionKeys::ExitTime) },
         [](SessionData& session) -> std::optional<QVariant> {
             QVariant exitVar = session.getAttribute(SessionKeys::ExitTime);
-            if (!exitVar.canConvert<QDateTime>())
+            if (!exitVar.canConvert<double>())
                 return std::nullopt;
             return exitVar;
         });
@@ -212,14 +205,14 @@ void Calculations::registerAttributeCalculations()
         [](SessionData& session) -> std::optional<QVariant> {
         // Retrieve exit time and landing time to bound the search
         QVariant exitVar = session.getAttribute(SessionKeys::ExitTime);
-        if (!exitVar.canConvert<QDateTime>())
+        if (!exitVar.canConvert<double>())
             return std::nullopt;
-        double exitSec = exitVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+        double exitSec = exitVar.toDouble();
 
         QVariant landVar = session.getAttribute(SessionKeys::LandingTime);
-        if (!landVar.canConvert<QDateTime>())
+        if (!landVar.canConvert<double>())
             return std::nullopt;
-        double landingSec = landVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+        double landingSec = landVar.toDouble();
 
         QVector<double> velD = session.getMeasurement("GNSS", "velD");
         QVector<double> sAcc = session.getMeasurement("GNSS", "sAcc");
@@ -257,8 +250,7 @@ void Calculations::registerAttributeCalculations()
             }
         }
 
-        return QDateTime::fromMSecsSinceEpoch(
-            qint64(time[minIdx] * 1000.0), QTimeZone::utc());
+        return QVariant(time[minIdx]);
     });
 
     // Landing time: first flying-to-walking transition within the analysis window
@@ -279,14 +271,14 @@ void Calculations::registerAttributeCalculations()
         [](SessionData& session) -> std::optional<QVariant> {
         // Retrieve analysis window to constrain the search
         QVariant asVar = session.getAttribute(SessionKeys::AnalysisStartTime);
-        if (!asVar.canConvert<QDateTime>())
+        if (!asVar.canConvert<double>())
             return std::nullopt;
-        double analysisStartSec = asVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+        double analysisStartSec = asVar.toDouble();
 
         QVariant aeVar = session.getAttribute(SessionKeys::AnalysisEndTime);
-        if (!aeVar.canConvert<QDateTime>())
+        if (!aeVar.canConvert<double>())
             return std::nullopt;
-        double analysisEndSec = aeVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+        double analysisEndSec = aeVar.toDouble();
 
         QVariant geVar = session.getAttribute(SessionKeys::GroundElev);
         if (!geVar.canConvert<double>())
@@ -320,8 +312,7 @@ void Calculations::registerAttributeCalculations()
             if (time[i] < analysisStartSec) continue;
             if (time[i] > analysisEndSec) break;
             if (!isWalking(i - 1) && isWalking(i)) {
-                return QDateTime::fromMSecsSinceEpoch(
-                    qint64(time[i] * 1000.0), QTimeZone::utc());
+                return QVariant(time[i]);
             }
         }
 
@@ -345,7 +336,7 @@ void Calculations::registerAttributeCalculations()
             }
 
             double startTime = *std::min_element(times.begin(), times.end());
-            return QDateTime::fromMSecsSinceEpoch((qint64)(startTime * 1000.0), QTimeZone::utc());
+            return QVariant(startTime);
         });
 
         SessionData::registerCalculatedAttribute(
@@ -383,14 +374,14 @@ void Calculations::registerAttributeCalculations()
         },
         [](SessionData& session) -> std::optional<QVariant> {
         QVariant msVar = session.getAttribute(SessionKeys::ManoeuvreStartTime);
-        if (!msVar.canConvert<QDateTime>())
+        if (!msVar.canConvert<double>())
             return std::nullopt;
-        double msSec = msVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+        double msSec = msVar.toDouble();
 
         QVariant landVar = session.getAttribute(SessionKeys::LandingTime);
-        if (!landVar.canConvert<QDateTime>())
+        if (!landVar.canConvert<double>())
             return std::nullopt;
-        double landingSec = landVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+        double landingSec = landVar.toDouble();
 
         QVector<double> velD = session.getMeasurement("GNSS", "velD");
         QVector<double> time = session.getMeasurement("GNSS", SessionKeys::Time);
@@ -412,8 +403,7 @@ void Calculations::registerAttributeCalculations()
         if (maxIdx < 0)
             return std::nullopt;
 
-        return QDateTime::fromMSecsSinceEpoch(
-            qint64(time[maxIdx] * 1000.0), QTimeZone::utc());
+        return QVariant(time[maxIdx]);
     });
 
     // Maximum horizontal speed time (time of peak velH between manoeuvre start and landing)
@@ -427,14 +417,14 @@ void Calculations::registerAttributeCalculations()
         },
         [](SessionData& session) -> std::optional<QVariant> {
         QVariant msVar = session.getAttribute(SessionKeys::ManoeuvreStartTime);
-        if (!msVar.canConvert<QDateTime>())
+        if (!msVar.canConvert<double>())
             return std::nullopt;
-        double msSec = msVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+        double msSec = msVar.toDouble();
 
         QVariant landVar = session.getAttribute(SessionKeys::LandingTime);
-        if (!landVar.canConvert<QDateTime>())
+        if (!landVar.canConvert<double>())
             return std::nullopt;
-        double landingSec = landVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+        double landingSec = landVar.toDouble();
 
         QVector<double> velH = session.getMeasurement("GNSS", "velH");
         QVector<double> time = session.getMeasurement("GNSS", SessionKeys::Time);
@@ -456,8 +446,7 @@ void Calculations::registerAttributeCalculations()
         if (maxIdx < 0)
             return std::nullopt;
 
-        return QDateTime::fromMSecsSinceEpoch(
-            qint64(time[maxIdx] * 1000.0), QTimeZone::utc());
+        return QVariant(time[maxIdx]);
     });
 
     // Ground elevation calculation based on preferences and GNSS data
@@ -479,9 +468,9 @@ void Calculations::registerAttributeCalculations()
         } else if (mode == "Automatic") {
             // Interpolate hMSL at the analysis end time
             QVariant aeVar = session.getAttribute(SessionKeys::AnalysisEndTime);
-            if (!aeVar.canConvert<QDateTime>())
+            if (!aeVar.canConvert<double>())
                 return std::nullopt;
-            double analysisEndSec = aeVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+            double analysisEndSec = aeVar.toDouble();
 
             QVector<double> hMSL = session.getMeasurement("GNSS", "hMSL");
             QVector<double> time = session.getMeasurement("GNSS", SessionKeys::Time);

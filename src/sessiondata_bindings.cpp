@@ -3,7 +3,6 @@
 #include <pybind11/numpy.h>
 #include <QString>
 #include <QVariant>
-#include <QDateTime>
 #include "sessiondata.h"
 
 namespace py = pybind11;
@@ -67,15 +66,6 @@ void register_sessiondata(py::module_ &m) {
                  QVariant v = self.getAttribute(QString::fromStdString(key));
                  if (!v.isValid()) {
                      return py::none();
-                 }
-                 // QDateTime → ISO8601 string with ms + 'Z'
-                 if (v.canConvert<QDateTime>()) {
-                     QDateTime dt = v.toDateTime();
-                     // 1. Convert the time value to UTC
-                     QDateTime utcDt = dt.toUTC();
-                     // 2. Format the UTC time using the desired ISO format
-                     QString s = utcDt.toString(Qt::ISODateWithMs);
-                     return py::cast(s.toStdString());
                  }
                  // numeric?
                  bool ok = false;

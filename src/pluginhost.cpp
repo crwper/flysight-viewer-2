@@ -394,12 +394,13 @@ void PluginHost::initialise(const QString& pluginDir)
         def.attributeKey = QString::fromStdString(mk.attr("attribute_key").cast<std::string>());
         def.editable     = mk.attr("editable").cast<bool>();
 
-        // Convert measurements list: each element is a (sensor, measurement) tuple
+        // Convert measurements list: each element is a (sensor, timeVector, dataVector) tuple
         for (py::handle mh : mk.attr("measurements")) {
             py::tuple t = mh.cast<py::tuple>();
             def.measurements.append({
                 QString::fromStdString(t[0].cast<std::string>()),
-                QString::fromStdString(t[1].cast<std::string>())
+                QString::fromStdString(t[1].cast<std::string>()),
+                QString::fromStdString(t[2].cast<std::string>())
             });
         }
 

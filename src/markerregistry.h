@@ -4,14 +4,17 @@
 #include <QObject>
 #include <QString>
 #include <QColor>
-#include <QPair>
 #include <QVector>
 
 namespace FlySight {
 
 class MomentModel;
 
-using MeasurementKey = QPair<QString, QString>;
+struct MarkerMeasurement {
+    QString sensor;
+    QString timeVector;
+    QString dataVector;
+};
 
 // Marker definitions
 struct MarkerDefinition {
@@ -20,7 +23,7 @@ struct MarkerDefinition {
     QString shortLabel;
     QColor color;
     QString attributeKey; // Unique, stable marker id (session attribute key)
-    QVector<MeasurementKey> measurements;  // sensor measurements this marker relates to
+    QVector<MarkerMeasurement> measurements;  // sensor measurements this marker relates to
     bool    editable = false;              // whether the user can reposition by dragging
     QString groupId;                       // empty = statically registered; non-empty = managed group
 };

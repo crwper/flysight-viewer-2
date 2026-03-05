@@ -319,14 +319,10 @@ void MapCursorDotModel::rebuild()
                 if (moment.traits.positionSource == PositionSource::Attribute) {
                     // Attribute-sourced moments: read UTC from session attribute
                     const QVariant attrVal = session.getAttribute(moment.traits.attributeKey);
-                    if (!attrVal.canConvert<QDateTime>())
+                    if (!attrVal.canConvert<double>())
                         continue;
 
-                    const QDateTime dt = attrVal.toDateTime();
-                    if (!dt.isValid())
-                        continue;
-
-                    utcSeconds = dt.toMSecsSinceEpoch() / 1000.0;
+                    utcSeconds = attrVal.toDouble();
 
                     // Filter by visible plot range: skip markers outside the
                     // current plot viewport so the map stays in sync.

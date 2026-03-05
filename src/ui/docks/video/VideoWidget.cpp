@@ -816,14 +816,10 @@ std::optional<double> VideoWidget::syncedSyncUtcSeconds() const
 
     SessionData &session = m_sessionModel->sessionRef(row);
     const QVariant v = session.getAttribute(SessionKeys::SyncTime);
-    if (!v.canConvert<QDateTime>())
+    if (!v.canConvert<double>())
         return std::nullopt;
 
-    const QDateTime dt = v.toDateTime();
-    if (!dt.isValid())
-        return std::nullopt;
-
-    return dt.toMSecsSinceEpoch() / 1000.0;
+    return v.toDouble();
 }
 
 void VideoWidget::updateVideoCursorSyncState()

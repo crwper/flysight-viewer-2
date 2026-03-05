@@ -1115,14 +1115,14 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
         QString shortLabel;
         QColor color;
         bool editable = false;
-        QVector<MeasurementKey> measurements;
+        QVector<MarkerMeasurement> measurements;
     };
 
     QVector<BubbleMoment> bubbleMoments;
 
     if (m_momentModel) {
         // Build measurement lookup from MarkerRegistry (needed for annotation computation)
-        QHash<QString, QVector<MeasurementKey>> measurementsByKey;
+        QHash<QString, QVector<MarkerMeasurement>> measurementsByKey;
         const QVector<MarkerDefinition> allDefs = MarkerRegistry::instance()->allMarkers();
         for (const auto &def : allDefs) {
             measurementsByKey.insert(def.attributeKey, def.measurements);
@@ -1186,15 +1186,10 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
                 return false;
 
             QVariant v = s.getAttribute(attributeKey);
-            if (!v.canConvert<QDateTime>())
+            if (!v.canConvert<double>())
                 return false;
 
-            QDateTime dt = v.toDateTime();
-            if (!dt.isValid())
-                return false;
-
-            dt = dt.toUTC();
-            *outUtcSeconds = dt.toMSecsSinceEpoch() / 1000.0;
+            *outUtcSeconds = v.toDouble();
             return true;
         };
 
@@ -1208,9 +1203,11 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
         const auto &primaryMk = bm.measurements.first();
         QString valueKey = bm.attributeKey
             + QStringLiteral(":")
-            + primaryMk.first
+            + primaryMk.sensor
             + QStringLiteral("/")
-            + primaryMk.second;
+            + primaryMk.timeVector
+            + QStringLiteral("/")
+            + primaryMk.dataVector;
 
         int row = model->getSessionRow(sessionId);
         if (row < 0)
@@ -1227,7 +1224,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
         QString measurementType;
         const QVector<PlotValue> &allPlots = PlotRegistry::instance().allPlots();
         for (const PlotValue &pv : allPlots) {
-            if (pv.sensorID == primaryMk.first && pv.measurementID == primaryMk.second) {
+            if (pv.sensorID == primaryMk.sensor && pv.measurementID == primaryMk.dataVector) {
                 measurementType = pv.measurementType;
                 break;
             }
@@ -1700,13 +1697,9 @@ void PlotWidget::updateCrosshairFromMoments()
         if (moment.traits.positionSource == PositionSource::Attribute) {
             // Attribute-sourced: read position from session attribute
             QVariant v = s.getAttribute(moment.traits.attributeKey);
-            if (!v.canConvert<QDateTime>())
+            if (!v.canConvert<double>())
                 return false;
-            QDateTime dt = v.toDateTime();
-            if (!dt.isValid())
-                return false;
-            dt = dt.toUTC();
-            double utcSec = dt.toMSecsSinceEpoch() / 1000.0;
+            double utcSec = v.toDouble();
             auto opt = plotAxisXFromUtc(utcSec, m_xVariable, m_referenceMarkerKey, s);
             if (!opt.has_value())
                 return false;
@@ -1934,13 +1927,9 @@ void PlotWidget::updateMomentVLines()
                     continue;
 
                 QVariant v = s.getAttribute(moment.traits.attributeKey);
-                if (!v.canConvert<QDateTime>())
+                if (!v.canConvert<double>())
                     continue;
-                QDateTime dt = v.toDateTime();
-                if (!dt.isValid())
-                    continue;
-                dt = dt.toUTC();
-                double utcSec = dt.toMSecsSinceEpoch() / 1000.0;
+                double utcSec = v.toDouble();
                 auto opt = plotAxisXFromUtc(utcSec, m_xVariable, m_referenceMarkerKey, s);
                 if (!opt.has_value())
                     continue;

@@ -1,6 +1,7 @@
 #include "sessiondata.h"
 #include "dependencykey.h"
 #include "dependencymanager.h"
+#include <algorithm>
 #include <QDebug>
 #include <QDateTime>
 #include <QCryptographicHash>
@@ -108,8 +109,11 @@ void SessionData::unregisterCalculatedAttribute(const QString &key)
 {
     // Remove from global calculation registry (affects all sessions)
     CalculatedValue<QString, QVariant>::unregisterCalculation(key);
-    // Flush this session's cached value for the key
-    m_calculatedAttributes.invalidate(key);
+    // Cascade invalidation through the dependency graph
+    m_dependencyManager.invalidateKeyAndDependents(
+        DependencyKey::attribute(key),
+        m_calculatedAttributes,
+        m_calculatedMeasurements);
 }
 
 void SessionData::registerCalculatedAttribute(
@@ -136,11 +140,71 @@ void SessionData::registerCalculatedMeasurement(
 
 QVariant SessionData::computeAttribute(const QString &key) const {
     auto result = m_calculatedAttributes.getValue(*const_cast<SessionData*>(this), key);
-    if (!result.has_value()) {
-        // handle failure
-        return QVariant();
+    if (result.has_value()) {
+        return result.value();
     }
-    return result.value();
+    return synthesizeInterpolation(key);
+}
+
+QVariant SessionData::synthesizeInterpolation(const QString &key) const {
+    // 1. Parse the key: {timeAttr}:{sensor}/{timeVector}/{dataVector}
+    const int colonPos = key.indexOf(':');
+    if (colonPos < 0)
+        return QVariant();
+
+    const QString timeAttrKey = key.left(colonPos);
+    const QString sensorPath = key.mid(colonPos + 1);
+    const QStringList parts = sensorPath.split('/');
+    if (parts.size() != 3)
+        return QVariant();
+
+    const QString &sensor     = parts[0];
+    const QString &timeVector = parts[1];
+    const QString &dataVector = parts[2];
+
+    // 2. Resolve the time attribute
+    const QVariant timeVar = getAttribute(timeAttrKey);
+    if (!timeVar.canConvert<double>())
+        return QVariant();
+    const double markerTime = timeVar.toDouble();
+
+    // 3. Read the measurement vectors
+    const QVector<double> timeVec = getMeasurement(sensor, timeVector);
+    if (timeVec.isEmpty())
+        return QVariant();
+
+    const QVector<double> dataVec = getMeasurement(sensor, dataVector);
+    if (dataVec.isEmpty() || dataVec.size() != timeVec.size())
+        return QVariant();
+
+    // 4. Binary search and linear interpolation
+    auto it = std::lower_bound(timeVec.cbegin(), timeVec.cend(), markerTime);
+    if (it == timeVec.cbegin() || it == timeVec.cend())
+        return QVariant();
+
+    const int idx = static_cast<int>(std::distance(timeVec.cbegin(), it));
+    const double t1 = timeVec[idx - 1], v1 = dataVec[idx - 1];
+    const double t2 = timeVec[idx],     v2 = dataVec[idx];
+
+    if (t2 == t1)
+        return QVariant();
+
+    const double result = v1 + (v2 - v1) * (markerTime - t1) / (t2 - t1);
+
+    // 5. Cache the result
+    const_cast<CalculatedValue<QString, QVariant>&>(m_calculatedAttributes).setValue(key, QVariant(result));
+
+    // 6. Register dependency edges for DAG invalidation
+    DependencyKey thisKey = DependencyKey::attribute(key);
+    QList<DependencyKey> deps = {
+        DependencyKey::attribute(timeAttrKey),
+        DependencyKey::measurement(sensor, timeVector),
+        DependencyKey::measurement(sensor, dataVector)
+    };
+    const_cast<SessionData*>(this)->addDependencies(thisKey, deps);
+
+    // 7. Return the interpolated value
+    return QVariant(result);
 }
 
 QVector<double> SessionData::computeMeasurement(const QString &sensorKey, const QString &measurementKey) const {

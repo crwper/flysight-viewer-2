@@ -1,12 +1,11 @@
 #include "altitudemarkerfeature.h"
+#include "calculatedvalue.h"
 #include "sessionmodel.h"
 #include "sessiondata.h"
 #include "dependencykey.h"
 #include "markerregistry.h"
 #include "preferences/preferencesmanager.h"
 #include "preferences/preferencekeys.h"
-#include <QDateTime>
-#include <QTimeZone>
 #include <QColor>
 #include <algorithm>
 
@@ -86,14 +85,14 @@ void AltitudeMarkerManager::registerAll()
             [thresholdMetres](SessionData &session) -> std::optional<QVariant> {
                 // Retrieve analysis window bounds
                 QVariant asVar = session.getAttribute(SessionKeys::AnalysisStartTime);
-                if (!asVar.canConvert<QDateTime>())
+                if (!asVar.canConvert<double>())
                     return std::nullopt;
-                double analysisStartSec = asVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+                double analysisStartSec = asVar.toDouble();
 
                 QVariant aeVar = session.getAttribute(SessionKeys::AnalysisEndTime);
-                if (!aeVar.canConvert<QDateTime>())
+                if (!aeVar.canConvert<double>())
                     return std::nullopt;
-                double analysisEndSec = aeVar.toDateTime().toUTC().toMSecsSinceEpoch() / 1000.0;
+                double analysisEndSec = aeVar.toDouble();
 
                 // Retrieve GNSS altitude AGL and time vectors
                 QVector<double> z    = session.getMeasurement("GNSS", "z");
@@ -124,8 +123,7 @@ void AltitudeMarkerManager::registerAll()
                 if (!foundCrossing)
                     return std::nullopt;
 
-                return QDateTime::fromMSecsSinceEpoch(
-                    qint64(lastCrossingTime * 1000.0), QTimeZone::utc());
+                return QVariant(lastCrossingTime);
             });
 
         // Build the MarkerDefinition
@@ -156,19 +154,17 @@ void AltitudeMarkerManager::registerAll()
 
 void AltitudeMarkerManager::refresh()
 {
-    // Step 1: Unregister calculated attributes from every active session
+    // Unregister calculated attribute recipes (global, not per-session)
     for (const QString &key : std::as_const(m_registeredKeys)) {
-        for (int row = 0; row < m_sessionModel->rowCount(); ++row) {
-            m_sessionModel->sessionRef(row).unregisterCalculatedAttribute(key);
-        }
+        CalculatedValue<QString, QVariant>::unregisterCalculation(key);
     }
 
-    // Step 2: Clear the marker group from the registry
+    // Clear the marker group from the registry
     MarkerRegistry::instance()->clearMarkerGroup(QStringLiteral("altitude"));
 
-    // Step 3: Clear the tracked key list
+    // Clear the tracked key list
     m_registeredKeys.clear();
 
-    // Step 4: Re-register with current preferences
+    // Re-register with current preferences
     registerAll();
 }

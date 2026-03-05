@@ -66,7 +66,7 @@ public:
         QString attributeKey;       // marker definition's attributeKey
         QString sessionId;          // only valid when count == 1
         bool    editable = false;   // from MarkerDefinition
-        QVector<MeasurementKey> measurements;  // from MarkerDefinition
+        QVector<MarkerMeasurement> measurements;  // from MarkerDefinition
     };
 
     // Constructor / Destructor

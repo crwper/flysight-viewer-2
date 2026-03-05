@@ -19,12 +19,9 @@ std::optional<double> markerOffsetSeconds(const SessionData &session,
     if (referenceMarkerKey.isEmpty())
         return 0.0;
     QVariant v = session.getAttribute(referenceMarkerKey);
-    if (!v.canConvert<QDateTime>())
+    if (!v.canConvert<double>())
         return std::nullopt;
-    QDateTime dt = v.toDateTime();
-    if (!dt.isValid())
-        return std::nullopt;
-    const double utcSeconds = dt.toMSecsSinceEpoch() / 1000.0;
+    const double utcSeconds = v.toDouble();
 
     if (xVariable == QLatin1String(SessionKeys::SystemTime)) {
         return Calculations::utcToSystemTime(session, utcSeconds);
@@ -152,12 +149,9 @@ std::optional<double> utcSecondsForMoment(const MomentModel::Moment &moment,
     if (moment.traits.positionSource == PositionSource::Attribute) {
         // Read the position from the session's attribute
         const QVariant v = session.getAttribute(moment.traits.attributeKey);
-        if (!v.canConvert<QDateTime>())
+        if (!v.canConvert<double>())
             return std::nullopt;
-        const QDateTime dt = v.toDateTime();
-        if (!dt.isValid())
-            return std::nullopt;
-        return dt.toMSecsSinceEpoch() / 1000.0;
+        return v.toDouble();
     }
 
     // MouseInput or External: check per-session positions first
