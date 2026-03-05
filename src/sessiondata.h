@@ -89,6 +89,14 @@ private:
 
     QVariant computeAttribute(const QString &key) const;
     QVariant synthesizeInterpolation(const QString &key) const;
+
+public:
+    /// Builds an interpolation key: "{timeAttr}:{sensor}/{timeVector}/{dataVector}"
+    static QString interpolationKey(const QString &timeAttr,
+                                    const QString &sensor,
+                                    const QString &timeVector,
+                                    const QString &dataVector);
+private:
     QVector<double> computeMeasurement(const QString &sensorKey, const QString &measurementKey) const;
 
     friend class DataImporter;

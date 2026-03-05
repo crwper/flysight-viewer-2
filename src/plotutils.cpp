@@ -51,6 +51,8 @@ double interpolateAtX(const QVector<double> &xData,
     if (xData.isEmpty() || yData.isEmpty() || xData.size() != yData.size())
         return kNaN;
 
+    // Reject queries outside the interpolatable range — we need two
+    // bracketing points. See also synthesizeInterpolation() in sessiondata.cpp.
     auto it = std::lower_bound(xData.cbegin(), xData.cend(), x);
     if (it == xData.cbegin() || it == xData.cend())
         return kNaN;

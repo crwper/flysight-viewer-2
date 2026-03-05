@@ -153,8 +153,7 @@ QVariant SessionData::synthesizeInterpolation(const QString &key) const {
         return QVariant();
 
     const QString timeAttrKey = key.left(colonPos);
-    const QString sensorPath = key.mid(colonPos + 1);
-    const QStringList parts = sensorPath.split('/');
+    const QStringList parts = key.mid(colonPos + 1).split('/');
     if (parts.size() != 3)
         return QVariant();
 
@@ -178,6 +177,10 @@ QVariant SessionData::synthesizeInterpolation(const QString &key) const {
         return QVariant();
 
     // 4. Binary search and linear interpolation
+    //    lower_bound returns cbegin() when markerTime <= first element, and
+    //    cend() when markerTime > last element. Both cases mean the query
+    //    falls outside the interpolatable range (we need two bracketing
+    //    points). This matches interpolateAtX() in plotutils.cpp.
     auto it = std::lower_bound(timeVec.cbegin(), timeVec.cend(), markerTime);
     if (it == timeVec.cbegin() || it == timeVec.cend())
         return QVariant();
@@ -205,6 +208,20 @@ QVariant SessionData::synthesizeInterpolation(const QString &key) const {
 
     // 7. Return the interpolated value
     return QVariant(result);
+}
+
+QString SessionData::interpolationKey(const QString &timeAttr,
+                                      const QString &sensor,
+                                      const QString &timeVector,
+                                      const QString &dataVector)
+{
+    return timeAttr
+        + QStringLiteral(":")
+        + sensor
+        + QStringLiteral("/")
+        + timeVector
+        + QStringLiteral("/")
+        + dataVector;
 }
 
 QVector<double> SessionData::computeMeasurement(const QString &sensorKey, const QString &measurementKey) const {

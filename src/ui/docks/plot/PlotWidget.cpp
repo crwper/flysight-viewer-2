@@ -1201,13 +1201,9 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
             return QString();
 
         const auto &primaryMk = bm.measurements.first();
-        QString valueKey = bm.attributeKey
-            + QStringLiteral(":")
-            + primaryMk.sensor
-            + QStringLiteral("/")
-            + primaryMk.timeVector
-            + QStringLiteral("/")
-            + primaryMk.dataVector;
+        QString valueKey = SessionData::interpolationKey(
+            bm.attributeKey, primaryMk.sensor,
+            primaryMk.timeVector, primaryMk.dataVector);
 
         int row = model->getSessionRow(sessionId);
         if (row < 0)

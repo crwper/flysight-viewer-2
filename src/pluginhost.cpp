@@ -311,8 +311,13 @@ void PluginHost::initialise(const QString& pluginDir)
                         QString::fromStdString(out.cast<std::string>());
                     const QDateTime dt =
                         QDateTime::fromString(txt, Qt::ISODateWithMs);
-                    return dt.isValid() ? QVariant::fromValue(dt)
-                                        : QVariant::fromValue(txt);
+                    if (dt.isValid()) {
+                        // Store as UTC-seconds double so the value participates
+                        // in the interpolation system's canConvert<double>() check.
+                        return QVariant::fromValue(
+                            dt.toMSecsSinceEpoch() / 1000.0);
+                    }
+                    return QVariant::fromValue(txt);
                 }
                 return std::nullopt;
             });
