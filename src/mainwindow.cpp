@@ -186,6 +186,21 @@ MainWindow::MainWindow(QWidget *parent)
                 this, &MainWindow::on_action_HideOthers_triggered);
         connect(logbookFeature, &LogbookDockFeature::deleteRequested,
                 this, &MainWindow::on_action_Delete_triggered);
+        connect(logbookFeature, &LogbookDockFeature::focusSessionRequested,
+                this, [this](int row) {
+            // Show only the double-clicked session, hide all others
+            QMap<int, bool> visibility;
+            for (int i = 0; i < model->rowCount(); ++i) {
+                visibility.insert(i, i == row);
+            }
+            model->setRowsVisibility(visibility);
+
+            // Zoom to extent for the now-visible session
+            auto* pf = findFeature<PlotDockFeature>();
+            if (pf && pf->plotWidget()) {
+                pf->plotWidget()->zoomToExtent();
+            }
+        });
     }
 
     // Connect plot signals

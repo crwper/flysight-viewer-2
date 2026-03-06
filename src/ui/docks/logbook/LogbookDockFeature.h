@@ -32,6 +32,7 @@ signals:
     void hideSelectedRequested();
     void hideOthersRequested();
     void deleteRequested();
+    void focusSessionRequested(int row);
 
 private:
     KDDockWidgets::QtWidgets::DockWidget* m_dock = nullptr;

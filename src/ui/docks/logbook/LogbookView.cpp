@@ -22,6 +22,10 @@ LogbookView::LogbookView(SessionModel *model, QWidget *parent)
 
     treeView->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(treeView, &QTreeView::customContextMenuRequested, this, &LogbookView::onContextMenuRequested);
+    connect(treeView, &QTreeView::doubleClicked, this, [this](const QModelIndex &index) {
+        if (index.isValid())
+            emit focusSessionRequested(index.row());
+    });
 }
 
 QList<QModelIndex> LogbookView::selectedRows() const {
@@ -40,6 +44,9 @@ void LogbookView::setupView()
 
     // Set selection behavior to select entire rows
     treeView->setSelectionBehavior(QAbstractItemView::SelectRows);
+
+    // Edit on F2 or slow second click, not double-click (double-click is used for focus)
+    treeView->setEditTriggers(QAbstractItemView::EditKeyPressed | QAbstractItemView::SelectedClicked);
 
     // Optimize performance for large models
     treeView->setUniformRowHeights(true);

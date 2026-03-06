@@ -20,6 +20,7 @@ signals:
     void hideSelectedRequested();
     void hideOthersRequested();
     void deleteRequested();
+    void focusSessionRequested(int row);
 
 public slots:
     void selectSessions(const QList<QString> &sessionIds);

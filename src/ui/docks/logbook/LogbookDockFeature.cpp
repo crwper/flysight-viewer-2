@@ -24,6 +24,8 @@ LogbookDockFeature::LogbookDockFeature(const AppContext& ctx, QObject* parent)
             this, &LogbookDockFeature::hideOthersRequested);
     connect(m_logbookView, &LogbookView::deleteRequested,
             this, &LogbookDockFeature::deleteRequested);
+    connect(m_logbookView, &LogbookView::focusSessionRequested,
+            this, &LogbookDockFeature::focusSessionRequested);
 }
 
 QString LogbookDockFeature::id() const
