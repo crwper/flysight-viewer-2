@@ -106,6 +106,7 @@ inline QString markerColorKey(const QString &attributeKey) {
 inline const QString AltitudeMarkersUnits = QStringLiteral("altitudeMarkers/units");
 inline const QString AltitudeMarkersColor = QStringLiteral("altitudeMarkers/color");
 inline const QString AltitudeMarkersSize  = QStringLiteral("altitudeMarkers/size");
+inline const QString AltitudeMarkersVersion = QStringLiteral("altitudeMarkers/version");
 
 /**
  * @brief Generate the preference key for a specific altitude marker's value.

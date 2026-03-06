@@ -4,6 +4,7 @@
 #include "ui/docks/DockFeature.h"
 #include <QComboBox>
 #include <QLabel>
+#include <QSet>
 #include <QTreeView>
 
 namespace FlySight {
@@ -31,6 +32,8 @@ public:
 
 private:
     void populateReferenceCombo();
+    void saveExpansionState();
+    void restoreExpansionState();
     void onReferenceComboActivated(int index);
     void onReferenceMarkerKeyChanged(const QString &oldKey, const QString &newKey);
 
@@ -39,6 +42,7 @@ private:
     QComboBox* m_referenceCombo = nullptr;
     PlotViewSettingsModel* m_viewSettings = nullptr;
     MarkerModel* m_markerModel = nullptr;
+    QSet<QString> m_expandedCategories;
 };
 
 } // namespace FlySight

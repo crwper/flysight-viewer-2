@@ -26,6 +26,7 @@ struct MarkerDefinition {
     QVector<MarkerMeasurement> measurements;  // sensor measurements this marker relates to
     bool    editable = false;              // whether the user can reposition by dragging
     QString groupId;                       // empty = statically registered; non-empty = managed group
+    bool    defaultEnabled = false;        // initial enabled state when first seen
 };
 
 class MarkerRegistry : public QObject {
@@ -49,6 +50,9 @@ public:
 
     /// removes all markers belonging to the given group
     void clearMarkerGroup(const QString &groupId);
+
+    /// atomically replace all markers in a group (one markersChanged signal)
+    void replaceMarkerGroup(const QString &groupId, const QVector<MarkerDefinition> &defs);
 
 signals:
     void markersChanged();

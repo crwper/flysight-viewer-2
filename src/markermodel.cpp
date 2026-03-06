@@ -115,15 +115,11 @@ void MarkerModel::setMarkers(const QVector<MarkerDefinition>& defs)
         markerNode->def = def;
 
         // Restore enabled state: in-memory hash (within-session reset),
-        // then QSettings (cross-session), then default.
-        const bool defaultEnabled = (key == SessionKeys::ExitTime
-                                     || key == SessionKeys::SyncTime
-                                     || key == SessionKeys::AnalysisStartTime
-                                     || key == SessionKeys::AnalysisEndTime);
+        // then QSettings (cross-session), then MarkerDefinition default.
         markerNode->enabled = enabledByKey.contains(key)
             ? enabledByKey.value(key)
-            : (m_settings ? m_settings->value(settingsKey(key), defaultEnabled).toBool()
-                          : defaultEnabled);
+            : (m_settings ? m_settings->value(settingsKey(key), def.defaultEnabled).toBool()
+                          : def.defaultEnabled);
 
         markerNode->category = category;
         markerNode->categoryRow = category->row;

@@ -86,6 +86,33 @@ void MarkerRegistry::clearMarkerGroup(const QString &groupId) {
     emit markersChanged();
 }
 
+void MarkerRegistry::replaceMarkerGroup(const QString &groupId, const QVector<MarkerDefinition> &defs) {
+    m_markers.removeIf([&groupId](const MarkerDefinition &d) {
+        return d.groupId == groupId;
+    });
+
+    QVector<MomentRegistration> momentRegs;
+    momentRegs.reserve(defs.size());
+    for (const MarkerDefinition &def : defs) {
+        m_markers.append(def);
+
+        MomentRegistration reg;
+        reg.id = def.attributeKey;
+        reg.label = def.displayName;
+        reg.traits = markerTraitsFromDef(def);
+        reg.groupId = def.groupId;
+        momentRegs.append(reg);
+    }
+
+    if (m_momentModel) {
+        m_momentModel->unregisterMomentGroup(groupId);
+        if (!momentRegs.isEmpty())
+            m_momentModel->registerMoments(momentRegs);
+    }
+
+    emit markersChanged();
+}
+
 QVector<MarkerDefinition> MarkerRegistry::allMarkers() const {
     return m_markers;
 }

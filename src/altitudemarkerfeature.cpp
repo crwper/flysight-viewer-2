@@ -20,6 +20,7 @@ AltitudeMarkerManager::AltitudeMarkerManager(SessionModel *sessionModel, QObject
     prefs.registerPreference(PreferenceKeys::AltitudeMarkersUnits, QStringLiteral("Imperial"));
     prefs.registerPreference(PreferenceKeys::AltitudeMarkersColor, QColor(0x87, 0xCE, 0xEB));
     prefs.registerPreference(PreferenceKeys::AltitudeMarkersSize, 3);
+    prefs.registerPreference(PreferenceKeys::AltitudeMarkersVersion, 0);
     prefs.registerPreference(PreferenceKeys::altitudeMarkerValueKey(1), 300);
     prefs.registerPreference(PreferenceKeys::altitudeMarkerValueKey(2), 600);
     prefs.registerPreference(PreferenceKeys::altitudeMarkerValueKey(3), 900);
@@ -134,8 +135,9 @@ void AltitudeMarkerManager::registerAll()
         def.color        = color;
         def.attributeKey = attributeKey;
         def.measurements = {};
-        def.editable     = false;
-        def.groupId      = QStringLiteral("altitude");
+        def.editable       = false;
+        def.groupId        = QStringLiteral("altitude");
+        def.defaultEnabled = true;
         defs.append(def);
 
         // Step 6: Write the shared marker colour so plot rendering finds it via the
@@ -148,23 +150,30 @@ void AltitudeMarkerManager::registerAll()
         m_registeredKeys.append(attributeKey);
     }
 
-    // Register all markers in one call so markersChanged() fires only once
-    MarkerRegistry::instance()->registerMarkers(defs);
+    // Atomically replace the altitude group so markersChanged() fires only once
+    MarkerRegistry::instance()->replaceMarkerGroup(QStringLiteral("altitude"), defs);
 }
 
 void AltitudeMarkerManager::refresh()
 {
+    QSet<QString> oldKeys(m_registeredKeys.begin(), m_registeredKeys.end());
+
     // Unregister calculated attribute recipes (global, not per-session)
     for (const QString &key : std::as_const(m_registeredKeys)) {
         CalculatedValue<QString, QVariant>::unregisterCalculation(key);
     }
-
-    // Clear the marker group from the registry
-    MarkerRegistry::instance()->clearMarkerGroup(QStringLiteral("altitude"));
-
-    // Clear the tracked key list
     m_registeredKeys.clear();
 
-    // Re-register with current preferences
+    // Re-register with current preferences (uses atomic replaceMarkerGroup)
     registerAll();
+
+    // Clear saved enabled state for removed markers so that re-adding
+    // them later falls through to defaultEnabled = true.
+    QSet<QString> newKeys(m_registeredKeys.begin(), m_registeredKeys.end());
+    QSettings settings;
+    for (const QString &key : oldKeys) {
+        if (!newKeys.contains(key)) {
+            settings.remove(QStringLiteral("state/markers/") + key);
+        }
+    }
 }

@@ -43,6 +43,12 @@ MarkerSelectionDockFeature::MarkerSelectionDockFeature(const AppContext& ctx, QO
     connect(m_referenceCombo, QOverload<int>::of(&QComboBox::activated),
             this, &MarkerSelectionDockFeature::onReferenceComboActivated);
 
+    // Preserve tree expansion state across model resets
+    connect(m_markerModel, &QAbstractItemModel::modelAboutToBeReset,
+            this, &MarkerSelectionDockFeature::saveExpansionState);
+    connect(m_markerModel, &QAbstractItemModel::modelReset,
+            this, &MarkerSelectionDockFeature::restoreExpansionState);
+
     // Repopulate when enabled markers change
     connect(m_markerModel, &QAbstractItemModel::dataChanged,
             this, &MarkerSelectionDockFeature::populateReferenceCombo);
@@ -55,6 +61,31 @@ MarkerSelectionDockFeature::MarkerSelectionDockFeature(const AppContext& ctx, QO
 
     // Initial population
     populateReferenceCombo();
+}
+
+void MarkerSelectionDockFeature::saveExpansionState()
+{
+    // Merge rather than clear — preserves state for categories absent in
+    // intermediate resets (e.g. clearMarkerGroup then registerMarkers).
+    for (int i = 0; i < m_markerModel->rowCount(); ++i) {
+        QModelIndex idx = m_markerModel->index(i, 0);
+        QString name = idx.data(Qt::DisplayRole).toString();
+        if (m_treeView->isExpanded(idx)) {
+            m_expandedCategories.insert(name);
+        } else {
+            m_expandedCategories.remove(name);
+        }
+    }
+}
+
+void MarkerSelectionDockFeature::restoreExpansionState()
+{
+    for (int i = 0; i < m_markerModel->rowCount(); ++i) {
+        QModelIndex idx = m_markerModel->index(i, 0);
+        if (m_expandedCategories.contains(idx.data(Qt::DisplayRole).toString())) {
+            m_treeView->expand(idx);
+        }
+    }
 }
 
 void MarkerSelectionDockFeature::populateReferenceCombo()

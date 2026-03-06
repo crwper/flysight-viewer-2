@@ -896,13 +896,13 @@ void MainWindow::onPlotWidgetToolChanged(PlotWidget::Tool t)
 void MainWindow::registerBuiltInMarkers()
 {
     QVector<MarkerDefinition> defaults = {
-        // Category: Reference
-        {"Reference", "Exit",                    "Exit",   QColor(34, 131, 196),  SessionKeys::ExitTime,           {}, true},
-        {"Reference", "Video sync",              "Sync",   QColor(0, 175, 175),   SessionKeys::SyncTime,           {}, true},
-        {"Reference", "Manoeuvre start",         "Mvr",     QColor(213, 136, 43),  SessionKeys::ManoeuvreStartTime, {}, true},
-        {"Reference", "Landing",                 "Land",   QColor(153, 102, 51),  SessionKeys::LandingTime,        {}, true},
-        {"Reference", "Analysis start",          "AS",     QColor(179, 41, 179),  SessionKeys::AnalysisStartTime,  {}, true},
-        {"Reference", "Analysis end",            "AE",     QColor(179, 41, 179),  SessionKeys::AnalysisEndTime,    {}, true},
+        // Category: Reference                                                                                                               groupId  defaultEnabled
+        {"Reference", "Exit",                    "Exit",   QColor(34, 131, 196),  SessionKeys::ExitTime,           {}, true,  {}, true},
+        {"Reference", "Video sync",              "Sync",   QColor(0, 175, 175),   SessionKeys::SyncTime,           {}, true,  {}, true},
+        {"Reference", "Manoeuvre start",         "Mvr",     QColor(213, 136, 43),  SessionKeys::ManoeuvreStartTime, {}, true,  {}, true},
+        {"Reference", "Landing",                 "Land",   QColor(153, 102, 51),  SessionKeys::LandingTime,        {}, true,  {}, true},
+        {"Reference", "Analysis start",          "AS",     QColor(179, 41, 179),  SessionKeys::AnalysisStartTime,  {}, true,  {}, true},
+        {"Reference", "Analysis end",            "AE",     QColor(179, 41, 179),  SessionKeys::AnalysisEndTime,    {}, true,  {}, true},
 
         // Category: Analysis  (colours match the corresponding GNSS plots)
         {"Analysis",  "Maximum vertical speed",   "MaxV", QColor::fromHsl(120, 170, 115), SessionKeys::MaxVelDTime, {{"GNSS", "_time", "velD"}}, false},

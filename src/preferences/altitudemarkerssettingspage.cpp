@@ -223,6 +223,12 @@ void AltitudeMarkersSettingsPage::saveSettings()
     prefs.setValue(PreferenceKeys::AltitudeMarkersUnits, units);
     prefs.setValue(PreferenceKeys::AltitudeMarkersColor, m_currentColor);
     prefs.setValue(PreferenceKeys::AltitudeMarkersSize, altitudes.size());
+
+    // Always increment version to guarantee preferenceChanged fires.
+    // beginWriteArray above already writes the "size" key to QSettings,
+    // so PreferencesManager may not detect a change for AltitudeMarkersSize.
+    int version = prefs.getValue(PreferenceKeys::AltitudeMarkersVersion).toInt();
+    prefs.setValue(PreferenceKeys::AltitudeMarkersVersion, version + 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -295,6 +301,9 @@ void AltitudeMarkersSettingsPage::resetToDefaults()
     prefs.setValue(PreferenceKeys::AltitudeMarkersUnits, QStringLiteral("Imperial"));
     prefs.setValue(PreferenceKeys::AltitudeMarkersColor, QColor(0x87, 0xCE, 0xEB));
     prefs.setValue(PreferenceKeys::AltitudeMarkersSize, defaults.size());
+
+    int version = prefs.getValue(PreferenceKeys::AltitudeMarkersVersion).toInt();
+    prefs.setValue(PreferenceKeys::AltitudeMarkersVersion, version + 1);
 
     loadSettings();
 }
