@@ -226,6 +226,15 @@ install(
     PATTERN "*.pyc" EXCLUDE
 )
 
+# Copy the Python DLLs that FlySightViewer.exe links against to the root
+# directory so the Windows loader can find them at startup (load-time deps
+# are resolved before main() runs, before we can modify PATH).
+install(FILES
+    "${PYTHON_EMBED_DIR}/python${PYTHON_EMBED_VERSION_NODOT}.dll"
+    "${PYTHON_EMBED_DIR}/python3.dll"
+    DESTINATION "."
+)
+
 # =============================================================================
 # Verify bundled Python installation
 # =============================================================================
