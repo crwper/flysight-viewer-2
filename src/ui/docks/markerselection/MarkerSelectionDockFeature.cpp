@@ -49,9 +49,7 @@ MarkerSelectionDockFeature::MarkerSelectionDockFeature(const AppContext& ctx, QO
     connect(m_markerModel, &QAbstractItemModel::modelReset,
             this, &MarkerSelectionDockFeature::restoreExpansionState);
 
-    // Repopulate when enabled markers change
-    connect(m_markerModel, &QAbstractItemModel::dataChanged,
-            this, &MarkerSelectionDockFeature::populateReferenceCombo);
+    // Repopulate when the set of registered markers changes
     connect(m_markerModel, &QAbstractItemModel::modelReset,
             this, &MarkerSelectionDockFeature::populateReferenceCombo);
 
@@ -95,8 +93,8 @@ void MarkerSelectionDockFeature::populateReferenceCombo()
     m_referenceCombo->clear();
     m_referenceCombo->addItem(QStringLiteral("None"), QVariant(QString()));
 
-    const QVector<MarkerDefinition> enabled = m_markerModel->enabledMarkers();
-    for (const MarkerDefinition &def : enabled) {
+    const QVector<MarkerDefinition> markers = m_markerModel->allMarkers();
+    for (const MarkerDefinition &def : markers) {
         m_referenceCombo->addItem(def.displayName, QVariant(def.attributeKey));
     }
 
@@ -113,7 +111,6 @@ void MarkerSelectionDockFeature::populateReferenceCombo()
     if (matchIndex >= 0) {
         m_referenceCombo->setCurrentIndex(matchIndex);
     } else {
-        // Current reference marker is not enabled -- fall back to "None"
         m_referenceCombo->setCurrentIndex(0);
         if (!currentKey.isEmpty()) {
             m_viewSettings->setReferenceMarkerKey(QString());

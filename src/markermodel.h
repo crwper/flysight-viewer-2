@@ -33,6 +33,7 @@ public:
 
     // Public API (minimum)
     void setMarkers(const QVector<MarkerDefinition>& defs);
+    QVector<MarkerDefinition> allMarkers() const;
     QVector<MarkerDefinition> enabledMarkers() const;
 
     void setMarkerEnabled(const QString& attributeKey, bool enabled);

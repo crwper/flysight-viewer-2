@@ -142,6 +142,17 @@ void MarkerModel::setMarkers(const QVector<MarkerDefinition>& defs)
     }
 }
 
+QVector<MarkerDefinition> MarkerModel::allMarkers() const
+{
+    QVector<MarkerDefinition> out;
+    for (const auto& cat : m_categories) {
+        for (const auto& marker : cat->markers) {
+            out.push_back(marker->def);
+        }
+    }
+    return out;
+}
+
 QVector<MarkerDefinition> MarkerModel::enabledMarkers() const
 {
     QVector<MarkerDefinition> out;
