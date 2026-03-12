@@ -45,8 +45,10 @@
 #include "measuremodel.h"
 #include "units/unitconverter.h"
 #include "calculations/calculatedvalueregistry.h"
+#include "calculations/attributeregistration.h"
 #include "plotutils.h"
 #include "altitudemarkerfeature.h"
+#include "logbookcolumn.h"
 
 namespace {
 
@@ -128,6 +130,13 @@ MainWindow::MainWindow(QWidget *parent)
     // so that we can dynamically register per-plot and per-marker preferences
     registerBuiltInPlots();
     registerBuiltInMarkers();
+
+    // Register built-in session attributes (e.g., Description, StartTime, Duration)
+    registerBuiltInAttributes();
+
+    // Load persisted logbook column configuration (or defaults on first launch).
+    // This emits columnsChanged(), which triggers SessionModel::rebuildColumns().
+    LogbookColumnStore::instance().load();
 
     // Initialize plugins (may register additional plots/markers)
 #ifdef Q_OS_MACOS

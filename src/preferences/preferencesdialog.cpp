@@ -6,6 +6,7 @@
 #include "legendsettingspage.h"
 #include "mapsettingspage.h"
 #include "altitudemarkerssettingspage.h"
+#include "logbooksettingspage.h"
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 
@@ -28,6 +29,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent)
     categoryList->addItem(tr("Legend"));
     categoryList->addItem(tr("Map"));
     categoryList->addItem(tr("Altitude Markers"));
+    categoryList->addItem(tr("Logbook"));
     categoryList->setFixedWidth(120);
 
     // Stacked widget for pages - ORDER MUST MATCH categoryList
@@ -40,6 +42,8 @@ PreferencesDialog::PreferencesDialog(QWidget *parent)
     stackedWidget->addWidget(new MapSettingsPage(this));        // Index 5: Map
     AltitudeMarkersSettingsPage *altitudeMarkersPage = new AltitudeMarkersSettingsPage(this);
     stackedWidget->addWidget(altitudeMarkersPage);              // Index 6: Altitude Markers
+    LogbookSettingsPage *logbookPage = new LogbookSettingsPage(this);
+    stackedWidget->addWidget(logbookPage);                      // Index 7: Logbook
 
     mainLayout->addWidget(categoryList);
     mainLayout->addWidget(stackedWidget);
@@ -49,6 +53,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent)
     connect(buttonBox, &QDialogButtonBox::accepted, this, &PreferencesDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &PreferencesDialog::reject);
     connect(buttonBox, &QDialogButtonBox::accepted, altitudeMarkersPage, &AltitudeMarkersSettingsPage::saveSettings);
+    connect(buttonBox, &QDialogButtonBox::accepted, logbookPage, &LogbookSettingsPage::saveSettings);
 
     // Add layouts to the dialog
     dialogLayout->addLayout(mainLayout);

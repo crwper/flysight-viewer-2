@@ -3,6 +3,7 @@
 
 #include <QAbstractTableModel>
 #include <QVector>
+#include "logbookcolumn.h"
 #include "sessiondata.h"
 
 namespace FlySight {
@@ -11,10 +12,6 @@ class SessionModel : public QAbstractTableModel
 {
     Q_OBJECT
 public:
-    enum Columns {
-        Description = 0
-    };
-
     enum CustomRoles {
         IsHoveredRole = Qt::UserRole + 100
     };
@@ -64,8 +61,16 @@ signals:
 
 private:
     QVector<SessionData> m_sessionData;
+    QVector<LogbookColumn> m_columns;
     QString m_hoveredSessionId;
 
+    // Formatting helpers for data()
+    QVariant formatAttributeValue(const SessionData &session, const LogbookColumn &col) const;
+    QVariant formatMeasurementValue(const SessionData &session, const LogbookColumn &col) const;
+    QVariant formatDeltaValue(const SessionData &session, const LogbookColumn &col) const;
+
+private slots:
+    void rebuildColumns();
 };
 
 } // namespace FlySight

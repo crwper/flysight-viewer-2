@@ -265,6 +265,8 @@ set(PROJECT_SOURCES
   preferences/mapsettingspage.h     preferences/mapsettingspage.cpp
   preferences/markerssettingspage.h preferences/markerssettingspage.cpp
   preferences/altitudemarkerssettingspage.h preferences/altitudemarkerssettingspage.cpp
+  preferences/addcolumndialog.cpp         preferences/addcolumndialog.h
+  preferences/logbooksettingspage.cpp     preferences/logbooksettingspage.h
   preferences/plotssettingspage.h  preferences/plotssettingspage.cpp
   units/unitdefinitions.h
   units/unitconverter.h            units/unitconverter.cpp
@@ -274,6 +276,8 @@ set(PROJECT_SOURCES
   plotutils.cpp              plotutils.h
   pluginhost.h               pluginhost.cpp
   plotregistry.cpp           plotregistry.h
+  attributeregistry.cpp      attributeregistry.h
+  logbookcolumn.cpp          logbookcolumn.h
   python_output_redirector.h
   plotmodel.cpp              plotmodel.h
   plotrangemodel.cpp         plotrangemodel.h
@@ -305,6 +309,7 @@ set(PROJECT_SOURCES
   ui/docks/plot/PlotWidget.h    ui/docks/plot/PlotWidget.cpp
   calculations/calculatedvalueregistry.cpp    calculations/calculatedvalueregistry.h
   calculations/attributecalculations.cpp      calculations/attributecalculations.h
+  calculations/attributeregistration.cpp     calculations/attributeregistration.h
   calculations/gnsscalculations.cpp           calculations/gnsscalculations.h
   calculations/imucalculations.cpp            calculations/imucalculations.h
   calculations/magcalculations.cpp            calculations/magcalculations.h
