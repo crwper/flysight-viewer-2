@@ -235,7 +235,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Let PlotModel own the category/plot tree (must be done after plugin initialization)
     if (plotModel) {
-        plotModel->setPlots(PlotRegistry::instance().allPlots());
+        plotModel->setPlots(PlotRegistry::instance().dependentPlots());
     }
 
     // Restore the previous dock layout (includes visibility/open/closed state).
@@ -1009,6 +1009,10 @@ void MainWindow::registerBuiltInPlots()
         {"GNSS time", "Time of week", "s", QColor::fromHsl(0, 0, L_g),  "TIME", "tow",  "time"},
         {"GNSS time", "Week number",  "",  QColor::fromHsl(0, 0, L_gl), "TIME", "week", "count"},
 
+        // Independent variables (x-axis)
+        {"Time", "UTC time",    "s", QColor(128, 128, 128), "GNSS", "_time",        "time", PlotRole::Independent},
+        {"Time", "System time", "s", QColor(128, 128, 128), "GNSS", "_system_time", "time", PlotRole::Independent},
+
     };
 
     for (auto &pv : defaults)
@@ -1116,27 +1120,20 @@ void MainWindow::initializeXAxisMenu()
         ? m_plotViewSettingsModel->xVariable()
         : SessionKeys::Time;
 
-    // "UTC time" — maps to SessionKeys::Time
-    QAction *utcTimeAction = xAxisMenu->addAction(tr("UTC time"));
-    utcTimeAction->setCheckable(true);
-    utcTimeAction->setChecked(currentXVar == SessionKeys::Time);
-    axisGroup->addAction(utcTimeAction);
+    // Populate from registered independent variables
+    const QVector<PlotValue> indepPlots = PlotRegistry::instance().independentPlots();
+    for (const PlotValue &ipv : indepPlots) {
+        QAction *action = xAxisMenu->addAction(ipv.plotName);
+        action->setCheckable(true);
+        action->setChecked(currentXVar == ipv.measurementID);
+        axisGroup->addAction(action);
 
-    connect(utcTimeAction, &QAction::triggered, this, [this]() {
-        if (m_plotViewSettingsModel)
-            m_plotViewSettingsModel->setXVariable(SessionKeys::Time);
-    });
-
-    // "System time" — maps to SessionKeys::SystemTime
-    QAction *systemTimeAction = xAxisMenu->addAction(tr("System time"));
-    systemTimeAction->setCheckable(true);
-    systemTimeAction->setChecked(currentXVar == SessionKeys::SystemTime);
-    axisGroup->addAction(systemTimeAction);
-
-    connect(systemTimeAction, &QAction::triggered, this, [this]() {
-        if (m_plotViewSettingsModel)
-            m_plotViewSettingsModel->setXVariable(SessionKeys::SystemTime);
-    });
+        const QString measID = ipv.measurementID;
+        connect(action, &QAction::triggered, this, [this, measID]() {
+            if (m_plotViewSettingsModel)
+                m_plotViewSettingsModel->setXVariable(measID);
+        });
+    }
 }
 
 void MainWindow::initializePlotsMenu()

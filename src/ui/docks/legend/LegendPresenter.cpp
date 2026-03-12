@@ -9,6 +9,7 @@
 #include "sessiondata.h"
 #include "units/unitconverter.h"
 #include "plotutils.h"
+#include "plotregistry.h"
 #include "calculations/timecalculations.h"
 
 #include <QHash>
@@ -277,13 +278,14 @@ void LegendPresenter::recompute()
         const double offset = offsetForSession(*session);
         const double rawX = plotX + offset;
 
-        // Prepend a Time row showing the x-axis value.
-        {
-            LegendWidget::Row timeRow;
-            timeRow.name  = QStringLiteral("Time (s)");
-            timeRow.color = QColor(128, 128, 128);
-            timeRow.value = formatXAxisValue(plotX, xVariable, referenceMarkerKey);
-            rows.push_back(timeRow);
+        // Prepend independent variable rows (e.g., time).
+        for (const PlotValue &ipv : PlotRegistry::instance().independentPlots()) {
+            if (ipv.measurementID != xVariable) continue;
+            LegendWidget::Row row;
+            row.name  = seriesDisplayName(ipv);
+            row.color = ipv.defaultColor;
+            row.value = formatXAxisValue(plotX, xVariable, referenceMarkerKey);
+            rows.push_back(row);
             hasData = true;
         }
 
@@ -347,12 +349,13 @@ void LegendPresenter::recompute()
         return;
     }
 
-    // Prepend a Time row (no min/avg/max for time).
-    {
-        LegendWidget::Row timeRow;
-        timeRow.name  = QStringLiteral("Time (s)");
-        timeRow.color = QColor(128, 128, 128);
-        rows.push_back(timeRow);
+    // Prepend independent variable rows (e.g., time).
+    for (const PlotValue &ipv : PlotRegistry::instance().independentPlots()) {
+        if (ipv.measurementID != xVariable) continue;
+        LegendWidget::Row row;
+        row.name  = seriesDisplayName(ipv);
+        row.color = ipv.defaultColor;
+        rows.push_back(row);
     }
 
     // RangeStatsMode

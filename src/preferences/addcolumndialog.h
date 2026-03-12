@@ -47,7 +47,7 @@ private:
     void buildDeltaPage(QWidget *page);
 
     void populateAttributeTree(QTreeWidget *tree);
-    void populateMeasurementTree(QTreeWidget *tree);
+    void populateMeasurementTree(QTreeWidget *tree, bool includeIndependent = false);
     void populateMarkerTree(QTreeWidget *tree);
 
     bool isSelectionComplete() const;

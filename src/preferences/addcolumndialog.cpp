@@ -9,6 +9,8 @@
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
+#include <algorithm>
+
 #include "attributeregistry.h"
 #include "markerregistry.h"
 #include "plotregistry.h"
@@ -129,7 +131,7 @@ void AddColumnDialog::buildDeltaPage(QWidget *page)
     m_measurementTree2 = new QTreeWidget(measWidget);
     m_measurementTree2->setHeaderHidden(true);
     m_measurementTree2->setRootIsDecorated(true);
-    populateMeasurementTree(m_measurementTree2);
+    populateMeasurementTree(m_measurementTree2, true);
     measLayout->addWidget(m_measurementTree2);
 
     connect(m_measurementTree2, &QTreeWidget::currentItemChanged,
@@ -198,9 +200,14 @@ void AddColumnDialog::populateAttributeTree(QTreeWidget *tree)
     }
 }
 
-void AddColumnDialog::populateMeasurementTree(QTreeWidget *tree)
+void AddColumnDialog::populateMeasurementTree(QTreeWidget *tree, bool includeIndependent)
 {
-    const QVector<PlotValue> plots = PlotRegistry::instance().allPlots();
+    QVector<PlotValue> plots = PlotRegistry::instance().allPlots();
+    if (!includeIndependent) {
+        plots.erase(std::remove_if(plots.begin(), plots.end(),
+                                   [](const PlotValue &pv) { return pv.role == PlotRole::Independent; }),
+                    plots.end());
+    }
 
     QMap<QString, QTreeWidgetItem*> categoryItems;
 

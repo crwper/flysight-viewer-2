@@ -5,6 +5,7 @@
 #include "../crosshairmanager.h"
 #include "../units/unitconverter.h"
 #include "../plotutils.h"
+#include "../plotregistry.h"
 #include "../calculations/timecalculations.h"
 
 #include <QDateTime>
@@ -236,12 +237,13 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
         rows.reserve(enabledPlots.size() + 1);
         bool hasData = false;
 
-        // Always prepend a Time row at the top (x-axis value, no min/avg/max).
-        {
-            MeasureModel::Row timeRow;
-            timeRow.name  = QStringLiteral("Time (s)");
-            timeRow.color = QColor(128, 128, 128);
-            rows.push_back(timeRow);
+        // Prepend independent variable rows (e.g., time).
+        for (const PlotValue &ipv : PlotRegistry::instance().independentPlots()) {
+            if (ipv.measurementID != xVariable) continue;
+            MeasureModel::Row row;
+            row.name  = seriesDisplayName(ipv);
+            row.color = ipv.defaultColor;
+            rows.push_back(row);
         }
 
         for (const PlotValue &pv : enabledPlots) {
@@ -336,15 +338,16 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
     rows.reserve(enabledPlots.size() + 1);
     bool hasData = false;
 
-    // Always prepend a Time row at the top (x-axis values, no min/avg/max).
-    {
-        MeasureModel::Row timeRow;
-        timeRow.name  = QStringLiteral("Time (s)");
-        timeRow.color = QColor(128, 128, 128);
-        timeRow.deltaValue = formatValue(currentX - m_startX, QStringLiteral("_time"), QString());
-        timeRow.finalValue = formatXAxisValue(currentX, xVariable, referenceMarkerKey);
+    // Prepend independent variable rows (e.g., time).
+    for (const PlotValue &ipv : PlotRegistry::instance().independentPlots()) {
+        if (ipv.measurementID != xVariable) continue;
+        MeasureModel::Row row;
+        row.name  = seriesDisplayName(ipv);
+        row.color = ipv.defaultColor;
+        row.deltaValue = formatValue(currentX - m_startX, ipv.measurementID, ipv.measurementType);
+        row.finalValue = formatXAxisValue(currentX, xVariable, referenceMarkerKey);
         hasData = true;
-        rows.push_back(timeRow);
+        rows.push_back(row);
     }
 
     for (const PlotValue &pv : enabledPlots) {

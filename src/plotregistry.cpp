@@ -14,3 +14,21 @@ void PlotRegistry::registerPlot(const PlotValue& pv) {
 QVector<PlotValue> PlotRegistry::allPlots() const {
     return m_plots;
 }
+
+QVector<PlotValue> PlotRegistry::dependentPlots() const {
+    QVector<PlotValue> out;
+    for (const auto &pv : m_plots) {
+        if (pv.role == PlotRole::Dependent)
+            out.append(pv);
+    }
+    return out;
+}
+
+QVector<PlotValue> PlotRegistry::independentPlots() const {
+    QVector<PlotValue> out;
+    for (const auto &pv : m_plots) {
+        if (pv.role == PlotRole::Independent)
+            out.append(pv);
+    }
+    return out;
+}
