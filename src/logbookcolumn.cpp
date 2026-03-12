@@ -151,8 +151,10 @@ void LogbookColumnStore::load()
         settings.setArrayIndex(i);
 
         LogbookColumn col;
-        col.type = static_cast<ColumnType>(
-            settings.value(QStringLiteral("type"), 0).toInt());
+        int typeInt = settings.value(QStringLiteral("type"), 0).toInt();
+        if (typeInt < 0 || typeInt > static_cast<int>(ColumnType::Delta))
+            typeInt = 0;
+        col.type = static_cast<ColumnType>(typeInt);
         col.attributeKey = settings.value(QStringLiteral("attributeKey")).toString();
         col.sensorID = settings.value(QStringLiteral("sensorID")).toString();
         col.measurementID = settings.value(QStringLiteral("measurementID")).toString();

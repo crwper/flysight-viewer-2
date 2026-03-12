@@ -49,14 +49,8 @@ QVariant SessionModel::formatAttributeValue(const SessionData &session, const Lo
         return QVariant();
 
     // Look up the attribute definition to determine formatting
-    const auto attrs = AttributeRegistry::instance().allAttributes();
-    AttributeFormatType formatType = AttributeFormatType::Text; // default
-    for (const auto &def : attrs) {
-        if (def.attributeKey == col.attributeKey) {
-            formatType = def.formatType;
-            break;
-        }
-    }
+    const auto *def = AttributeRegistry::instance().findByKey(col.attributeKey);
+    AttributeFormatType formatType = def ? def->formatType : AttributeFormatType::Text;
 
     switch (formatType) {
     case AttributeFormatType::Text:
@@ -180,15 +174,9 @@ Qt::ItemFlags SessionModel::flags(const QModelIndex &index) const {
 
     const LogbookColumn &col = m_columns[index.column()];
     if (col.type == ColumnType::SessionAttribute) {
-        // Check if this attribute is editable
-        const auto attrs = AttributeRegistry::instance().allAttributes();
-        for (const auto &def : attrs) {
-            if (def.attributeKey == col.attributeKey) {
-                if (def.editable)
-                    flags |= Qt::ItemIsEditable;
-                break;
-            }
-        }
+        const auto *def = AttributeRegistry::instance().findByKey(col.attributeKey);
+        if (def && def->editable)
+            flags |= Qt::ItemIsEditable;
     }
     // MeasurementAtMarker and Delta are never editable
 
@@ -213,21 +201,11 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
         }
     } else if (role == Qt::EditRole && col.type == ColumnType::SessionAttribute) {
         // Look up the attribute definition
-        const auto attrs = AttributeRegistry::instance().allAttributes();
-        AttributeFormatType formatType = AttributeFormatType::Text;
-        bool editable = false;
-        for (const auto &def : attrs) {
-            if (def.attributeKey == col.attributeKey) {
-                formatType = def.formatType;
-                editable = def.editable;
-                break;
-            }
-        }
-
-        if (!editable)
+        const auto *def = AttributeRegistry::instance().findByKey(col.attributeKey);
+        if (!def || !def->editable)
             return false;
 
-        switch (formatType) {
+        switch (def->formatType) {
         case AttributeFormatType::Text: {
             QString newVal = value.toString();
             QString oldVal = item.getAttribute(col.attributeKey).toString();
@@ -305,7 +283,7 @@ void SessionModel::mergeSessionData(const SessionData& newSession)
 
         // Update views
         const int row = sessionIt - m_sessionData.begin();
-        emit dataChanged(index(row, 0), index(row, columnCount()));
+        emit dataChanged(index(row, 0), index(row, columnCount() - 1));
         emit modelChanged();
 
         // Log successful merge
@@ -597,14 +575,9 @@ void SessionModel::sort(int column, Qt::SortOrder order)
     // Determine whether to use string or numeric comparison
     bool useStringCompare = false;
     if (col.type == ColumnType::SessionAttribute) {
-        const auto attrs = AttributeRegistry::instance().allAttributes();
-        for (const auto &def : attrs) {
-            if (def.attributeKey == col.attributeKey) {
-                if (def.formatType == AttributeFormatType::Text)
-                    useStringCompare = true;
-                break;
-            }
-        }
+        const auto *def = AttributeRegistry::instance().findByKey(col.attributeKey);
+        if (def && def->formatType == AttributeFormatType::Text)
+            useStringCompare = true;
     }
 
     beginResetModel();

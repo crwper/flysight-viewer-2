@@ -31,6 +31,9 @@ public:
     /// Returns all registered attribute definitions
     QVector<AttributeDefinition> allAttributes() const;
 
+    /// Find an attribute by its key. Returns nullptr if not found.
+    const AttributeDefinition* findByKey(const QString &attributeKey) const;
+
 private:
     QVector<AttributeDefinition> m_attributes;
 };
