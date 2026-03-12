@@ -83,7 +83,6 @@ public:
     // Public Methods
     void setCurrentTool(Tool tool);
     void revertToPrimaryTool();
-    void setXAxisRange(double min, double max);
     void handleSessionsSelected(const QList<QString> &sessionIds);
     CrosshairManager* crosshairManager() const;
     void lockFocusToSession(const QString &sessionId);
@@ -125,6 +124,7 @@ public slots:
     void onXVariableChanged(const QString &newXVariable);
     void onReferenceMarkerKeyChanged(const QString &oldKey, const QString &newKey);
     void zoomToExtent();
+    void zoomToExtent(const QVector<SessionData> &sessions);
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;

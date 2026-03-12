@@ -46,7 +46,6 @@ public:
 
 signals:
     void plotValueSelected(const QModelIndex &selectedIndex);
-    void newTimeRange(double min, double max);
 
 protected:
     void closeEvent(QCloseEvent *event) override;

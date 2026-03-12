@@ -7,6 +7,7 @@
 #include "mapsettingspage.h"
 #include "altitudemarkerssettingspage.h"
 #include "logbooksettingspage.h"
+#include "zoomsettingspage.h"
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 
@@ -25,6 +26,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent)
     categoryList->addItem(tr("General"));
     categoryList->addItem(tr("Import"));
     categoryList->addItem(tr("Plots"));
+    categoryList->addItem(tr("Zoom"));
     categoryList->addItem(tr("Markers"));
     categoryList->addItem(tr("Legend"));
     categoryList->addItem(tr("Map"));
@@ -37,13 +39,14 @@ PreferencesDialog::PreferencesDialog(QWidget *parent)
     stackedWidget->addWidget(new GeneralSettingsPage(this));    // Index 0: General
     stackedWidget->addWidget(new ImportSettingsPage(this));     // Index 1: Import
     stackedWidget->addWidget(new PlotsSettingsPage(this));      // Index 2: Plots
-    stackedWidget->addWidget(new MarkersSettingsPage(this));    // Index 3: Markers
-    stackedWidget->addWidget(new LegendSettingsPage(this));     // Index 4: Legend
-    stackedWidget->addWidget(new MapSettingsPage(this));        // Index 5: Map
+    stackedWidget->addWidget(new ZoomSettingsPage(this));       // Index 3: Zoom
+    stackedWidget->addWidget(new MarkersSettingsPage(this));    // Index 4: Markers
+    stackedWidget->addWidget(new LegendSettingsPage(this));     // Index 5: Legend
+    stackedWidget->addWidget(new MapSettingsPage(this));        // Index 6: Map
     AltitudeMarkersSettingsPage *altitudeMarkersPage = new AltitudeMarkersSettingsPage(this);
-    stackedWidget->addWidget(altitudeMarkersPage);              // Index 6: Altitude Markers
+    stackedWidget->addWidget(altitudeMarkersPage);              // Index 7: Altitude Markers
     LogbookSettingsPage *logbookPage = new LogbookSettingsPage(this);
-    stackedWidget->addWidget(logbookPage);                      // Index 7: Logbook
+    stackedWidget->addWidget(logbookPage);                      // Index 8: Logbook
 
     mainLayout->addWidget(categoryList);
     mainLayout->addWidget(stackedWidget);

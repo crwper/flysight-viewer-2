@@ -46,7 +46,6 @@
 #include "units/unitconverter.h"
 #include "calculations/calculatedvalueregistry.h"
 #include "calculations/attributeregistration.h"
-#include "plotutils.h"
 #include "altitudemarkerfeature.h"
 #include "logbookcolumn.h"
 
@@ -216,7 +215,6 @@ MainWindow::MainWindow(QWidget *parent)
     if (plotFeature) {
         auto* plotWidget = plotFeature->plotWidget();
         if (plotWidget) {
-            connect(this, &MainWindow::newTimeRange, plotWidget, &PlotWidget::setXAxisRange);
             connect(plotFeature, &PlotDockFeature::toolChanged, this, &MainWindow::onPlotWidgetToolChanged);
 
             // Cross-dock connections
@@ -499,170 +497,55 @@ void MainWindow::importFiles(
         return;
     }
 
-    // Fetch the x-axis variable from the settings model
-    const QString xVar = m_plotViewSettingsModel
-        ? m_plotViewSettingsModel->xVariable()
-        : SessionKeys::Time;
-    const QString refKey = m_plotViewSettingsModel
-        ? m_plotViewSettingsModel->referenceMarkerKey()
-        : QString();
-
     // Initialize a map to collect failed imports with error messages
     QMap<QString, QString> failedImports;
 
     // Collect successfully imported sessions for batch merge
     QList<SessionData> importedSessions;
 
-    // Variables to track the overall min and max time from newly imported files
-    // (in plot-axis coordinates, i.e. raw minus offset)
-    double newMinTime = std::numeric_limits<double>::max();
-    double newMaxTime = std::numeric_limits<double>::lowest();
+    auto importOne = [&](const QString &filePath) {
+        DataImporter importer;
+        SessionData tempSessionData;
 
-    // Helper to compute the reference offset for a session
-    auto computeOffset = [&refKey, &xVar](SessionData &session) -> std::optional<double> {
-        return markerOffsetSeconds(session, refKey, xVar);
+        if (importer.importFile(filePath, tempSessionData)) {
+            // Force groundElev calculation on the temp session
+            tempSessionData.getAttribute(SessionKeys::GroundElev);
+            importedSessions.append(tempSessionData);
+        } else {
+            QString errorMessage = importer.getLastError();
+            qWarning() << "Failed to import file:" << filePath << "Error:" << errorMessage;
+
+            QString displayPath;
+            if (!baseDir.isEmpty()) {
+                QDir dir(baseDir);
+                displayPath = dir.relativeFilePath(filePath);
+                if (displayPath == filePath) {
+                    displayPath = QFileInfo(filePath).fileName();
+                }
+            } else {
+                displayPath = filePath;
+            }
+            failedImports.insert(displayPath, errorMessage);
+        }
     };
 
     if (showProgress) {
-        // Show progress dialog
         QProgressDialog progressDialog(tr("Importing files..."), tr("Cancel"), 0, fileNames.size(), this);
         progressDialog.setWindowModality(Qt::WindowModal);
         progressDialog.setMinimumDuration(0);
 
         int current = 0;
         for (const QString &filePath : fileNames) {
-            // Update progress dialog
             progressDialog.setValue(current);
-            if (progressDialog.wasCanceled()) {
-                break; // Exit the loop if the user cancels
-            }
-
-            // Import the file
-            DataImporter importer;
-            SessionData tempSessionData;
-
-            if (importer.importFile(filePath, tempSessionData)) {
-                // Force groundElev calculation on the temp session
-                tempSessionData.getAttribute(SessionKeys::GroundElev);
-
-                // Collect for batch merge
-                importedSessions.append(tempSessionData);
-
-                // Compute offset for plot-axis coordinates
-                const auto optOffset = computeOffset(tempSessionData);
-
-                // Collect min and max time from tempSessionData in plot-axis space
-                // (skip sessions whose reference offset can't be computed)
-                if (optOffset.has_value()) {
-                    const double offset = *optOffset;
-
-                    // Try analysis range first
-                    auto analysisStart = markerOffsetSeconds(tempSessionData, SessionKeys::AnalysisStartTime, xVar);
-                    auto analysisEnd   = markerOffsetSeconds(tempSessionData, SessionKeys::AnalysisEndTime, xVar);
-
-                    if (analysisStart.has_value() && analysisEnd.has_value()) {
-                        newMinTime = std::min(newMinTime, analysisStart.value() - offset);
-                        newMaxTime = std::max(newMaxTime, analysisEnd.value()   - offset);
-                    } else {
-                        // Fallback: scan all sensor data for full extent
-                        for (const QString &sensorKey : tempSessionData.sensorKeys()) {
-                            QVector<double> times = tempSessionData.getMeasurement(sensorKey, xVar);
-                            if (!times.isEmpty()) {
-                                double minTime = *std::min_element(times.begin(), times.end()) - offset;
-                                double maxTime = *std::max_element(times.begin(), times.end()) - offset;
-                                newMinTime = std::min(newMinTime, minTime);
-                                newMaxTime = std::max(newMaxTime, maxTime);
-                            }
-                        }
-                    }
-                }
-            } else {
-                // Failed import with an error message
-                QString errorMessage = importer.getLastError();
-                qWarning() << "Failed to import file:" << filePath << "Error:" << errorMessage;
-
-                // Compute relative path if baseDir is provided
-                QString displayPath;
-                if (!baseDir.isEmpty()) {
-                    QDir dir(baseDir);
-                    displayPath = dir.relativeFilePath(filePath);
-                    // If the file is outside baseDir, fallback to absolute path or just the file name
-                    if (displayPath == filePath) {
-                        displayPath = QFileInfo(filePath).fileName(); // Alternatively, keep absolute path
-                    }
-                } else {
-                    displayPath = filePath; // No baseDir provided, use absolute path
-                }
-
-                failedImports.insert(displayPath, errorMessage);
-            }
-
+            if (progressDialog.wasCanceled())
+                break;
+            importOne(filePath);
             ++current;
         }
-
-        // Finish progress dialog
         progressDialog.setValue(fileNames.size());
     } else {
-        // No progress dialog
         for (const QString &filePath : fileNames) {
-            DataImporter importer;
-            SessionData tempSessionData;
-
-            if (importer.importFile(filePath, tempSessionData)) {
-                // Force groundElev calculation on the temp session
-                tempSessionData.getAttribute(SessionKeys::GroundElev);
-
-                // Collect for batch merge
-                importedSessions.append(tempSessionData);
-
-                // Compute offset for plot-axis coordinates
-                const auto optOffset = computeOffset(tempSessionData);
-
-                // Collect min and max time from tempSessionData in plot-axis space
-                // (skip sessions whose reference offset can't be computed)
-                if (optOffset.has_value()) {
-                    const double offset = *optOffset;
-
-                    // Try analysis range first
-                    auto analysisStart = markerOffsetSeconds(tempSessionData, SessionKeys::AnalysisStartTime, xVar);
-                    auto analysisEnd   = markerOffsetSeconds(tempSessionData, SessionKeys::AnalysisEndTime, xVar);
-
-                    if (analysisStart.has_value() && analysisEnd.has_value()) {
-                        newMinTime = std::min(newMinTime, analysisStart.value() - offset);
-                        newMaxTime = std::max(newMaxTime, analysisEnd.value()   - offset);
-                    } else {
-                        // Fallback: scan all sensor data for full extent
-                        for (const QString &sensorKey : tempSessionData.sensorKeys()) {
-                            QVector<double> times = tempSessionData.getMeasurement(sensorKey, xVar);
-                            if (!times.isEmpty()) {
-                                double minTime = *std::min_element(times.begin(), times.end()) - offset;
-                                double maxTime = *std::max_element(times.begin(), times.end()) - offset;
-                                newMinTime = std::min(newMinTime, minTime);
-                                newMaxTime = std::max(newMaxTime, maxTime);
-                            }
-                        }
-                    }
-                }
-            } else {
-                // Failed import with an error message
-                QString errorMessage = importer.getLastError();
-                qWarning() << "Failed to import file:" << filePath << "Error:" << errorMessage;
-
-                // Compute relative path if baseDir is provided
-                QString displayPath;
-                if (!baseDir.isEmpty()) {
-                    QDir dir(baseDir);
-                    displayPath = dir.relativeFilePath(filePath);
-                    // If the file is outside baseDir, fallback to absolute path or just the file name
-                    if (displayPath == filePath) {
-                        displayPath = QFileInfo(filePath).fileName(); // Alternatively, keep absolute path
-                    }
-                } else {
-                    displayPath = filePath; // No baseDir provided, use absolute path
-                }
-
-                failedImports.insert(displayPath, errorMessage);
-            }
+            importOne(filePath);
         }
     }
 
@@ -672,13 +555,11 @@ void MainWindow::importFiles(
     // Optionally hide all other tracks so only the imported ones are visible
     if (PreferencesManager::instance().getValue(PreferenceKeys::ImportHideOthersOnImport).toBool()
         && !importedSessions.isEmpty()) {
-        // Collect session IDs of newly imported sessions
         QSet<QString> importedIds;
         for (const SessionData &s : importedSessions) {
             importedIds.insert(s.getAttribute(SessionKeys::SessionId).toString());
         }
 
-        // Build visibility map: hide everything except imported sessions
         QMap<int, bool> visibilityMap;
         const auto &allSessions = model->getAllSessions();
         for (int row = 0; row < allSessions.size(); ++row) {
@@ -688,9 +569,13 @@ void MainWindow::importFiles(
         model->setRowsVisibility(visibilityMap);
     }
 
-    // Emit the new time range if valid
-    if (newMinTime != std::numeric_limits<double>::max() && newMaxTime != std::numeric_limits<double>::lowest()) {
-        emit newTimeRange(newMinTime, newMaxTime);
+    // Zoom to extent of newly imported sessions
+    if (!importedSessions.isEmpty()) {
+        auto* pf = findFeature<PlotDockFeature>();
+        if (pf && pf->plotWidget()) {
+            QVector<SessionData> imported(importedSessions.begin(), importedSessions.end());
+            pf->plotWidget()->zoomToExtent(imported);
+        }
     }
 
     // Display completion message
@@ -1100,6 +985,14 @@ void MainWindow::initializePreferences()
     prefs.registerPreference(PreferenceKeys::MapLargeDotSize, 10);
     prefs.registerPreference(PreferenceKeys::MapSmallDotSize, 6);
     prefs.registerPreference(PreferenceKeys::MapTrackOpacity, 0.85);
+
+    // ========================================================================
+    // Zoom Preferences
+    // ========================================================================
+    prefs.registerPreference(PreferenceKeys::ZoomExtentMode, QStringLiteral("markerRange"));
+    prefs.registerPreference(PreferenceKeys::ZoomExtentStartMarker, QString::fromLatin1(SessionKeys::AnalysisStartTime));
+    prefs.registerPreference(PreferenceKeys::ZoomExtentEndMarker,   QString::fromLatin1(SessionKeys::AnalysisEndTime));
+    prefs.registerPreference(PreferenceKeys::ZoomExtentMarginPct, 10.0);
 }
 
 

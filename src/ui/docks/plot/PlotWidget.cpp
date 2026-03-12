@@ -282,62 +282,82 @@ void PlotWidget::revertToPrimaryTool()
     setCurrentTool(m_primaryTool);
 }
 
-void PlotWidget::setXAxisRange(double min, double max)
-{
-    // directly set the x-axis range on the plot
-    customPlot->xAxis->setRange(min, max);
-}
-
 void PlotWidget::zoomToExtent()
 {
+    // Use all visible sessions
+    const QVector<SessionData> &allSessions = model->getAllSessions();
+    QVector<SessionData> visible;
+    for (const SessionData &s : allSessions) {
+        if (s.isVisible())
+            visible.append(s);
+    }
+    zoomToExtent(visible);
+}
+
+void PlotWidget::zoomToExtent(const QVector<SessionData> &sessions)
+{
+    PreferencesManager &prefs = PreferencesManager::instance();
+    const QString mode = prefs.getValue(PreferenceKeys::ZoomExtentMode).toString();
+    const QString startMarkerKey = prefs.getValue(PreferenceKeys::ZoomExtentStartMarker).toString();
+    const QString endMarkerKey = prefs.getValue(PreferenceKeys::ZoomExtentEndMarker).toString();
+    const double marginPct = prefs.getValue(PreferenceKeys::ZoomExtentMarginPct).toDouble();
+
     double minX = std::numeric_limits<double>::max();
     double maxX = std::numeric_limits<double>::lowest();
     bool hasData = false;
 
-    const QVector<SessionData> &sessions = model->getAllSessions();
-
     for (const SessionData &session : sessions) {
-        if (!session.isVisible())
-            continue;
-
         auto offset = referenceOffsetForSession(session);
         if (!offset.has_value())
-            continue;  // session lacks reference marker value; skip it
+            continue;
 
-        // Try analysis range first
-        auto analysisStart = markerOffsetSeconds(session, SessionKeys::AnalysisStartTime, m_xVariable);
-        auto analysisEnd   = markerOffsetSeconds(session, SessionKeys::AnalysisEndTime, m_xVariable);
+        // Try marker range if configured
+        if (mode == "markerRange") {
+            auto startVal = markerOffsetSeconds(session, startMarkerKey, m_xVariable);
+            auto endVal   = markerOffsetSeconds(session, endMarkerKey, m_xVariable);
 
-        if (analysisStart.has_value() && analysisEnd.has_value()) {
-            double aMin = analysisStart.value() - offset.value();
-            double aMax = analysisEnd.value()   - offset.value();
-            minX = std::min(minX, aMin);
-            maxX = std::max(maxX, aMax);
-            hasData = true;
-        } else {
-            // Fallback: scan all sensors for x-variable data extent
-            for (const QString &sensorKey : session.sensorKeys()) {
-                QVector<double> xData = const_cast<SessionData &>(session)
-                    .getMeasurement(sensorKey, m_xVariable);
-                if (xData.isEmpty())
-                    continue;
-
-                QVector<double> adjusted = xData;
-                if (offset.value() != 0.0) {
-                    for (double &x : adjusted)
-                        x -= offset.value();
-                }
-
-                auto [minIt, maxIt] = std::minmax_element(adjusted.begin(), adjusted.end());
-                minX = std::min(minX, *minIt);
-                maxX = std::max(maxX, *maxIt);
+            if (startVal.has_value() && endVal.has_value()) {
+                double aMin = startVal.value() - offset.value();
+                double aMax = endVal.value()   - offset.value();
+                if (aMin > aMax) std::swap(aMin, aMax);
+                minX = std::min(minX, aMin);
+                maxX = std::max(maxX, aMax);
                 hasData = true;
+                continue;
             }
+            // Fallback to full data extent for this session
+        }
+
+        // Full data extent: scan all sensors for x-variable data
+        for (const QString &sensorKey : session.sensorKeys()) {
+            QVector<double> xData = const_cast<SessionData &>(session)
+                .getMeasurement(sensorKey, m_xVariable);
+            if (xData.isEmpty())
+                continue;
+
+            QVector<double> adjusted = xData;
+            if (offset.value() != 0.0) {
+                for (double &x : adjusted)
+                    x -= offset.value();
+            }
+
+            auto [minIt, maxIt] = std::minmax_element(adjusted.begin(), adjusted.end());
+            minX = std::min(minX, *minIt);
+            maxX = std::max(maxX, *maxIt);
+            hasData = true;
         }
     }
 
     if (!hasData || minX >= maxX)
         return;
+
+    // Apply symmetric margin
+    if (marginPct > 0.0) {
+        double range = maxX - minX;
+        double margin = range * marginPct / (100.0 - 2.0 * marginPct);
+        minX -= margin;
+        maxX += margin;
+    }
 
     customPlot->xAxis->setRange(minX, maxX);
 }

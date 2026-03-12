@@ -268,6 +268,7 @@ set(PROJECT_SOURCES
   preferences/addcolumndialog.cpp         preferences/addcolumndialog.h
   preferences/logbooksettingspage.cpp     preferences/logbooksettingspage.h
   preferences/plotssettingspage.h  preferences/plotssettingspage.cpp
+  preferences/zoomsettingspage.h   preferences/zoomsettingspage.cpp
   units/unitdefinitions.h
   units/unitconverter.h            units/unitconverter.cpp
   dependencykey.h

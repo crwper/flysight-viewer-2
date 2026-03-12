@@ -101,6 +101,14 @@ inline QString markerColorKey(const QString &attributeKey) {
 }
 
 // ============================================================================
+// Zoom Preferences
+// ============================================================================
+inline const QString ZoomExtentMode        = QStringLiteral("zoom/extentMode");
+inline const QString ZoomExtentStartMarker = QStringLiteral("zoom/extentStartMarker");
+inline const QString ZoomExtentEndMarker   = QStringLiteral("zoom/extentEndMarker");
+inline const QString ZoomExtentMarginPct   = QStringLiteral("zoom/extentMarginPct");
+
+// ============================================================================
 // Altitude Markers Preferences
 // ============================================================================
 inline const QString AltitudeMarkersUnits = QStringLiteral("altitudeMarkers/units");
