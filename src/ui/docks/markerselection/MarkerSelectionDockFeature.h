@@ -7,6 +7,8 @@
 #include <QSet>
 #include <QTreeView>
 
+class QSettings;
+
 namespace FlySight {
 
 struct AppContext;
@@ -34,6 +36,8 @@ private:
     void populateReferenceCombo();
     void saveExpansionState();
     void restoreExpansionState();
+    void onExpanded(const QModelIndex &index);
+    void onCollapsed(const QModelIndex &index);
     void onReferenceComboActivated(int index);
     void onReferenceMarkerKeyChanged(const QString &oldKey, const QString &newKey);
 
@@ -42,6 +46,7 @@ private:
     QComboBox* m_referenceCombo = nullptr;
     PlotViewSettingsModel* m_viewSettings = nullptr;
     MarkerModel* m_markerModel = nullptr;
+    QSettings* m_settings = nullptr;
     QSet<QString> m_expandedCategories;
 };
 

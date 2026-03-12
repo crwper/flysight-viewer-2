@@ -4,6 +4,7 @@
 #include "plotviewsettingsmodel.h"
 #include <QAbstractItemView>
 #include <QHBoxLayout>
+#include <QSettings>
 #include <QSignalBlocker>
 #include <QVBoxLayout>
 
@@ -13,6 +14,7 @@ MarkerSelectionDockFeature::MarkerSelectionDockFeature(const AppContext& ctx, QO
     : DockFeature(parent)
     , m_viewSettings(ctx.plotViewSettings)
     , m_markerModel(ctx.markerModel)
+    , m_settings(ctx.settings)
 {
     // Create dock widget with unique name for layout persistence
     m_dock = new KDDockWidgets::QtWidgets::DockWidget(QStringLiteral("Marker Selection"));
@@ -49,6 +51,12 @@ MarkerSelectionDockFeature::MarkerSelectionDockFeature(const AppContext& ctx, QO
     connect(m_markerModel, &QAbstractItemModel::modelReset,
             this, &MarkerSelectionDockFeature::restoreExpansionState);
 
+    // Persist expansion state immediately on user interaction
+    connect(m_treeView, &QTreeView::expanded,
+            this, &MarkerSelectionDockFeature::onExpanded);
+    connect(m_treeView, &QTreeView::collapsed,
+            this, &MarkerSelectionDockFeature::onCollapsed);
+
     // Repopulate when the set of registered markers changes
     connect(m_markerModel, &QAbstractItemModel::modelReset,
             this, &MarkerSelectionDockFeature::populateReferenceCombo);
@@ -59,6 +67,9 @@ MarkerSelectionDockFeature::MarkerSelectionDockFeature(const AppContext& ctx, QO
 
     // Initial population
     populateReferenceCombo();
+
+    // Restore expansion state for models already populated before dock creation
+    restoreExpansionState();
 }
 
 void MarkerSelectionDockFeature::saveExpansionState()
@@ -78,12 +89,40 @@ void MarkerSelectionDockFeature::saveExpansionState()
 
 void MarkerSelectionDockFeature::restoreExpansionState()
 {
+    // On first load, seed from QSettings
+    if (m_expandedCategories.isEmpty() && m_settings) {
+        for (int i = 0; i < m_markerModel->rowCount(); ++i) {
+            QModelIndex idx = m_markerModel->index(i, 0);
+            QString name = idx.data(Qt::DisplayRole).toString();
+            if (m_settings->value(QStringLiteral("state/markerExpansion/") + name, false).toBool())
+                m_expandedCategories.insert(name);
+        }
+    }
+
     for (int i = 0; i < m_markerModel->rowCount(); ++i) {
         QModelIndex idx = m_markerModel->index(i, 0);
         if (m_expandedCategories.contains(idx.data(Qt::DisplayRole).toString())) {
             m_treeView->expand(idx);
         }
     }
+}
+
+void MarkerSelectionDockFeature::onExpanded(const QModelIndex &index)
+{
+    if (index.parent().isValid()) return; // only track top-level categories
+    QString name = index.data(Qt::DisplayRole).toString();
+    m_expandedCategories.insert(name);
+    if (m_settings)
+        m_settings->setValue(QStringLiteral("state/markerExpansion/") + name, true);
+}
+
+void MarkerSelectionDockFeature::onCollapsed(const QModelIndex &index)
+{
+    if (index.parent().isValid()) return;
+    QString name = index.data(Qt::DisplayRole).toString();
+    m_expandedCategories.remove(name);
+    if (m_settings)
+        m_settings->setValue(QStringLiteral("state/markerExpansion/") + name, false);
 }
 
 void MarkerSelectionDockFeature::populateReferenceCombo()
