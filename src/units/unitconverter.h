@@ -60,6 +60,22 @@ public:
     QString format(double value, const QString& measurementType) const;
 
     /**
+     * @brief Format a value with conversion but without the unit label.
+     * @param value The value in SI units.
+     * @param measurementType The measurement type.
+     * @return Formatted number string (e.g., "45.5"), or "--" for NaN values.
+     */
+    QString formatValue(double value, const QString& measurementType) const;
+
+    /**
+     * @brief Convert a value from display units back to SI units.
+     * @param displayValue The value in display units.
+     * @param measurementType The measurement type.
+     * @return The value in SI units.
+     */
+    double reverseConvert(double displayValue, const QString& measurementType) const;
+
+    /**
      * @brief Get the currently active unit system name.
      * @return The current system name (e.g., "Metric", "Imperial").
      */

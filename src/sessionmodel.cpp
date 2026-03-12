@@ -19,6 +19,7 @@ SessionModel::SessionModel(QObject *parent)
     connect(&UnitConverter::instance(), &UnitConverter::systemChanged, this, [this]() {
         if (m_sessionData.isEmpty() || m_columns.isEmpty()) return;
         emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1), {Qt::DisplayRole});
+        emit headerDataChanged(Qt::Horizontal, 0, columnCount() - 1);
     });
 
     rebuildColumns();
@@ -80,6 +81,8 @@ QVariant SessionModel::formatAttributeValue(const SessionData &session, const Lo
         bool ok = false;
         double val = value.toDouble(&ok);
         if (!ok) return QVariant();
+        if (def && !def->measurementType.isEmpty())
+            return UnitConverter::instance().formatValue(val, def->measurementType);
         return QString::number(val);
     }
     }
@@ -95,7 +98,7 @@ QVariant SessionModel::formatMeasurementValue(const SessionData &session, const 
     if (!value.isValid())
         return QVariant();
 
-    return UnitConverter::instance().format(value.toDouble(), col.measurementType);
+    return UnitConverter::instance().formatValue(value.toDouble(), col.measurementType);
 }
 
 QVariant SessionModel::formatDeltaValue(const SessionData &session, const LogbookColumn &col) const
@@ -112,7 +115,7 @@ QVariant SessionModel::formatDeltaValue(const SessionData &session, const Logboo
         return QVariant();
 
     double delta = value2.toDouble() - value1.toDouble();
-    return UnitConverter::instance().format(delta, col.measurementType);
+    return UnitConverter::instance().formatValue(delta, col.measurementType);
 }
 
 QVariant SessionModel::data(const QModelIndex &index, int role) const {
@@ -156,9 +159,18 @@ QVariant SessionModel::data(const QModelIndex &index, int role) const {
 }
 
 QVariant SessionModel::headerData(int section, Qt::Orientation orientation, int role) const {
-    if (orientation == Qt::Horizontal && role == Qt::DisplayRole && section < m_columns.size()) {
-        return logbookColumnLabel(m_columns[section]);
+    if (orientation != Qt::Horizontal || section >= m_columns.size())
+        return QVariant();
+
+    if (role == Qt::DisplayRole) {
+        QString label = logbookColumnLabel(m_columns[section]);
+        QString unit = columnUnitLabel(m_columns[section]);
+        if (!unit.isEmpty())
+            return label + QStringLiteral("\n(") + unit + QStringLiteral(")");
+        return label;
     }
+    if (role == Qt::TextAlignmentRole)
+        return QVariant::fromValue(Qt::AlignCenter);
     return QVariant();
 }
 
@@ -216,7 +228,10 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
             break;
         }
         case AttributeFormatType::Double: {
-            double newVal = value.toDouble();
+            double displayVal = value.toDouble();
+            double newVal = displayVal;
+            if (def && !def->measurementType.isEmpty())
+                newVal = UnitConverter::instance().reverseConvert(displayVal, def->measurementType);
             double oldVal = item.getAttribute(col.attributeKey).toDouble();
             if (oldVal != newVal) {
                 item.setAttribute(col.attributeKey, newVal);
@@ -615,6 +630,22 @@ void SessionModel::sort(int column, Qt::SortOrder order)
     });
 
     endResetModel();
+}
+
+QString SessionModel::columnUnitLabel(const LogbookColumn &col) const
+{
+    switch (col.type) {
+    case ColumnType::MeasurementAtMarker:
+    case ColumnType::Delta:
+        return UnitConverter::instance().getUnitLabel(col.measurementType);
+    case ColumnType::SessionAttribute: {
+        const auto *def = AttributeRegistry::instance().findByKey(col.attributeKey);
+        if (def && !def->measurementType.isEmpty())
+            return UnitConverter::instance().getUnitLabel(def->measurementType);
+        return QString();
+    }
+    }
+    return QString();
 }
 
 } // namespace FlySight

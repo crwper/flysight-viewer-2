@@ -1,6 +1,7 @@
 #include "attributeregistration.h"
 #include "../attributeregistry.h"
 #include "../sessiondata.h"
+#include "../units/unitdefinitions.h"
 
 using namespace FlySight;
 
@@ -52,6 +53,7 @@ void FlySight::registerBuiltInAttributes() {
         QStringLiteral("Ground Elevation"),
         SessionKeys::GroundElev,
         AttributeFormatType::Double,
-        true
+        true,
+        MeasurementTypes::Altitude
     });
 }

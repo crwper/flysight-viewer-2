@@ -3,6 +3,7 @@
 #include <QVBoxLayout>
 #include <QMouseEvent>
 #include <QDebug>
+#include <QFontMetrics>
 #include <QItemSelectionModel>
 #include <QHeaderView>
 #include <QMenu>
@@ -37,6 +38,10 @@ void LogbookView::setupView()
     treeView->setModel(model);
     treeView->setRootIsDecorated(false);
     treeView->header()->setDefaultSectionSize(100);
+
+    // Ensure header is tall enough for two-line headers (name + unit)
+    QFontMetrics fm(treeView->header()->font());
+    treeView->header()->setFixedHeight(fm.height() * 2 + 8);
     treeView->setMouseTracking(true); // Enable mouse tracking
 
     // Set selection mode to ExtendedSelection to allow multiple selections

@@ -115,6 +115,39 @@ QString UnitConverter::format(double value, const QString& measurementType) cons
     return formattedValue + QStringLiteral(" ") + label;
 }
 
+QString UnitConverter::formatValue(double value, const QString& measurementType) const
+{
+    if (std::isnan(value))
+        return QStringLiteral("--");
+
+    double displayValue = convert(value, measurementType);
+    int precision = getPrecision(measurementType);
+    if (precision < 0)
+        precision = 2;
+
+    return QString::number(displayValue, 'f', precision);
+}
+
+double UnitConverter::reverseConvert(double displayValue, const QString& measurementType) const
+{
+    if (measurementType.isEmpty())
+        return displayValue;
+
+    const QMap<QString, MeasurementTypeInfo>& registry = getMeasurementTypeRegistry();
+
+    auto typeIt = registry.find(measurementType);
+    if (typeIt == registry.end())
+        return displayValue;
+
+    const MeasurementTypeInfo& typeInfo = typeIt.value();
+    auto systemIt = typeInfo.systems.find(m_currentSystem);
+    if (systemIt == typeInfo.systems.end())
+        return displayValue;
+
+    const UnitSpec& spec = systemIt.value();
+    return (displayValue - spec.offset) / spec.scale;
+}
+
 QString UnitConverter::currentSystem() const
 {
     return m_currentSystem;

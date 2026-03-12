@@ -19,6 +19,7 @@ struct AttributeDefinition {
     QString attributeKey;      // SessionKeys constant this reads from
     AttributeFormatType formatType; // How to format and sort the value
     bool editable = false;     // Whether the user can edit this value in the logbook
+    QString measurementType;   // UnitConverter key (empty = no unit conversion)
 };
 
 class AttributeRegistry {

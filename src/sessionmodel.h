@@ -68,6 +68,7 @@ private:
     QVariant formatAttributeValue(const SessionData &session, const LogbookColumn &col) const;
     QVariant formatMeasurementValue(const SessionData &session, const LogbookColumn &col) const;
     QVariant formatDeltaValue(const SessionData &session, const LogbookColumn &col) const;
+    QString columnUnitLabel(const LogbookColumn &col) const;
 
 private slots:
     void rebuildColumns();
