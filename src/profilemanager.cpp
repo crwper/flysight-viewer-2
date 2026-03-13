@@ -253,6 +253,7 @@ void ProfileManager::setProfileOrder(const QStringList &orderedIds)
 {
     QSettings settings;
     settings.setValue(kOrderSettingsKey, orderedIds);
+    emit profilesChanged();
 }
 
 // ============================================================================
@@ -262,7 +263,6 @@ void ProfileManager::setProfileOrder(const QStringList &orderedIds)
 QStringList ProfileManager::defaultProfileResourcePaths()
 {
     return {
-        QStringLiteral(":/resources/profiles/Wingsuit_Performance.fvprofile"),
         QStringLiteral(":/resources/profiles/Canopy_Piloting.fvprofile")
     };
 }
