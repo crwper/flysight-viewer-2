@@ -264,6 +264,7 @@ QStringList ProfileManager::defaultProfileResourcePaths()
 {
     return {
         QStringLiteral(":/resources/profiles/Canopy_Piloting.fvprofile")
+        QStringLiteral(":/resources/profiles/Wingsuit_Performance.fvprofile")
     };
 }
 

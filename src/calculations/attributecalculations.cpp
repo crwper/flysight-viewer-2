@@ -253,6 +253,125 @@ void Calculations::registerAttributeCalculations()
         return QVariant(time[minIdx]);
     });
 
+    // Flare detection: longest ascending segment in hMSL between exit and landing,
+    // tolerating small dips within the vertical position accuracy band.
+    // Both FlareStartTime and FlareEndTime are computed by the same shared function.
+    auto computeFlare = [](SessionData& session, const QString& outputKey) -> std::optional<QVariant> {
+        // If both attributes are already stored, return the requested one
+        QString otherKey = (outputKey == SessionKeys::FlareStartTime)
+            ? SessionKeys::FlareEndTime
+            : SessionKeys::FlareStartTime;
+        if (session.hasAttribute(otherKey) && session.hasAttribute(outputKey))
+            return session.getAttribute(outputKey);
+
+        QVariant exitVar = session.getAttribute(SessionKeys::ExitTime);
+        if (!exitVar.canConvert<double>())
+            return std::nullopt;
+        double exitSec = exitVar.toDouble();
+
+        QVariant landVar = session.getAttribute(SessionKeys::LandingTime);
+        if (!landVar.canConvert<double>())
+            return std::nullopt;
+        double landingSec = landVar.toDouble();
+
+        QVector<double> hMSL = session.getMeasurement("GNSS", "hMSL");
+        QVector<double> vAcc = session.getMeasurement("GNSS", "vAcc");
+        QVector<double> time = session.getMeasurement("GNSS", SessionKeys::Time);
+
+        const int n = hMSL.size();
+        if (n == 0 || vAcc.size() != n || time.size() != n)
+            return std::nullopt;
+
+        // Find the index range [iStart, iEnd) covering exit..landing
+        int iStart = -1, iEnd = n;
+        for (int i = 0; i < n; ++i) {
+            if (iStart < 0 && time[i] >= exitSec) iStart = i;
+            if (time[i] > landingSec) { iEnd = i; break; }
+        }
+        if (iStart < 0 || iStart >= iEnd)
+            return std::nullopt;
+
+        // Track ascending segments: look for the one with the greatest elevation gain.
+        // A segment ends when elevation drops below the running high by more than 2*vAcc.
+        double currentLow  = hMSL[iStart];
+        int    currentLowIdx  = iStart;
+        double currentHigh = hMSL[iStart];
+        int    currentHighIdx = iStart;
+
+        double bestGain = 0.0;
+        int    bestLowIdx  = -1;
+        int    bestHighIdx = -1;
+
+        for (int i = iStart + 1; i < iEnd; ++i) {
+            if (hMSL[i] < currentLow) {
+                // New low: reset the ascending segment
+                currentLow = hMSL[i];
+                currentLowIdx = i;
+                currentHigh = hMSL[i];
+                currentHighIdx = i;
+            } else if (hMSL[i] > currentHigh) {
+                // Extending the ascent
+                currentHigh = hMSL[i];
+                currentHighIdx = i;
+            } else if (hMSL[i] < currentHigh - 2.0 * vAcc[i]) {
+                // Confidently below the high: ascending segment has ended
+                double gain = currentHigh - currentLow;
+                if (gain > bestGain) {
+                    bestGain = gain;
+                    bestLowIdx = currentLowIdx;
+                    bestHighIdx = currentHighIdx;
+                }
+                // Reset from this sample
+                currentLow = hMSL[i];
+                currentLowIdx = i;
+                currentHigh = hMSL[i];
+                currentHighIdx = i;
+            }
+        }
+
+        // Finalize: check the last segment
+        double gain = currentHigh - currentLow;
+        if (gain > bestGain) {
+            bestGain = gain;
+            bestLowIdx = currentLowIdx;
+            bestHighIdx = currentHighIdx;
+        }
+
+        if (bestGain <= 0 || bestLowIdx < 0)
+            return std::nullopt;
+
+        session.setAttribute(SessionKeys::FlareStartTime, time[bestLowIdx]);
+        session.setAttribute(SessionKeys::FlareEndTime,   time[bestHighIdx]);
+
+        return session.getAttribute(outputKey);
+    };
+
+    SessionData::registerCalculatedAttribute(
+        SessionKeys::FlareStartTime,
+        {
+            DependencyKey::attribute(SessionKeys::ExitTime),
+            DependencyKey::attribute(SessionKeys::LandingTime),
+            DependencyKey::measurement("GNSS", "hMSL"),
+            DependencyKey::measurement("GNSS", "vAcc"),
+            DependencyKey::measurement("GNSS", SessionKeys::Time)
+        },
+        [computeFlare](SessionData& session) -> std::optional<QVariant> {
+        return computeFlare(session, SessionKeys::FlareStartTime);
+    });
+
+    SessionData::registerCalculatedAttribute(
+        SessionKeys::FlareEndTime,
+        {
+            DependencyKey::attribute(SessionKeys::ExitTime),
+            DependencyKey::attribute(SessionKeys::LandingTime),
+            DependencyKey::measurement("GNSS", "hMSL"),
+            DependencyKey::measurement("GNSS", "vAcc"),
+            DependencyKey::measurement("GNSS", SessionKeys::Time)
+        },
+        [computeFlare](SessionData& session) -> std::optional<QVariant> {
+        return computeFlare(session, SessionKeys::FlareEndTime);
+    });
+
     // Landing time: first flying-to-walking transition within the analysis window
     // "Walking" = vertical speed < 2*sAcc AND horizontal speed < 10 km/h
     //             AND elevation within 10 m of ground

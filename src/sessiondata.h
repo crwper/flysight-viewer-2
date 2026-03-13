@@ -33,6 +33,10 @@ namespace SessionKeys {
     constexpr char MaxVelHTime[] = "_MAX_VELH_TIME";
     constexpr char LandingTime[] = "_LANDING_TIME";
 
+    // Flare detection keys
+    constexpr char FlareStartTime[] = "_FLARE_START_TIME";
+    constexpr char FlareEndTime[]   = "_FLARE_END_TIME";
+
     // Analysis range keys
     constexpr char AnalysisStartTime[] = "_ANALYSIS_START_TIME";
     constexpr char AnalysisEndTime[]   = "_ANALYSIS_END_TIME";
