@@ -68,6 +68,11 @@
      <string>&amp;Window</string>
     </property>
    </widget>
+   <widget class="QMenu" name="menuProfiles">
+    <property name="title">
+     <string>&amp;Profiles</string>
+    </property>
+   </widget>
    <widget class="QMenu" name="menu_Help">
     <property name="title">
      <string>&amp;Help</string>
@@ -79,6 +84,7 @@
    <addaction name="menu_Tools"/>
    <addaction name="menuTrack"/>
    <addaction name="menuWindow"/>
+   <addaction name="menuProfiles"/>
    <addaction name="menu_Help"/>
   </widget>
   <action name="action_Import">
@@ -224,6 +230,16 @@
   <action name="action_About">
    <property name="text">
     <string>&amp;About FlySight Viewer</string>
+   </property>
+  </action>
+  <action name="action_AddProfile">
+   <property name="text">
+    <string>Add Profile...</string>
+   </property>
+  </action>
+  <action name="action_ManageProfiles">
+   <property name="text">
+    <string>Manage Profiles...</string>
    </property>
   </action>
  </widget>

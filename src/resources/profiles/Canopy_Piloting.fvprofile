@@ -1,0 +1,32 @@
+{
+    "name": "Canopy Piloting",
+    "enabledPlots": [
+        "GNSS/z",
+        "GNSS/velH",
+        "GNSS/velD"
+    ],
+    "enabledMarkers": [
+        "_EXIT_TIME",
+        "_MANOEUVRE_START_TIME",
+        "_LANDING_TIME",
+        "_ANALYSIS_START_TIME",
+        "_ANALYSIS_END_TIME"
+    ],
+    "referenceMarker": "_MANOEUVRE_START_TIME",
+    "xAxisVariable": "GNSS/_time",
+    "zoomExtent": {
+        "mode": "markerRange",
+        "startMarker": "_MANOEUVRE_START_TIME",
+        "endMarker": "_LANDING_TIME",
+        "marginPct": 5.0
+    },
+    "logbookColumns": [
+        { "type": 0, "attributeKey": "_DESCRIPTION" },
+        { "type": 0, "attributeKey": "_START_TIME" },
+        { "type": 0, "attributeKey": "_DURATION" },
+        { "type": 0, "attributeKey": "_MANOEUVRE_START_TIME" },
+        { "type": 0, "attributeKey": "_LANDING_TIME" },
+        { "type": 1, "sensorID": "GNSS", "measurementID": "velH", "measurementType": "speed", "markerAttributeKey": "_LANDING_TIME" },
+        { "type": 2, "sensorID": "GNSS", "measurementID": "z", "measurementType": "altitude", "markerAttributeKey": "_MANOEUVRE_START_TIME", "marker2AttributeKey": "_LANDING_TIME" }
+    ]
+}

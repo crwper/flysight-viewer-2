@@ -32,6 +32,9 @@ public:
     KDDockWidgets::QtWidgets::DockWidget* dock() const override;
     KDDockWidgets::Location defaultLocation() const override;
 
+    QSet<QString> expandedCategories() const;
+    void setExpandedCategories(const QSet<QString> &categories);
+
 private:
     void populateReferenceCombo();
     void saveExpansionState();

@@ -44,6 +44,25 @@ public:
         PlotUnitsRole
     };
 
+    // Model accessors for profile state bridge
+    PlotModel* plotModel() const;
+    MarkerModel* markerModel() const;
+    PlotViewSettingsModel* plotViewSettingsModel() const;
+
+    // Dock layout capture/restore without QSettings
+    QByteArray captureDockLayout() const;
+    bool applyDockLayout(const QByteArray &layout);
+
+    // Find a specific dock feature by type
+    template<typename T>
+    T* findFeature() const {
+        for (auto* f : m_features) {
+            if (auto* t = qobject_cast<T*>(f))
+                return t;
+        }
+        return nullptr;
+    }
+
 signals:
     void plotValueSelected(const QModelIndex &selectedIndex);
 
@@ -71,6 +90,8 @@ private slots:
     void on_action_Exit_triggered();
     void on_action_About_triggered();
     void on_action_ToggleUnits_triggered();
+    void on_action_AddProfile_triggered();
+    void on_action_ManageProfiles_triggered();
 
     void onPlotWidgetToolChanged(PlotWidget::Tool t);
 
@@ -105,8 +126,8 @@ private:
     QList<DockFeature*> m_features;
 
     // Models
-    PlotModel *plotModel;
-    MarkerModel *markerModel = nullptr;
+    PlotModel *m_plotModel;
+    MarkerModel *m_markerModel = nullptr;
 
     // Pointer to QActionGroup for tools
     QActionGroup *toolActionGroup;
@@ -130,16 +151,6 @@ private:
     static void registerBuiltInPlots();
     static void registerBuiltInMarkers();
 
-    // Find a specific dock feature by type
-    template<typename T>
-    T* findFeature() const {
-        for (auto* f : m_features) {
-            if (auto* t = qobject_cast<T*>(f))
-                return t;
-        }
-        return nullptr;
-    }
-
     // Helper function for importing files
     void importFiles(const QStringList &fileNames, bool showProgress, const QString &baseDir = QString());
 
@@ -153,6 +164,8 @@ private:
     void initializeXAxisMenu();
     void initializePlotsMenu();
     void initializeWindowMenu();
+    void initializeProfilesMenu();
+    void rebuildProfilesMenu();
     void togglePlot(const QString &sensorID, const QString &measurementID);
 
     // Helper functions for tracks

@@ -5,6 +5,7 @@
 #include <QFileDialog>
 #include <QProgressDialog>
 #include <QMessageBox>
+#include <QInputDialog>
 #include <QDirIterator>
 #include <QMouseEvent>
 #include <QStandardPaths>
@@ -48,6 +49,10 @@
 #include "calculations/attributeregistration.h"
 #include "altitudemarkerfeature.h"
 #include "logbookcolumn.h"
+#include "profile.h"
+#include "profilemanager.h"
+#include "profilestatebridge.h"
+#include "manageprofilesdialog.h"
 
 namespace {
 
@@ -82,15 +87,15 @@ MainWindow::MainWindow(QWidget *parent)
     , m_plotViewSettingsModel(new PlotViewSettingsModel(m_settings, this))
     , ui(new Ui::MainWindow)
     , model(new SessionModel(this))
-    , plotModel (new PlotModel(this))
-    , markerModel (new MarkerModel(this))
+    , m_plotModel (new PlotModel(this))
+    , m_markerModel (new MarkerModel(this))
 {
     ui->setupUi(this);
     manualInit();
 
     // Give models access to QSettings for persisting enabled state
-    plotModel->setSettings(m_settings);
-    markerModel->setSettings(m_settings);
+    m_plotModel->setSettings(m_settings);
+    m_markerModel->setSettings(m_settings);
 
     // Create MomentModel and wire it to SessionModel for dependency tracking
     m_momentModel = new MomentModel(this);
@@ -99,7 +104,7 @@ MainWindow::MainWindow(QWidget *parent)
     // Give MarkerRegistry and MarkerModel access to MomentModel so that
     // marker registration and enablement changes propagate to the moment system.
     MarkerRegistry::instance()->setMomentModel(m_momentModel);
-    markerModel->setMomentModel(m_momentModel);
+    m_markerModel->setMomentModel(m_momentModel);
 
     // Register the mouse cursor as a moment (always enabled, always visible)
     {
@@ -133,6 +138,9 @@ MainWindow::MainWindow(QWidget *parent)
     // Register built-in session attributes (e.g., Description, StartTime, Duration)
     registerBuiltInAttributes();
 
+    // Ensure default profiles exist on first launch
+    ProfileManager::instance().ensureDefaultProfilesExist();
+
     // Load persisted logbook column configuration (or defaults on first launch).
     // This emits columnsChanged(), which triggers SessionModel::rebuildColumns().
     LogbookColumnStore::instance().load();
@@ -165,8 +173,8 @@ MainWindow::MainWindow(QWidget *parent)
     // Create all docks via registry
     AppContext ctx;
     ctx.sessionModel = model;
-    ctx.plotModel = plotModel;
-    ctx.markerModel = markerModel;
+    ctx.plotModel = m_plotModel;
+    ctx.markerModel = m_markerModel;
     ctx.momentModel = m_momentModel;
     ctx.rangeModel = m_rangeModel;
     ctx.plotViewSettings = m_plotViewSettingsModel;
@@ -232,8 +240,8 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     // Let PlotModel own the category/plot tree (must be done after plugin initialization)
-    if (plotModel) {
-        plotModel->setPlots(PlotRegistry::instance().dependentPlots());
+    if (m_plotModel) {
+        m_plotModel->setPlots(PlotRegistry::instance().dependentPlots());
     }
 
     // Restore the previous dock layout (includes visibility/open/closed state).
@@ -245,6 +253,9 @@ MainWindow::MainWindow(QWidget *parent)
     // Initialize the Plots menu
     initializeXAxisMenu();
     initializePlotsMenu();
+
+    // Initialize the Profiles menu
+    initializeProfilesMenu();
 
     // Setup plot tools
     setupPlotTools();
@@ -363,6 +374,36 @@ void MainWindow::saveDockLayout()
         return;
 
     m_settings->setValue(QStringLiteral("ui/dockLayout"), layout);
+}
+
+PlotModel* MainWindow::plotModel() const
+{
+    return m_plotModel;
+}
+
+MarkerModel* MainWindow::markerModel() const
+{
+    return m_markerModel;
+}
+
+PlotViewSettingsModel* MainWindow::plotViewSettingsModel() const
+{
+    return m_plotViewSettingsModel;
+}
+
+QByteArray MainWindow::captureDockLayout() const
+{
+    KDDockWidgets::LayoutSaver saver;
+    return saver.serializeLayout();
+}
+
+bool MainWindow::applyDockLayout(const QByteArray &layout)
+{
+    if (layout.isEmpty())
+        return false;
+
+    KDDockWidgets::LayoutSaver saver;
+    return saver.restoreLayout(layout);
 }
 
 void MainWindow::on_action_Import_triggered()
@@ -1125,13 +1166,121 @@ void MainWindow::initializeWindowMenu()
     }
 }
 
+void MainWindow::initializeProfilesMenu()
+{
+    rebuildProfilesMenu();
+
+    connect(&ProfileManager::instance(), &ProfileManager::profilesChanged,
+            this, &MainWindow::rebuildProfilesMenu);
+}
+
+void MainWindow::rebuildProfilesMenu()
+{
+    QMenu *menu = ui->menuProfiles;
+    menu->clear();
+
+    // Get all profiles and the user-defined order
+    const QVector<Profile> allProfiles = ProfileManager::instance().listProfiles();
+    const QStringList orderedIds = ProfileManager::instance().profileOrder();
+
+    // Build a map from id to profile for quick lookup
+    QHash<QString, Profile> profileMap;
+    for (const Profile &p : allProfiles) {
+        profileMap.insert(p.id, p);
+    }
+
+    // Collect profiles in order: first those in orderedIds, then remaining alphabetically
+    QVector<Profile> ordered;
+    QSet<QString> added;
+
+    for (const QString &id : orderedIds) {
+        if (profileMap.contains(id)) {
+            ordered.append(profileMap.value(id));
+            added.insert(id);
+        }
+    }
+
+    // Remaining profiles sorted alphabetically by displayName
+    QVector<Profile> remaining;
+    for (const Profile &p : allProfiles) {
+        if (!added.contains(p.id)) {
+            remaining.append(p);
+        }
+    }
+    std::sort(remaining.begin(), remaining.end(),
+              [](const Profile &a, const Profile &b) {
+                  return a.displayName.toLower() < b.displayName.toLower();
+              });
+    ordered.append(remaining);
+
+    // Add a menu action for each profile
+    for (const Profile &profile : ordered) {
+        QString profileId = profile.id;
+        QAction *action = new QAction(profile.displayName, menu);
+        action->setData(profileId);
+
+        connect(action, &QAction::triggered, this, [this, profileId]() {
+            auto result = QMessageBox::question(
+                this,
+                tr("Load Profile"),
+                tr("Your current analysis state will be replaced. Continue?"),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No);
+
+            if (result == QMessageBox::Yes) {
+                auto profile = ProfileManager::instance().loadProfile(profileId);
+                if (profile.has_value()) {
+                    applyProfile(profile.value(), this);
+                }
+            }
+        });
+
+        menu->addAction(action);
+    }
+
+    // Add separator only if there are profiles
+    if (!ordered.isEmpty()) {
+        menu->addSeparator();
+    }
+
+    menu->addAction(ui->action_AddProfile);
+    menu->addAction(ui->action_ManageProfiles);
+}
+
+void MainWindow::on_action_AddProfile_triggered()
+{
+    bool ok = false;
+    QString name = QInputDialog::getText(
+        this,
+        tr("Add Profile"),
+        tr("Profile name:"),
+        QLineEdit::Normal,
+        QString(),
+        &ok);
+
+    if (!ok) return;
+
+    name = name.trimmed();
+    if (name.isEmpty()) return;
+
+    Profile profile = captureCurrentState(this);
+    profile.displayName = name;
+    ProfileManager::instance().saveProfile(profile);
+}
+
+void MainWindow::on_action_ManageProfiles_triggered()
+{
+    ManageProfilesDialog dlg(this);
+    dlg.exec();
+}
+
 void MainWindow::togglePlot(const QString &sensorID, const QString &measurementID)
 {
-    if (!plotModel) {
+    if (!m_plotModel) {
         return;
     }
 
-    plotModel->togglePlot(sensorID, measurementID);
+    m_plotModel->togglePlot(sensorID, measurementID);
 
     // Ensure the plot selection view is visible
     auto* plotSelectionFeature = findFeature<PlotSelectionDockFeature>();

@@ -90,6 +90,30 @@ void PlotSelectionDockFeature::onCollapsed(const QModelIndex &index)
         m_settings->setValue(QStringLiteral("state/plotExpansion/") + name, false);
 }
 
+QSet<QString> PlotSelectionDockFeature::expandedCategories() const
+{
+    return m_expandedCategories;
+}
+
+void PlotSelectionDockFeature::setExpandedCategories(const QSet<QString> &categories)
+{
+    m_expandedCategories = categories;
+
+    for (int i = 0; i < m_plotModel->rowCount(); ++i) {
+        QModelIndex idx = m_plotModel->index(i, 0);
+        QString name = idx.data(Qt::DisplayRole).toString();
+        bool shouldExpand = categories.contains(name);
+
+        if (shouldExpand)
+            m_treeView->expand(idx);
+        else
+            m_treeView->collapse(idx);
+
+        if (m_settings)
+            m_settings->setValue(QStringLiteral("state/plotExpansion/") + name, shouldExpand);
+    }
+}
+
 QString PlotSelectionDockFeature::id() const
 {
     return QStringLiteral("Plot Selection");

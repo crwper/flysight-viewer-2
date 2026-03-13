@@ -279,6 +279,10 @@ set(PROJECT_SOURCES
   plotregistry.cpp           plotregistry.h
   attributeregistry.cpp      attributeregistry.h
   logbookcolumn.cpp          logbookcolumn.h
+  profile.cpp                profile.h
+  profilemanager.cpp         profilemanager.h
+  profilestatebridge.cpp     profilestatebridge.h
+  manageprofilesdialog.cpp   manageprofilesdialog.h
   python_output_redirector.h
   plotmodel.cpp              plotmodel.h
   plotrangemodel.cpp         plotrangemodel.h

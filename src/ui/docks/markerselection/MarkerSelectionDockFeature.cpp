@@ -179,6 +179,30 @@ void MarkerSelectionDockFeature::onReferenceMarkerKeyChanged(const QString &oldK
     m_referenceCombo->setCurrentIndex(0);
 }
 
+QSet<QString> MarkerSelectionDockFeature::expandedCategories() const
+{
+    return m_expandedCategories;
+}
+
+void MarkerSelectionDockFeature::setExpandedCategories(const QSet<QString> &categories)
+{
+    m_expandedCategories = categories;
+
+    for (int i = 0; i < m_markerModel->rowCount(); ++i) {
+        QModelIndex idx = m_markerModel->index(i, 0);
+        QString name = idx.data(Qt::DisplayRole).toString();
+        bool shouldExpand = categories.contains(name);
+
+        if (shouldExpand)
+            m_treeView->expand(idx);
+        else
+            m_treeView->collapse(idx);
+
+        if (m_settings)
+            m_settings->setValue(QStringLiteral("state/markerExpansion/") + name, shouldExpand);
+    }
+}
+
 QString MarkerSelectionDockFeature::id() const
 {
     return QStringLiteral("Marker Selection");
