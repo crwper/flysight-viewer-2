@@ -263,7 +263,8 @@ void ProfileManager::setProfileOrder(const QStringList &orderedIds)
 QStringList ProfileManager::defaultProfileResourcePaths()
 {
     return {
-        QStringLiteral(":/resources/profiles/Canopy_Piloting.fvprofile")
+        QStringLiteral(":/resources/profiles/Basic_Flight.fvprofile"),
+        QStringLiteral(":/resources/profiles/Canopy_Piloting.fvprofile"),
         QStringLiteral(":/resources/profiles/Wingsuit_Performance.fvprofile")
     };
 }
