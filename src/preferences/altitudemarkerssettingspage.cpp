@@ -22,7 +22,6 @@ AltitudeMarkersSettingsPage::AltitudeMarkersSettingsPage(QWidget *parent)
     layout->addWidget(createUnitsGroup());
     layout->addWidget(createColorGroup());
     layout->addWidget(createAltitudesGroup());
-    layout->addWidget(createResetSection());
     layout->addStretch();
 
     loadSettings();
@@ -85,21 +84,6 @@ QGroupBox* AltitudeMarkersSettingsPage::createAltitudesGroup()
     return group;
 }
 
-QWidget* AltitudeMarkersSettingsPage::createResetSection()
-{
-    QWidget *resetWidget = new QWidget(this);
-    QHBoxLayout *resetLayout = new QHBoxLayout(resetWidget);
-    resetLayout->setContentsMargins(0, 0, 0, 0);
-
-    m_resetButton = new QPushButton(tr("Reset to Defaults"), this);
-    connect(m_resetButton, &QPushButton::clicked, this, &AltitudeMarkersSettingsPage::resetToDefaults);
-
-    resetLayout->addStretch();
-    resetLayout->addWidget(m_resetButton);
-
-    return resetWidget;
-}
-
 // ---------------------------------------------------------------------------
 // Settings persistence
 // ---------------------------------------------------------------------------
@@ -160,10 +144,6 @@ void AltitudeMarkersSettingsPage::loadSettings()
     }
     settings.endArray();
 
-    if (altitudes.isEmpty()) {
-        altitudes = {300, 600, 900};
-    }
-
     std::sort(altitudes.begin(), altitudes.end());
     for (int val : altitudes) {
         QListWidgetItem *item = new QListWidgetItem(QString::number(val));
@@ -201,10 +181,6 @@ void AltitudeMarkersSettingsPage::saveSettings()
         }
         seen.insert(val);
         altitudes.append(val);
-    }
-
-    if (altitudes.isEmpty()) {
-        altitudes = {300, 600, 900};
     }
 
     std::sort(altitudes.begin(), altitudes.end());
@@ -271,41 +247,6 @@ void AltitudeMarkersSettingsPage::onRemoveAltitude()
     if (item) {
         delete item;
     }
-}
-
-void AltitudeMarkersSettingsPage::resetToDefaults()
-{
-    QMessageBox::StandardButton reply = QMessageBox::question(
-        this,
-        tr("Reset to Defaults"),
-        tr("Are you sure you want to reset all altitude marker settings to their default values?"),
-        QMessageBox::Yes | QMessageBox::No,
-        QMessageBox::No
-    );
-
-    if (reply != QMessageBox::Yes) {
-        return;
-    }
-
-    // Write altitude array FIRST so that any refresh() triggered below reads current data
-    QSettings settings;
-    const QList<int> defaults = {300, 600, 900};
-    settings.beginWriteArray(QStringLiteral("altitudeMarkers"), defaults.size());
-    for (int i = 0; i < defaults.size(); ++i) {
-        settings.setArrayIndex(i);
-        settings.setValue(QStringLiteral("value"), defaults[i]);
-    }
-    settings.endArray();
-
-    PreferencesManager &prefs = PreferencesManager::instance();
-    prefs.setValue(PreferenceKeys::AltitudeMarkersUnits, QStringLiteral("Imperial"));
-    prefs.setValue(PreferenceKeys::AltitudeMarkersColor, QColor(0x87, 0xCE, 0xEB));
-    prefs.setValue(PreferenceKeys::AltitudeMarkersSize, defaults.size());
-
-    int version = prefs.getValue(PreferenceKeys::AltitudeMarkersVersion).toInt();
-    prefs.setValue(PreferenceKeys::AltitudeMarkersVersion, version + 1);
-
-    loadSettings();
 }
 
 } // namespace FlySight

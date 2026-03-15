@@ -25,19 +25,15 @@ private slots:
     void onColorButtonClicked();
     void onAddAltitude();
     void onRemoveAltitude();
-    void resetToDefaults();
-
 private:
     QComboBox   *m_unitsComboBox;
     QPushButton *m_colorButton;
     QListWidget *m_altitudeList;
     QColor       m_currentColor;
-    QPushButton *m_resetButton;
 
     QGroupBox* createUnitsGroup();
     QGroupBox* createColorGroup();
     QGroupBox* createAltitudesGroup();
-    QWidget*   createResetSection();
 
     void updateColorButtonStyle(const QColor &color);
     void loadSettings();

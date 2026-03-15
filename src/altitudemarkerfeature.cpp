@@ -19,11 +19,8 @@ AltitudeMarkerManager::AltitudeMarkerManager(SessionModel *sessionModel, QObject
     PreferencesManager &prefs = PreferencesManager::instance();
     prefs.registerPreference(PreferenceKeys::AltitudeMarkersUnits, QStringLiteral("Imperial"));
     prefs.registerPreference(PreferenceKeys::AltitudeMarkersColor, QColor(0x87, 0xCE, 0xEB));
-    prefs.registerPreference(PreferenceKeys::AltitudeMarkersSize, 3);
+    prefs.registerPreference(PreferenceKeys::AltitudeMarkersSize, 0);
     prefs.registerPreference(PreferenceKeys::AltitudeMarkersVersion, 0);
-    prefs.registerPreference(PreferenceKeys::altitudeMarkerValueKey(1), 300);
-    prefs.registerPreference(PreferenceKeys::altitudeMarkerValueKey(2), 600);
-    prefs.registerPreference(PreferenceKeys::altitudeMarkerValueKey(3), 900);
 
     // Trigger refresh() whenever any altitude-marker preference changes
     connect(&PreferencesManager::instance(), &PreferencesManager::preferenceChanged,
@@ -51,11 +48,6 @@ void AltitudeMarkerManager::registerAll()
         altitudes.append(settings.value(QStringLiteral("value")).toInt());
     }
     settings.endArray();
-
-    // Fall back to defaults if no array entries found
-    if (altitudes.isEmpty()) {
-        altitudes = {300, 600, 900};
-    }
 
     // Sort ascending so markers appear in order in the dock
     std::sort(altitudes.begin(), altitudes.end());
