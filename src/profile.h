@@ -25,6 +25,7 @@ namespace ProfileKeys {
     inline const QString LogbookColumns   = QStringLiteral("logbookColumns");
     inline const QString DockLayout       = QStringLiteral("dockLayout");
     inline const QString TreeExpansion    = QStringLiteral("treeExpansionState");
+    inline const QString AltitudeMarkers  = QStringLiteral("altitudeMarkers");
 }
 
 // ============================================================================
@@ -45,6 +46,7 @@ struct Profile {
     std::optional<QJsonArray>  logbookColumns;          // array of column config objects
     std::optional<QByteArray>  dockLayout;              // KDDockWidgets serialized layout (Base64-encoded in JSON)
     std::optional<QJsonObject> treeExpansionState;      // sub-object: category expansion state for plot/marker docks
+    std::optional<QJsonObject> altitudeMarkers;         // sub-object: units and altitude values for altitude markers
 
     // Round-trip preservation: keys present in JSON but not recognized by this version
     QJsonObject extraKeys;

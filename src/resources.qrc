@@ -2,8 +2,5 @@
     <qresource prefix="/">
         <file>qml/VideoSurface.qml</file>
         <file>resources/icons/FlySightViewer.png</file>
-        <file>resources/profiles/Basic_Flight.fvprofile</file>
-        <file>resources/profiles/Canopy_Piloting.fvprofile</file>
-        <file>resources/profiles/Wingsuit_Performance.fvprofile</file>
     </qresource>
 </RCC>

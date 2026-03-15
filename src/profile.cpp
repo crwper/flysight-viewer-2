@@ -51,6 +51,9 @@ QJsonObject FlySight::profileToJson(const Profile &profile)
     if (profile.treeExpansionState.has_value())
         obj[ProfileKeys::TreeExpansion] = *profile.treeExpansionState;
 
+    if (profile.altitudeMarkers.has_value())
+        obj[ProfileKeys::AltitudeMarkers] = *profile.altitudeMarkers;
+
     return obj;
 }
 
@@ -69,7 +72,8 @@ Profile FlySight::profileFromJson(const QJsonObject &obj, const QString &id)
         ProfileKeys::ZoomExtent,
         ProfileKeys::LogbookColumns,
         ProfileKeys::DockLayout,
-        ProfileKeys::TreeExpansion
+        ProfileKeys::TreeExpansion,
+        ProfileKeys::AltitudeMarkers
     };
 
     // Display name
@@ -119,6 +123,10 @@ Profile FlySight::profileFromJson(const QJsonObject &obj, const QString &id)
     // Tree expansion state
     if (obj.contains(ProfileKeys::TreeExpansion))
         profile.treeExpansionState = obj[ProfileKeys::TreeExpansion].toObject();
+
+    // Altitude markers
+    if (obj.contains(ProfileKeys::AltitudeMarkers))
+        profile.altitudeMarkers = obj[ProfileKeys::AltitudeMarkers].toObject();
 
     // Collect unknown keys for round-trip preservation
     for (auto it = obj.begin(); it != obj.end(); ++it) {

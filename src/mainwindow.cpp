@@ -138,8 +138,8 @@ MainWindow::MainWindow(QWidget *parent)
     // Register built-in session attributes (e.g., Description, StartTime, Duration)
     registerBuiltInAttributes();
 
-    // Ensure default profiles exist on first launch
-    ProfileManager::instance().ensureDefaultProfilesExist();
+    // Ensure default profiles exist on first launch (returns true if first launch)
+    m_isFirstLaunch = ProfileManager::instance().ensureDefaultProfilesExist();
 
     // Load persisted logbook column configuration (or defaults on first launch).
     // This emits columnsChanged(), which triggers SessionModel::rebuildColumns().
@@ -256,6 +256,16 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Initialize the Profiles menu
     initializeProfilesMenu();
+
+    // On first launch, apply the designated default profile
+    if (m_isFirstLaunch) {
+        const QString defaultId = ProfileManager::defaultProfileId();
+        if (!defaultId.isEmpty()) {
+            auto profile = ProfileManager::instance().loadProfile(defaultId);
+            if (profile.has_value())
+                applyProfile(profile.value(), this);
+        }
+    }
 
     // Setup plot tools
     setupPlotTools();

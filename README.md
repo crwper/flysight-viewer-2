@@ -639,7 +639,21 @@ To reset all stored preferences for FlySight Viewer on macOS:
 defaults delete com.flysight.Viewer
 ```
 
-### 7. Visual Studio shows many projects
+### 7. Resetting Application Preferences (Windows)
+
+To reset all stored preferences for FlySight Viewer on Windows:
+
+```cmd
+reg delete "HKEY_CURRENT_USER\Software\FlySight\FlySightViewer" /f
+```
+
+To also reset built-in profiles (so they are re-copied on next launch), delete the profiles directory:
+
+```cmd
+del /q "%USERPROFILE%\Documents\FlySight Viewer\profiles\*.fvprofile"
+```
+
+### 8. Visual Studio shows many projects
 
 **Symptom:** The Visual Studio solution contains many projects (GeographicLib, KDDockWidgets targets).
 

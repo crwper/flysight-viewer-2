@@ -3,6 +3,7 @@
 
 #include <optional>
 
+#include <QJsonObject>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -31,10 +32,12 @@ public:
     QStringList profileOrder() const;
     void setProfileOrder(const QStringList &orderedIds);
 
-    // Built-in default profiles
+    // Built-in default profiles (driven by profiles.json manifest)
     static QStringList defaultProfileResourcePaths();
+    static QString defaultProfileId();
+    static QStringList defaultProfileOrder();
     int copyDefaultProfiles(bool overwrite = false);
-    void ensureDefaultProfilesExist();
+    bool ensureDefaultProfilesExist();
 
 signals:
     void profilesChanged();
@@ -45,6 +48,8 @@ private:
 
     QString filenameForProfile(const Profile &profile) const;
     QString findFileForId(const QString &id) const;
+
+    static QJsonObject loadManifest();
 };
 
 } // namespace FlySight

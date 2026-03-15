@@ -80,6 +80,10 @@
             "type": 2
         }
     ],
+    "altitudeMarkers": {
+        "units": "Metric",
+        "altitudes": [1500, 2500]
+    },
     "name": "Wingsuit Performance",
     "referenceMarker": "_EXIT_TIME",
     "treeExpansionState": {

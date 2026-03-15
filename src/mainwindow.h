@@ -119,6 +119,7 @@ private:
 
     QSettings *m_settings;
     Ui::MainWindow *ui;
+    bool m_isFirstLaunch = false;
 
     SessionModel *model;
 

@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
@@ -257,16 +258,53 @@ void ProfileManager::setProfileOrder(const QStringList &orderedIds)
 }
 
 // ============================================================================
-// Built-in Default Profiles
+// Built-in Default Profiles (driven by profiles.json manifest)
 // ============================================================================
+
+QJsonObject ProfileManager::loadManifest()
+{
+    QFile file(QStringLiteral(":/resources/profiles/profiles.json"));
+    if (!file.open(QIODevice::ReadOnly)) {
+        qWarning("ProfileManager: failed to open profiles manifest");
+        return {};
+    }
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        qWarning("ProfileManager: failed to parse profiles manifest: %s",
+                 qPrintable(err.errorString()));
+        return {};
+    }
+    return doc.object();
+}
 
 QStringList ProfileManager::defaultProfileResourcePaths()
 {
-    return {
-        QStringLiteral(":/resources/profiles/Basic_Flight.fvprofile"),
-        QStringLiteral(":/resources/profiles/Canopy_Piloting.fvprofile"),
-        QStringLiteral(":/resources/profiles/Wingsuit_Performance.fvprofile")
-    };
+    const QJsonObject manifest = loadManifest();
+    const QJsonArray order = manifest[QStringLiteral("order")].toArray();
+
+    QStringList paths;
+    for (const QJsonValue &val : order) {
+        const QString id = val.toString();
+        paths.append(QStringLiteral(":/resources/profiles/") + id + QStringLiteral(".fvprofile"));
+    }
+    return paths;
+}
+
+QString ProfileManager::defaultProfileId()
+{
+    const QJsonObject manifest = loadManifest();
+    return manifest[QStringLiteral("defaultProfile")].toString();
+}
+
+QStringList ProfileManager::defaultProfileOrder()
+{
+    const QJsonObject manifest = loadManifest();
+    const QJsonArray order = manifest[QStringLiteral("order")].toArray();
+    QStringList ids;
+    for (const QJsonValue &val : order)
+        ids.append(val.toString());
+    return ids;
 }
 
 int ProfileManager::copyDefaultProfiles(bool overwrite)
@@ -318,7 +356,7 @@ int ProfileManager::copyDefaultProfiles(bool overwrite)
     return count;
 }
 
-void ProfileManager::ensureDefaultProfilesExist()
+bool ProfileManager::ensureDefaultProfilesExist()
 {
     const QString dir = profileDirectory();
     const QDir profileDir(dir);
@@ -328,6 +366,15 @@ void ProfileManager::ensureDefaultProfilesExist()
         QStringList() << QStringLiteral("*.fvprofile"),
         QDir::Files);
 
-    if (existing.isEmpty())
+    if (existing.isEmpty()) {
         copyDefaultProfiles(false);
+
+        // Seed profile order from manifest
+        const QStringList order = defaultProfileOrder();
+        if (!order.isEmpty())
+            setProfileOrder(order);
+
+        return true; // first launch
+    }
+    return false;
 }

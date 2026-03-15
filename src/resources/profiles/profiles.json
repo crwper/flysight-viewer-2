@@ -1,0 +1,8 @@
+{
+    "defaultProfile": "Basic_Flight",
+    "order": [
+        "Basic_Flight",
+        "Canopy_Piloting",
+        "Wingsuit_Performance"
+    ]
+}

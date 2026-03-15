@@ -353,6 +353,17 @@ qt_add_resources(FlySightViewer map_resource
     FILES "${CMAKE_CURRENT_BINARY_DIR}/resources/map.html"
 )
 
+# Profile resources — auto-discovered via glob.
+# NOTE: Re-run CMake configure after adding/removing profile files.
+file(GLOB PROFILE_RESOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/profiles/*.fvprofile")
+list(APPEND PROFILE_RESOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/profiles/profiles.json")
+
+qt_add_resources(FlySightViewer profile_resources
+    PREFIX "/"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}"
+    FILES ${PROFILE_RESOURCE_FILES}
+)
+
 target_link_libraries(FlySightViewer PRIVATE
   flysight_model
   qcustomplot

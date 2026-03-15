@@ -3,6 +3,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QSet>
+#include <QSettings>
 
 #include "mainwindow.h"
 #include "plotmodel.h"
@@ -121,6 +122,24 @@ Profile captureCurrentState(MainWindow *mainWindow)
         profile.treeExpansionState = expansion;
     }
 
+    // 9. Altitude markers
+    {
+        QSettings settings;
+        int count = settings.beginReadArray(QStringLiteral("altitudeMarkers"));
+        QJsonArray altitudes;
+        for (int i = 0; i < count; ++i) {
+            settings.setArrayIndex(i);
+            altitudes.append(settings.value(QStringLiteral("value")).toInt());
+        }
+        settings.endArray();
+
+        QJsonObject altObj;
+        altObj[QStringLiteral("units")] = PreferencesManager::instance()
+            .getValue(PreferenceKeys::AltitudeMarkersUnits).toString();
+        altObj[QStringLiteral("altitudes")] = altitudes;
+        profile.altitudeMarkers = altObj;
+    }
+
     return profile;
 }
 
@@ -141,7 +160,35 @@ void applyProfile(const Profile &profile, MainWindow *mainWindow)
         }
     }
 
-    // 2. Enabled markers
+    // 2. Altitude markers (must come before enabled-markers so the markers exist)
+    if (profile.altitudeMarkers.has_value()) {
+        const QJsonObject &alt = *profile.altitudeMarkers;
+
+        // Write units
+        if (alt.contains(QStringLiteral("units")))
+            PreferencesManager::instance().setValue(
+                PreferenceKeys::AltitudeMarkersUnits,
+                alt[QStringLiteral("units")].toString());
+
+        // Write altitude array to QSettings
+        if (alt.contains(QStringLiteral("altitudes"))) {
+            const QJsonArray altArr = alt[QStringLiteral("altitudes")].toArray();
+            QSettings settings;
+            settings.beginWriteArray(QStringLiteral("altitudeMarkers"), altArr.size());
+            for (int i = 0; i < altArr.size(); ++i) {
+                settings.setArrayIndex(i);
+                settings.setValue(QStringLiteral("value"), altArr[i].toInt());
+            }
+            settings.endArray();
+        }
+
+        // Increment version to trigger AltitudeMarkerManager::refresh()
+        auto &prefs = PreferencesManager::instance();
+        int version = prefs.getValue(PreferenceKeys::AltitudeMarkersVersion).toInt();
+        prefs.setValue(PreferenceKeys::AltitudeMarkersVersion, version + 1);
+    }
+
+    // 3. Enabled markers
     if (profile.enabledMarkers.has_value()) {
         const QSet<QString> enabledSet(profile.enabledMarkers->begin(), profile.enabledMarkers->end());
         const QVector<MarkerDefinition> allMarkers = MarkerRegistry::instance()->allMarkers();
@@ -151,17 +198,17 @@ void applyProfile(const Profile &profile, MainWindow *mainWindow)
         }
     }
 
-    // 3. Reference marker
+    // 4. Reference marker
     if (profile.referenceMarker.has_value()) {
         mainWindow->plotViewSettingsModel()->setReferenceMarkerKey(*profile.referenceMarker);
     }
 
-    // 4. X-axis variable
+    // 5. X-axis variable
     if (profile.xAxisVariable.has_value()) {
         mainWindow->plotViewSettingsModel()->setXVariable(*profile.xAxisVariable);
     }
 
-    // 5. Zoom extent
+    // 6. Zoom extent
     if (profile.zoomExtent.has_value()) {
         auto &prefs = PreferencesManager::instance();
         const QJsonObject &zoom = *profile.zoomExtent;
@@ -176,7 +223,7 @@ void applyProfile(const Profile &profile, MainWindow *mainWindow)
             prefs.setValue(PreferenceKeys::ZoomExtentMarginPct, zoom[QStringLiteral("marginPct")].toDouble());
     }
 
-    // 6. Logbook columns
+    // 7. Logbook columns
     if (profile.logbookColumns.has_value()) {
         QVector<LogbookColumn> cols;
         const QJsonArray &arr = *profile.logbookColumns;
@@ -200,12 +247,12 @@ void applyProfile(const Profile &profile, MainWindow *mainWindow)
         LogbookColumnStore::instance().setColumns(cols);
     }
 
-    // 7. Dock layout (apply after model state so widgets exist)
+    // 8. Dock layout (apply after model state so widgets exist)
     if (profile.dockLayout.has_value()) {
         mainWindow->applyDockLayout(*profile.dockLayout);
     }
 
-    // 8. Tree expansion state (apply last so tree views exist after dock layout restore)
+    // 9. Tree expansion state (apply last so tree views exist after dock layout restore)
     if (profile.treeExpansionState.has_value()) {
         const QJsonObject &expansion = *profile.treeExpansionState;
 
