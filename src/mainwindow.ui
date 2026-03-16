@@ -83,8 +83,8 @@
    <addaction name="menuPlots"/>
    <addaction name="menu_Tools"/>
    <addaction name="menuTrack"/>
-   <addaction name="menuWindow"/>
    <addaction name="menuProfiles"/>
+   <addaction name="menuWindow"/>
    <addaction name="menu_Help"/>
   </widget>
   <action name="action_Import">
