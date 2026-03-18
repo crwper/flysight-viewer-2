@@ -30,10 +30,8 @@ bool SetSyncTool::mousePressEvent(QMouseEvent *event)
     QSet<QString> tracedIds = crosshairMgr->getTracedSessionIds();
 
     for (const QString& sessionId : tracedIds) {
-        QDateTime newSync = m_widget->xCoordToUtcDateTime(xCoord, sessionId);
-        if (newSync.isValid()) {
-            m_model->updateAttribute(sessionId, SessionKeys::SyncTime, newSync);
-        }
+        double utcSec = m_widget->xCoordToUtcSeconds(xCoord, sessionId);
+        m_model->updateAttribute(sessionId, SessionKeys::SyncTime, utcSec);
     }
 
     // done — go back to your primary tool

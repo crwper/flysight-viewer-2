@@ -107,7 +107,7 @@ public:
 
     static double interpolateY(const QCPGraph* graph, double x);
 
-    QDateTime xCoordToUtcDateTime(double xCoord, const QString &sessionId) const;
+    double xCoordToUtcSeconds(double xCoord, const QString &sessionId) const;
 
     // Axis configuration getters (used by tools and downstream consumers)
     QString xVariable() const { return m_xVariable; }

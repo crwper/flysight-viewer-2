@@ -386,21 +386,19 @@ void PlotWidget::unlockFocus()
         m_crosshairManager->clearToolFocusLock();
 }
 
-QDateTime PlotWidget::xCoordToUtcDateTime(double xCoord, const QString &sessionId) const
+double PlotWidget::xCoordToUtcSeconds(double xCoord, const QString &sessionId) const
 {
     int row = model->getSessionRow(sessionId);
     if (row < 0)
-        return QDateTime();
+        return 0.0;
 
     const SessionData &session = model->getAllSessions().at(row);
     auto offset = referenceOffsetForSession(session);
     if (!offset.has_value())
-        return QDateTime();
+        return 0.0;
 
     // Plot-to-UTC: add offset back
-    double utcSeconds = xCoord + offset.value();
-    return QDateTime::fromMSecsSinceEpoch(
-        qint64(utcSeconds * 1000.0), QTimeZone::utc());
+    return xCoord + offset.value();
 }
 
 // Slots
@@ -1551,10 +1549,8 @@ bool PlotWidget::handleBubblePress(QCPItemText *bubble, QMouseEvent *event)
 bool PlotWidget::handleBubbleDrag(QMouseEvent *event)
 {
     double xCoord = customPlot->xAxis->pixelToCoord(event->pos().x()) - m_dragXCoordOffset;
-    QDateTime newDt = xCoordToUtcDateTime(xCoord, m_dragSessionId);
-    if (newDt.isValid()) {
-        model->updateAttribute(m_dragSessionId, m_dragAttributeKey, newDt);
-    }
+    double utcSec = xCoordToUtcSeconds(xCoord, m_dragSessionId);
+    model->updateAttribute(m_dragSessionId, m_dragAttributeKey, utcSec);
     return true;
 }
 
@@ -1562,10 +1558,8 @@ bool PlotWidget::handleBubbleRelease(QMouseEvent *event)
 {
     // Perform final position update
     double xCoord = customPlot->xAxis->pixelToCoord(event->pos().x()) - m_dragXCoordOffset;
-    QDateTime newDt = xCoordToUtcDateTime(xCoord, m_dragSessionId);
-    if (newDt.isValid()) {
-        model->updateAttribute(m_dragSessionId, m_dragAttributeKey, newDt);
-    }
+    double utcSec = xCoordToUtcSeconds(xCoord, m_dragSessionId);
+    model->updateAttribute(m_dragSessionId, m_dragAttributeKey, utcSec);
 
     // Clear drag state
     m_dragBubble = nullptr;

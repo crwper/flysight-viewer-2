@@ -31,10 +31,8 @@ bool SetExitTool::mousePressEvent(QMouseEvent *event)
     QSet<QString> tracedIds = crosshairMgr->getTracedSessionIds();
 
     for (const QString& sessionId : tracedIds) {
-        QDateTime newExit = m_widget->xCoordToUtcDateTime(xCoord, sessionId);
-        if (newExit.isValid()) {
-            m_model->updateAttribute(sessionId, SessionKeys::ExitTime, newExit);
-        }
+        double utcSec = m_widget->xCoordToUtcSeconds(xCoord, sessionId);
+        m_model->updateAttribute(sessionId, SessionKeys::ExitTime, utcSec);
     }
 
     // 4) done — go back to your primary tool
