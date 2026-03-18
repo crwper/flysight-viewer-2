@@ -9,11 +9,11 @@
 namespace FlySight {
 
 bool SessionData::isVisible() const {
-    return m_attributes.value(SessionKeys::Visible, "true") == "true";
+    return m_visible;
 }
 
 void SessionData::setVisible(bool visible) {
-    m_attributes.insert(SessionKeys::Visible, visible ? "true" : "false");
+    m_visible = visible;
 }
 
 QStringList SessionData::attributeKeys() const {
@@ -21,11 +21,11 @@ QStringList SessionData::attributeKeys() const {
 }
 
 bool SessionData::hasAttribute(const QString &key) const {
-    return m_attributes.contains(key);
+    return m_attributes.contains(key) || m_calculatedAttributes.hasValue(key);
 }
 
 QVariant SessionData::getAttribute(const QString &key) const {
-    if (hasAttribute(key)) {
+    if (m_attributes.contains(key)) {
         return m_attributes.value(key);
     }
 
@@ -92,6 +92,11 @@ QSet<DependencyKey> SessionData::setMeasurement(const QString &sensorKey, const 
         DependencyKey::measurement(sensorKey, measurementKey),
         m_calculatedAttributes,
         m_calculatedMeasurements);
+}
+
+void SessionData::setCalculatedAttribute(const QString &key, const QVariant &value)
+{
+    m_calculatedAttributes.setValue(key, value);
 }
 
 void SessionData::setCalculatedMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data)

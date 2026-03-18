@@ -85,8 +85,8 @@ void Calculations::registerAttributeCalculations()
             double endSec = std::min(time[bestLowIdx] + timeout, time[n - 1]);
 
             // Store both results as double (UTC seconds)
-            session.setAttribute(SessionKeys::AnalysisStartTime, startSec);
-            session.setAttribute(SessionKeys::AnalysisEndTime, endSec);
+            session.setCalculatedAttribute(SessionKeys::AnalysisStartTime, startSec);
+            session.setCalculatedAttribute(SessionKeys::AnalysisEndTime, endSec);
 
             return session.getAttribute(outputKey);
         }
@@ -340,8 +340,8 @@ void Calculations::registerAttributeCalculations()
         if (bestGain <= 0 || bestLowIdx < 0)
             return std::nullopt;
 
-        session.setAttribute(SessionKeys::FlareStartTime, time[bestLowIdx]);
-        session.setAttribute(SessionKeys::FlareEndTime,   time[bestHighIdx]);
+        session.setCalculatedAttribute(SessionKeys::FlareStartTime, time[bestLowIdx]);
+        session.setCalculatedAttribute(SessionKeys::FlareEndTime,   time[bestHighIdx]);
 
         return session.getAttribute(outputKey);
     };

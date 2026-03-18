@@ -86,8 +86,8 @@ void Calculations::registerTimeCalculations()
         double a = (N * sumSU - sumS * sumU) / denom;
         double b = (sumU - a * sumS) / N;
 
-        session.setAttribute(SessionKeys::TimeFitA, QString::number(a, 'g', 17));
-        session.setAttribute(SessionKeys::TimeFitB, QString::number(b, 'g', 17));
+        session.setCalculatedAttribute(SessionKeys::TimeFitA, QString::number(a, 'g', 17));
+        session.setCalculatedAttribute(SessionKeys::TimeFitB, QString::number(b, 'g', 17));
 
         return session.getAttribute(outputKey);
     };

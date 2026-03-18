@@ -17,7 +17,6 @@ namespace FlySight {
 namespace SessionKeys {
     constexpr char DeviceId[] = "DEVICE_ID";
     constexpr char SessionId[] = "SESSION_ID";
-    constexpr char Visible[] = "_VISIBLE";
     constexpr char Description[] = "_DESCRIPTION";
     constexpr char Time[] = "_time";
     constexpr char SystemTime[] = "_system_time";
@@ -69,6 +68,7 @@ public:
     bool hasMeasurement(const QString& sensorKey, const QString& measurementKey) const;
     QVector<double> getMeasurement(const QString& sensorKey, const QString& measurementKey) const;
     QSet<DependencyKey> setMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
+    void setCalculatedAttribute(const QString &key, const QVariant &value);
     void setCalculatedMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
 
     static bool hasRegisteredCalculation(const QString &key);
@@ -83,6 +83,7 @@ public:
         m_dependencyManager.registerDependencies(thisKey, deps);
     }
 private:
+    bool m_visible = true;
     QMap<QString, QVariant> m_attributes;
     QMap<QString, QMap<QString, QVector<double>>> m_sensors;
 
