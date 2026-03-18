@@ -86,12 +86,6 @@ std::optional<Value> CalculatedValue<Key, Value>::getValue(SessionData &session,
 }
 
 template<typename Key, typename Value>
-bool CalculatedValue<Key, Value>::hasValue(const Key &key) const
-{
-    return m_cache.contains(key);
-}
-
-template<typename Key, typename Value>
 void CalculatedValue<Key, Value>::setValue(const Key &key, const Value& data)
 {
     m_cache.insert(key, data);

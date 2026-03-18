@@ -39,12 +39,6 @@ void Calculations::registerTimeCalculations()
     // attributes.  Follows the computeAnalysisRange pattern in
     // attributecalculations.cpp.
     auto computeTimeFit = [](SessionData &session, const QString &outputKey) -> std::optional<QVariant> {
-        // Short-circuit: if both attributes already exist, return the requested one
-        if (session.hasAttribute(SessionKeys::TimeFitA) &&
-            session.hasAttribute(SessionKeys::TimeFitB)) {
-            return session.getAttribute(outputKey);
-        }
-
         // Need TIME sensor data to compute the fit
         if (!session.hasMeasurement("TIME", "time") ||
             !session.hasMeasurement("TIME", "tow") ||

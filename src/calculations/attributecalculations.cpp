@@ -14,13 +14,6 @@ void Calculations::registerAttributeCalculations()
     // Both attributes are computed by the same shared function (like the
     // simplified-track pattern in simplificationcalculations.cpp).
     auto computeAnalysisRange = [](SessionData& session, const QString& outputKey) -> std::optional<QVariant> {
-        // If the other attribute is already stored, the algorithm has already run
-        QString otherKey = (outputKey == SessionKeys::AnalysisStartTime)
-            ? SessionKeys::AnalysisEndTime
-            : SessionKeys::AnalysisStartTime;
-        if (session.hasAttribute(otherKey) && session.hasAttribute(outputKey))
-            return session.getAttribute(outputKey);
-
         // Read the pause timeout from preferences at compute time
         PreferencesManager &prefs = PreferencesManager::instance();
         double timeout = prefs.getValue(PreferenceKeys::ImportDescentPauseSeconds).toDouble();
@@ -257,13 +250,6 @@ void Calculations::registerAttributeCalculations()
     // tolerating small dips within the vertical position accuracy band.
     // Both FlareStartTime and FlareEndTime are computed by the same shared function.
     auto computeFlare = [](SessionData& session, const QString& outputKey) -> std::optional<QVariant> {
-        // If both attributes are already stored, return the requested one
-        QString otherKey = (outputKey == SessionKeys::FlareStartTime)
-            ? SessionKeys::FlareEndTime
-            : SessionKeys::FlareStartTime;
-        if (session.hasAttribute(otherKey) && session.hasAttribute(outputKey))
-            return session.getAttribute(outputKey);
-
         QVariant exitVar = session.getAttribute(SessionKeys::ExitTime);
         if (!exitVar.canConvert<double>())
             return std::nullopt;

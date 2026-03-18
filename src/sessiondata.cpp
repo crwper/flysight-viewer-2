@@ -21,7 +21,7 @@ QStringList SessionData::attributeKeys() const {
 }
 
 bool SessionData::hasAttribute(const QString &key) const {
-    return m_attributes.contains(key) || m_calculatedAttributes.hasValue(key);
+    return m_attributes.contains(key);
 }
 
 QVariant SessionData::getAttribute(const QString &key) const {

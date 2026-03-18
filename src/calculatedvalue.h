@@ -43,9 +43,6 @@ public:
     // Retrieves the value associated with the given key, computing it if necessary.
     std::optional<Value> getValue(SessionData &session, const Key &key) const;
 
-    // Checks if the cache contains a value for the given key.
-    bool hasValue(const Key &key) const;
-
     // Set the value associated with the given key
     void setValue(const Key &key, const Value& data);
 
