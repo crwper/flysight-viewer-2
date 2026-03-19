@@ -14,6 +14,12 @@ public:
     // Method to import a file and get the session data
     bool importFile(const QString& fileName, SessionData& sessionData);
 
+    // Parse a file into sessionData without device-specific initialization
+    bool readFile(const QString& fileName, SessionData& sessionData, QByteArray* fileData = nullptr);
+
+    // Apply device-specific initialization (description, device ID, session ID)
+    void initializeFromDevice(const QString& fileName, const QByteArray& fileData, SessionData& sessionData);
+
     // Report last import error
     QString getLastError() const;
 

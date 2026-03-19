@@ -49,6 +49,7 @@
 #include "calculations/attributeregistration.h"
 #include "altitudemarkerfeature.h"
 #include "logbookcolumn.h"
+#include "logbookmanager.h"
 #include "profile.h"
 #include "profilemanager.h"
 #include "profilestatebridge.h"
@@ -163,6 +164,13 @@ MainWindow::MainWindow(QWidget *parent)
     // Instantiate and register altitude markers (must come after calculations are registered)
     m_altitudeMarkerManager = new AltitudeMarkerManager(model, this);
     m_altitudeMarkerManager->registerAll();
+
+    // Load saved sessions from the logbook directory
+    LogbookManager::instance().initialize();
+    QList<SessionData> savedSessions = LogbookManager::instance().loadAllSessions();
+    if (!savedSessions.isEmpty()) {
+        model->mergeSessions(savedSessions);
+    }
 
     // Create range model for synchronizing plot x-axis range with other docks
     m_rangeModel = new PlotRangeModel(this);
@@ -300,6 +308,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    LogbookManager::instance().flushIndex();
     saveDockLayout();
     KDDockWidgets::QtWidgets::MainWindow::closeEvent(event);
 }
@@ -603,6 +612,19 @@ void MainWindow::importFiles(
     // Batch merge all imported sessions
     model->mergeSessions(importedSessions);
 
+    // Persist the merged sessions to the logbook directory
+    for (const SessionData &imported : importedSessions) {
+        QString sessionId = imported.getAttribute(SessionKeys::SessionId).toString();
+        if (sessionId.isEmpty()) continue;
+
+        int row = model->getSessionRow(sessionId);
+        if (row < 0) continue;
+
+        if (!LogbookManager::instance().saveSession(model->sessionRef(row))) {
+            qWarning() << "Failed to save session to logbook:" << sessionId;
+        }
+    }
+
     // Optionally hide all other tracks so only the imported ones are visible
     if (PreferencesManager::instance().getValue(PreferenceKeys::ImportHideOthersOnImport).toBool()
         && !importedSessions.isEmpty()) {
@@ -790,6 +812,11 @@ void MainWindow::on_action_Delete_triggered()
     bool success = model->removeSessions(sessionIdsToRemove);
 
     if (success) {
+        // Remove corresponding logbook files from disk
+        for (const QString &sessionId : sessionIdsToRemove) {
+            LogbookManager::instance().removeSession(sessionId);
+        }
+
         QMessageBox::information(
             this,
             tr("Delete Tracks"),

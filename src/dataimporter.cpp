@@ -16,6 +16,15 @@
 namespace FlySight {
 
 bool DataImporter::importFile(const QString& fileName, SessionData& sessionData) {
+    QByteArray fileData;
+    if (!readFile(fileName, sessionData, &fileData)) {
+        return false;
+    }
+    initializeFromDevice(fileName, fileData, sessionData);
+    return true;
+}
+
+bool DataImporter::readFile(const QString& fileName, SessionData& sessionData, QByteArray* fileData) {
     QFile file(fileName);
     if (!file.open(QIODevice::ReadOnly)) {
         m_lastError = "Couldn't read file";
@@ -23,20 +32,25 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
     }
 
     // Read the entire file into a QByteArray
-    QByteArray fileData = file.readAll();
+    QByteArray localData = file.readAll();
 
-    if (fileData.isEmpty()) {
+    if (localData.isEmpty()) {
         m_lastError = "Empty file";
         return false;
     }
 
+    // Optionally copy raw bytes to the caller
+    if (fileData) {
+        *fileData = localData;
+    }
+
     // Extract the first line directly from QByteArray
-    int firstNewline = fileData.indexOf('\n');
+    int firstNewline = localData.indexOf('\n');
     QString firstLine;
     if (firstNewline != -1) {
-        firstLine = QString::fromUtf8(fileData.left(firstNewline)).trimmed();
+        firstLine = QString::fromUtf8(localData.left(firstNewline)).trimmed();
     } else {
-        firstLine = QString::fromUtf8(fileData).trimmed();
+        firstLine = QString::fromUtf8(localData).trimmed();
     }
 
     // Determine file type based on the first line
@@ -51,7 +65,7 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
     }
 
     // Create a QTextStream from the QByteArray
-    QTextStream in(&fileData, QIODevice::ReadOnly);
+    QTextStream in(&localData, QIODevice::ReadOnly);
 
     // Use the fileType to choose the import method
     switch (fileType) {
@@ -63,18 +77,26 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
         break;
     }
 
+    return true;
+}
+
+void DataImporter::initializeFromDevice(const QString& fileName, const QByteArray& fileData, SessionData& sessionData) {
     // Set default description
     sessionData.setAttribute(SessionKeys::Description, getDescription(fileName));
 
-    // After importing, attempt to extract DEVICE_ID based on file type
+    // Determine file type from the first line for device ID extraction
+    int firstNewline = fileData.indexOf('\n');
+    QString firstLine = (firstNewline != -1)
+        ? QString::fromUtf8(fileData.left(firstNewline)).trimmed()
+        : QString::fromUtf8(fileData).trimmed();
+    bool isFS2 = firstLine.startsWith("$FLYS");
+
+    // Attempt to extract DEVICE_ID based on file type
     if (!sessionData.hasAttribute(SessionKeys::DeviceId)) {
-        switch (fileType) {
-        case FS_FileType::FS1:
-            extractDeviceId(fileName, sessionData, "Processor serial number");
-            break;
-        case FS_FileType::FS2:
+        if (isFS2) {
             extractDeviceId(fileName, sessionData, "Device_ID");
-            break;
+        } else {
+            extractDeviceId(fileName, sessionData, "Processor serial number");
         }
     }
 
@@ -90,8 +112,6 @@ bool DataImporter::importFile(const QString& fileName, SessionData& sessionData)
         QString md5HashString = md5Hash.toHex();
         sessionData.setAttribute(SessionKeys::SessionId, md5HashString);
     }
-
-    return true;
 }
 
 void DataImporter::importSimple(QTextStream& in, SessionData& sessionData, const QString &sensorName) {
@@ -124,14 +144,22 @@ void DataImporter::importSimple(QTextStream& in, SessionData& sessionData, const
         importDataRow(dataLine, columnOrder, sessionData, sensorName);
     }
 
-    // Apply SI normalization based on unit text
+    // Store initial unit strings in SessionData
     const QVector<QString>& cols = columnOrder[sensorName];
+    for (int i = 0; i < cols.size() && i < columnUnits.size(); ++i) {
+        sessionData.setUnit(sensorName, cols[i], columnUnits[i]);
+    }
+
+    // Apply SI normalization based on unit text
     for (int i = 0; i < cols.size() && i < columnUnits.size(); ++i) {
         const QString& unitText = columnUnits[i];
         if (UnitConversion::requiresConversion(unitText)) {
             QVector<double>& data = sessionData.m_sensors[sensorName][cols[i]];
             UnitConversion::toSI(data, unitText);
         }
+        // Update stored unit to the post-conversion SI unit
+        ConversionSpec spec = UnitConversion::getConversion(unitText);
+        sessionData.setUnit(sensorName, cols[i], spec.siUnit);
     }
 }
 
@@ -169,6 +197,9 @@ void DataImporter::importFS2(QTextStream& in, SessionData& sessionData) {
                 QVector<double>& data = sessionData.m_sensors[sensor][cols[i]];
                 UnitConversion::toSI(data, unitText);
             }
+            // Update stored unit to the post-conversion SI unit
+            ConversionSpec spec = UnitConversion::getConversion(unitText);
+            sessionData.setUnit(sensor, cols[i], spec.siUnit);
         }
     }
 }
@@ -224,6 +255,12 @@ DataImporter::FS_Section DataImporter::importHeaderRow(
                         units.append(it->toString());
                     }
                     columnUnits[sensorName] = units;
+
+                    // Store unit strings in SessionData for later export
+                    const QVector<QString>& cols = columnOrder.value(sensorName);
+                    for (int i = 0; i < cols.size() && i < units.size(); ++i) {
+                        sessionData.setUnit(sensorName, cols[i], units[i]);
+                    }
                 }
             }
         }

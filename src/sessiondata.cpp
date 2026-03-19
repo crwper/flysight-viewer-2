@@ -83,6 +83,22 @@ QVector<double> SessionData::getMeasurement(const QString &sensorKey, const QStr
     return computeMeasurement(sensorKey, measurementKey);
 }
 
+void SessionData::setUnit(const QString &sensorKey, const QString &measurementKey, const QString &unitString) {
+    m_units[sensorKey][measurementKey] = unitString;
+}
+
+QString SessionData::getUnit(const QString &sensorKey, const QString &measurementKey) const {
+    auto sensorIt = m_units.find(sensorKey);
+    if (sensorIt == m_units.end()) return QString();
+    auto unitIt = sensorIt.value().find(measurementKey);
+    if (unitIt == sensorIt.value().end()) return QString();
+    return unitIt.value();
+}
+
+QMap<QString, QString> SessionData::units(const QString &sensorKey) const {
+    return m_units.value(sensorKey);
+}
+
 QSet<DependencyKey> SessionData::setMeasurement(const QString &sensorKey, const QString &measurementKey, const QVector<double> &data) {
     // Store the measurement
     m_sensors[sensorKey].insert(measurementKey, data);

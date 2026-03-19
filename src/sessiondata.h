@@ -68,6 +68,10 @@ public:
     bool hasMeasurement(const QString& sensorKey, const QString& measurementKey) const;
     QVector<double> getMeasurement(const QString& sensorKey, const QString& measurementKey) const;
     QSet<DependencyKey> setMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
+
+    void setUnit(const QString& sensorKey, const QString& measurementKey, const QString& unitString);
+    QString getUnit(const QString& sensorKey, const QString& measurementKey) const;
+    QMap<QString, QString> units(const QString& sensorKey) const;
     void setCalculatedAttribute(const QString &key, const QVariant &value);
     void setCalculatedMeasurement(const QString& sensorKey, const QString& measurementKey, const QVector<double>& data);
 
@@ -86,6 +90,7 @@ private:
     bool m_visible = true;
     QMap<QString, QVariant> m_attributes;
     QMap<QString, QMap<QString, QVector<double>>> m_sensors;
+    QMap<QString, QMap<QString, QString>> m_units;
 
     CalculatedValue<QString, QVariant> m_calculatedAttributes;
     CalculatedValue<MeasurementKey, QVector<double>> m_calculatedMeasurements;

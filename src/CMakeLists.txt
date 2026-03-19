@@ -247,6 +247,7 @@ set(PROJECT_SOURCES
   sessionmodel.h             sessionmodel.cpp
   plotviewsettingsmodel.cpp  plotviewsettingsmodel.h
   dataimporter.cpp           dataimporter.h
+  dataexporter.cpp           dataexporter.h
   plottool/pantool.h
   plottool/plottool.h
   plottool/selecttool.cpp    plottool/selecttool.h
@@ -280,6 +281,7 @@ set(PROJECT_SOURCES
   attributeregistry.cpp      attributeregistry.h
   logbookcolumn.cpp          logbookcolumn.h
   profile.cpp                profile.h
+  logbookmanager.cpp         logbookmanager.h
   profilemanager.cpp         profilemanager.h
   profilestatebridge.cpp     profilestatebridge.h
   manageprofilesdialog.cpp   manageprofilesdialog.h
