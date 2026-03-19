@@ -627,19 +627,25 @@ void MainWindow::importFiles(
         }
     }
 
-    // Optionally hide all other tracks so only the imported ones are visible
-    if (PreferencesManager::instance().getValue(PreferenceKeys::ImportHideOthersOnImport).toBool()
-        && !importedSessions.isEmpty()) {
+    // Make imported sessions visible; optionally hide all others
+    if (!importedSessions.isEmpty()) {
         QSet<QString> importedIds;
         for (const SessionData &s : importedSessions) {
             importedIds.insert(s.getAttribute(SessionKeys::SessionId).toString());
         }
 
+        bool hideOthers = PreferencesManager::instance()
+                              .getValue(PreferenceKeys::ImportHideOthersOnImport).toBool();
+
         QMap<int, bool> visibilityMap;
         const auto &allSessions = model->getAllSessions();
         for (int row = 0; row < allSessions.size(); ++row) {
             QString id = allSessions[row].getAttribute(SessionKeys::SessionId).toString();
-            visibilityMap.insert(row, importedIds.contains(id));
+            if (importedIds.contains(id)) {
+                visibilityMap.insert(row, true);
+            } else if (hideOthers) {
+                visibilityMap.insert(row, false);
+            }
         }
         model->setRowsVisibility(visibilityMap);
     }

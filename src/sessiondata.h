@@ -87,7 +87,7 @@ public:
         m_dependencyManager.registerDependencies(thisKey, deps);
     }
 private:
-    bool m_visible = true;
+    bool m_visible = false;
     QMap<QString, QVariant> m_attributes;
     QMap<QString, QMap<QString, QVector<double>>> m_sensors;
     QMap<QString, QMap<QString, QString>> m_units;
