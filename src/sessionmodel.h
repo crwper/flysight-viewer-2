@@ -2,6 +2,8 @@
 #define SESSIONMODEL_H
 
 #include <QAbstractTableModel>
+#include <QSet>
+#include <QTimer>
 #include <QVector>
 #include "logbookcolumn.h"
 #include "sessiondata.h"
@@ -64,6 +66,11 @@ private:
     QVector<LogbookColumn> m_columns;
     QString m_hoveredSessionId;
 
+    // Deferred logbook persistence
+    QTimer m_saveTimer;
+    QSet<QString> m_dirtySessions;
+    void scheduleSave(const QString &sessionId);
+
     // Formatting helpers for data()
     QVariant formatAttributeValue(const SessionData &session, const LogbookColumn &col) const;
     QVariant formatMeasurementValue(const SessionData &session, const LogbookColumn &col) const;
@@ -72,6 +79,7 @@ private:
 
 private slots:
     void rebuildColumns();
+    void flushDirtySessions();
 };
 
 } // namespace FlySight

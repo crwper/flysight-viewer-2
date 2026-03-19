@@ -6,6 +6,7 @@
 
 #include "attributeregistry.h"
 #include "logbookcolumn.h"
+#include "logbookmanager.h"
 #include "units/unitconverter.h"
 
 namespace FlySight {
@@ -21,6 +22,10 @@ SessionModel::SessionModel(QObject *parent)
         emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1), {Qt::DisplayRole});
         emit headerDataChanged(Qt::Horizontal, 0, columnCount() - 1);
     });
+
+    m_saveTimer.setSingleShot(true);
+    m_saveTimer.setInterval(0);
+    connect(&m_saveTimer, &QTimer::timeout, this, &SessionModel::flushDirtySessions);
 
     rebuildColumns();
 }
@@ -203,6 +208,7 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
     const LogbookColumn &col = m_columns[index.column()];
 
     bool somethingChanged = false;
+    bool attributeChanged = false;
 
     if (role == Qt::CheckStateRole && index.column() == 0) {
         // Update visibility based on the checkbox
@@ -224,6 +230,7 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
             if (oldVal != newVal) {
                 item.setAttribute(col.attributeKey, newVal);
                 somethingChanged = true;
+                attributeChanged = true;
             }
             break;
         }
@@ -236,6 +243,7 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
             if (oldVal != newVal) {
                 item.setAttribute(col.attributeKey, newVal);
                 somethingChanged = true;
+                attributeChanged = true;
             }
             break;
         }
@@ -249,6 +257,11 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
     if (somethingChanged) {
         emit dataChanged(index, index, {role});
         emit modelChanged();
+        if (attributeChanged) {
+            QString sessionId = item.getAttribute(SessionKeys::SessionId).toString();
+            if (!sessionId.isEmpty())
+                scheduleSave(sessionId);
+        }
         return true;
     }
 
@@ -517,6 +530,9 @@ bool SessionModel::updateAttribute(const QString &sessionId,
         emit dependencyChanged(sessionId, key);
     }
 
+    // 7. Schedule deferred logbook save
+    scheduleSave(sessionId);
+
     return true;
 }
 
@@ -552,8 +568,35 @@ bool SessionModel::removeAttribute(const QString &sessionId,
         emit dependencyChanged(sessionId, key);
     }
 
+    // 7. Schedule deferred logbook save
+    scheduleSave(sessionId);
+
     return true;
 }
+
+// ---- Deferred logbook persistence ------------------------------------
+
+void SessionModel::scheduleSave(const QString &sessionId)
+{
+    m_dirtySessions.insert(sessionId);
+    m_saveTimer.start();
+}
+
+void SessionModel::flushDirtySessions()
+{
+    LogbookManager &logbook = LogbookManager::instance();
+    for (const QString &sessionId : std::as_const(m_dirtySessions)) {
+        int row = getSessionRow(sessionId);
+        if (row < 0) continue;
+        logbook.saveSession(sessionRef(row));
+    }
+    if (!m_dirtySessions.isEmpty()) {
+        logbook.flushIndex();
+        m_dirtySessions.clear();
+    }
+}
+
+// ----------------------------------------------------------------------
 
 void SessionModel::sort(int column, Qt::SortOrder order)
 {
