@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QSaveFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUuid>
@@ -188,21 +189,15 @@ void LogbookManager::flushIndex()
     }
 
     const QString filePath = sessionsDirectory() + QStringLiteral("/index.json");
-    const QString tmpPath = filePath + QStringLiteral(".tmp");
 
-    QFile tmpFile(tmpPath);
-    if (!tmpFile.open(QIODevice::WriteOnly)) {
-        qWarning("LogbookManager: failed to open %s for writing", qPrintable(tmpPath));
+    // Atomic write via QSaveFile
+    QSaveFile saveFile(filePath);
+    if (!saveFile.open(QIODevice::WriteOnly)) {
+        qWarning("LogbookManager: failed to open %s for writing", qPrintable(filePath));
         return;
     }
-    tmpFile.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
-    tmpFile.close();
-
-    // On Windows, QFile::rename() fails if the target exists
-    QFile::remove(filePath);
-    if (!tmpFile.rename(filePath)) {
-        qWarning("LogbookManager: failed to rename %s to %s",
-                 qPrintable(tmpPath), qPrintable(filePath));
-        QFile::remove(tmpPath);
+    saveFile.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    if (!saveFile.commit()) {
+        qWarning("LogbookManager: failed to commit %s", qPrintable(filePath));
     }
 }

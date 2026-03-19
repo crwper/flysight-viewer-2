@@ -1,7 +1,7 @@
 // dataexporter.cpp
 
 #include "dataexporter.h"
-#include <QFile>
+#include <QSaveFile>
 #include <QTextStream>
 #include <QStringConverter>
 
@@ -9,15 +9,13 @@ namespace FlySight {
 
 bool DataExporter::exportSession(const QString &filePath, const SessionData &sessionData)
 {
-    // Write to a temporary file for atomic rename
-    const QString tmpPath = filePath + QStringLiteral(".tmp");
-
-    QFile tmpFile(tmpPath);
-    if (!tmpFile.open(QIODevice::WriteOnly)) {
+    // Atomic write via QSaveFile
+    QSaveFile saveFile(filePath);
+    if (!saveFile.open(QIODevice::WriteOnly)) {
         return false;
     }
 
-    QTextStream stream(&tmpFile);
+    QTextStream stream(&saveFile);
     stream.setEncoding(QStringConverter::Utf8);
     stream.setGenerateByteOrderMark(false);
     stream.setRealNumberPrecision(15);
@@ -82,23 +80,14 @@ bool DataExporter::exportSession(const QString &filePath, const SessionData &ses
         }
     }
 
-    // Flush and check for write errors
+    // Flush and commit atomically
     stream.flush();
-    if (tmpFile.error() != QFile::NoError) {
-        tmpFile.close();
-        tmpFile.remove();
-        return false;
-    }
-    tmpFile.close();
-
-    // Atomic rename: on Windows, remove target first since rename fails if it exists
-    QFile::remove(filePath);
-    if (!tmpFile.rename(filePath)) {
-        tmpFile.remove();
+    if (saveFile.error() != QFileDevice::NoError) {
+        saveFile.cancelWriting();
         return false;
     }
 
-    return true;
+    return saveFile.commit();
 }
 
 } // namespace FlySight
