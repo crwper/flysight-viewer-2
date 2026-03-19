@@ -2,7 +2,7 @@
 # FlySight Viewer - GitHub Actions CI/CD Workflow
 # =============================================================================
 #
-# This workflow builds FlySight Viewer on Windows, macOS (ARM64), and Linux,
+# This workflow builds FlySight Viewer on Windows, macOS (ARM64 + x86_64), and Linux,
 # creating platform-specific packages (ZIP, DMG, AppImage) for distribution.
 #
 # Triggers:
@@ -64,6 +64,10 @@ jobs:
           - os: macos-15
             platform: macOS
             arch: arm64
+            artifact_ext: dmg
+          - os: macos-13
+            platform: macOS
+            arch: x86_64
             artifact_ext: dmg
           - os: ubuntu-22.04
             platform: Linux
