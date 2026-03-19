@@ -16,8 +16,9 @@ class LogbookManager : public QObject {
 public:
     static LogbookManager& instance();
 
-    // Creates sessions directory if missing, loads index.json or scans *.csv files
-    void initialize();
+    // Creates sessions directory if missing, loads index.json or scans *.csv files.
+    // Returns parsed sessions if fallback CSV scan was used, empty list otherwise.
+    QList<SessionData> initialize();
 
     // Writes a session to disk as a UUID-based .csv file; returns true on success
     bool saveSession(const SessionData& session);
@@ -37,6 +38,9 @@ private:
 
     // Returns the full path to the sessions directory
     QString sessionsDirectory() const;
+
+    // Scans *.csv files in the sessions directory, parses each, and populates m_sessionIdToUuid
+    QList<SessionData> scanSessionFiles();
 
     // Maps SESSION_ID strings to UUID filename stems (without extension)
     QMap<QString, QString> m_sessionIdToUuid;

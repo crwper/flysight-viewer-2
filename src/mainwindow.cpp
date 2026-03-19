@@ -166,8 +166,10 @@ MainWindow::MainWindow(QWidget *parent)
     m_altitudeMarkerManager->registerAll();
 
     // Load saved sessions from the logbook directory
-    LogbookManager::instance().initialize();
-    QList<SessionData> savedSessions = LogbookManager::instance().loadAllSessions();
+    QList<SessionData> savedSessions = LogbookManager::instance().initialize();
+    if (savedSessions.isEmpty()) {
+        savedSessions = LogbookManager::instance().loadAllSessions();
+    }
     if (!savedSessions.isEmpty()) {
         model->mergeSessions(savedSessions);
     }

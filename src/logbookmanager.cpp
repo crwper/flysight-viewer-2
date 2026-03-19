@@ -47,7 +47,7 @@ QString LogbookManager::sessionsDirectory() const
 // Initialize
 // ============================================================================
 
-void LogbookManager::initialize()
+QList<SessionData> LogbookManager::initialize()
 {
     const QString dir = sessionsDirectory();
 
@@ -69,31 +69,17 @@ void LogbookManager::initialize()
                     m_sessionIdToUuid[sessionId] = uuid;
                 }
             }
-            return;
+            return {};
         }
     }
 
-    // Fallback: scan *.csv files in the sessions directory
-    const QDir sessDir(dir);
-    const QStringList csvFiles = sessDir.entryList(
-        QStringList() << QStringLiteral("*.csv"),
-        QDir::Files, QDir::Name);
-
-    for (const QString& filename : csvFiles) {
-        const QString filePath = sessDir.absoluteFilePath(filename);
-        DataImporter importer;
-        SessionData sessionData;
-        if (importer.readFile(filePath, sessionData)) {
-            const QString sessionId = sessionData.getAttribute(SessionKeys::SessionId).toString();
-            const QString uuid = QFileInfo(filename).completeBaseName();
-            if (!sessionId.isEmpty()) {
-                m_sessionIdToUuid[sessionId] = uuid;
-            }
-        }
-    }
+    // Fallback: scan *.csv files and return parsed sessions
+    QList<SessionData> result = scanSessionFiles();
 
     // Write the index so it's available on next launch
     flushIndex();
+
+    return result;
 }
 
 // ============================================================================
@@ -131,6 +117,15 @@ bool LogbookManager::saveSession(const SessionData& session)
 // ============================================================================
 
 QList<SessionData> LogbookManager::loadAllSessions()
+{
+    return scanSessionFiles();
+}
+
+// ============================================================================
+// Scan Session Files
+// ============================================================================
+
+QList<SessionData> LogbookManager::scanSessionFiles()
 {
     QList<SessionData> result;
     const QString dir = sessionsDirectory();
