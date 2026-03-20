@@ -31,7 +31,6 @@ public:
 
     Qt::ItemFlags flags(const QModelIndex &index) const override;
 
-    void mergeSessionData(const SessionData& newSession);
     void mergeSessions(const QList<SessionData>& sessions);
     bool removeSessions(const QList<QString> &sessionIds);
 

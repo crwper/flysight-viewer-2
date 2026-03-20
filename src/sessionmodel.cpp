@@ -268,65 +268,6 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
     return false;
 }
 
-void SessionModel::mergeSessionData(const SessionData& newSession)
-{
-    // Ensure SESSION_ID exists
-    if (!newSession.hasAttribute(SessionKeys::SessionId)) {
-        QMessageBox::critical(nullptr, tr("Import failed"), tr("No session ID found"));
-        return;
-    }
-
-    QString newSessionID = newSession.getAttribute(SessionKeys::SessionId).toString();
-
-    // Check if SESSION_ID exists in m_sessionData
-    auto sessionIt = std::find_if(
-        m_sessionData.begin(), m_sessionData.end(),
-        [&newSessionID](const SessionData &item) {
-            return item.getAttribute(SessionKeys::SessionId) == newSessionID;
-        });
-
-    if (sessionIt != m_sessionData.end()) {
-        SessionData &existingSession = *sessionIt;
-
-        // Retrieve attribute and sensor names from new session
-        QStringList newAttributeKeys = newSession.attributeKeys();
-        QStringList newSensorKeys = newSession.sensorKeys();
-
-        // Merge attributes
-        for (const QString &attributeKey : newAttributeKeys) {
-            const QVariant &value = newSession.getAttribute(attributeKey);
-            existingSession.setAttribute(attributeKey, value);
-        }
-
-        // Merge sensors and measurements
-        for (const QString &sensorKey : newSensorKeys) {
-            QStringList newMeasurements = newSession.measurementKeys(sensorKey);
-
-            // Simply set the measurements, regardless of whether the sensor exists.
-            for (const QString &measurementKey : newMeasurements) {
-                QVector<double> data = newSession.getMeasurement(sensorKey, measurementKey);
-                existingSession.setMeasurement(sensorKey, measurementKey, data);
-            }
-        }
-
-        // Update views
-        const int row = sessionIt - m_sessionData.begin();
-        emit dataChanged(index(row, 0), index(row, columnCount() - 1));
-        emit modelChanged();
-
-        // Log successful merge
-        qDebug() << "Merged SessionData with SESSION_ID:" << newSessionID;
-    } else {
-        // SESSION_ID does not exist, add as new SessionData
-        beginInsertRows(QModelIndex(), m_sessionData.size(), m_sessionData.size());
-        m_sessionData.append(newSession);
-        endInsertRows();
-        emit modelChanged();
-
-        qDebug() << "Added new SessionData with SESSION_ID:" << newSessionID;
-    }
-}
-
 void SessionModel::mergeSessions(const QList<SessionData>& sessions)
 {
     if (sessions.isEmpty())
