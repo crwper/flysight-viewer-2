@@ -36,6 +36,9 @@ private:
     LogbookManager();
     Q_DISABLE_COPY(LogbookManager)
 
+    // Returns the full path to the logbook directory
+    QString logbookDirectory() const;
+
     // Returns the full path to the sessions directory
     QString sessionsDirectory() const;
 

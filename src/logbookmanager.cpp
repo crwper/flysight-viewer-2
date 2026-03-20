@@ -34,12 +34,16 @@ LogbookManager::LogbookManager()
 // Directory
 // ============================================================================
 
-QString LogbookManager::sessionsDirectory() const
+QString LogbookManager::logbookDirectory() const
 {
     const QString logbookFolder = PreferencesManager::instance()
         .getValue(PreferenceKeys::GeneralLogbookFolder).toString();
-    const QString dir = logbookFolder
-        + QStringLiteral("/FlySight Viewer/logbook/sessions");
+    return logbookFolder + QStringLiteral("/FlySight Viewer/logbook");
+}
+
+QString LogbookManager::sessionsDirectory() const
+{
+    const QString dir = logbookDirectory() + QStringLiteral("/sessions");
     QDir().mkpath(dir);
     return dir;
 }
@@ -50,10 +54,8 @@ QString LogbookManager::sessionsDirectory() const
 
 QList<SessionData> LogbookManager::initialize()
 {
-    const QString dir = sessionsDirectory();
-
     // Attempt to read index.json
-    const QString indexPath = dir + QStringLiteral("/index.json");
+    const QString indexPath = logbookDirectory() + QStringLiteral("/index.json");
     QFile indexFile(indexPath);
     if (indexFile.exists() && indexFile.open(QIODevice::ReadOnly)) {
         QJsonParseError parseError;
@@ -188,7 +190,7 @@ void LogbookManager::flushIndex()
         root[it.key()] = entry;
     }
 
-    const QString filePath = sessionsDirectory() + QStringLiteral("/index.json");
+    const QString filePath = logbookDirectory() + QStringLiteral("/index.json");
 
     // Atomic write via QSaveFile
     QSaveFile saveFile(filePath);
