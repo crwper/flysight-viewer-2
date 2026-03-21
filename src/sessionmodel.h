@@ -78,6 +78,9 @@ public:
     // Flush dirty sessions to disk (public so MainWindow can call on shutdown)
     void flushDirtySessions();
 
+    // Count of sessions still in stub state (not yet loaded)
+    int remainingStubCount() const;
+
 signals:
     void modelChanged();
     void sessionLoaded(const QString &sessionId);

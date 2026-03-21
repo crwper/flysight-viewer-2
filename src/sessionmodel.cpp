@@ -716,6 +716,16 @@ void SessionModel::flushDirtySessions()
     }
 }
 
+int SessionModel::remainingStubCount() const
+{
+    int count = 0;
+    for (const SessionRow &row : std::as_const(m_rows)) {
+        if (!row.isLoaded())
+            ++count;
+    }
+    return count;
+}
+
 // ---- Background loader ------------------------------------------------
 
 void SessionModel::startBackgroundLoader(const QMap<QString, double> &lastAccessed)

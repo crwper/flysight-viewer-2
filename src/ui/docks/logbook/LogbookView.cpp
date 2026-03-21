@@ -15,8 +15,13 @@ LogbookView::LogbookView(SessionModel *model, QWidget *parent)
       treeView(new QTreeView(this)),
       model(model)
 {
+    m_progressBar = new QProgressBar(this);
+    m_progressBar->setVisible(false);
+    m_progressBar->setTextVisible(true);
+
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(treeView);
+    layout->addWidget(m_progressBar);
     setLayout(layout);
 
     setupView();
@@ -149,6 +154,32 @@ void LogbookView::selectSessions(const QList<QString> &sessionIds)
             QModelIndex firstIndex = model->index(firstRow, 0);
             treeView->scrollTo(firstIndex, QAbstractItemView::PositionAtCenter);
         }
+    }
+}
+
+void LogbookView::startProgress(int totalStubs)
+{
+    if (totalStubs <= 0)
+        return;
+
+    m_totalStubs = totalStubs;
+    m_loadedCount = 0;
+    m_progressBar->setRange(0, totalStubs);
+    m_progressBar->setValue(0);
+    m_progressBar->setFormat(tr("Loading sessions: %v / %m"));
+    m_progressBar->setVisible(true);
+}
+
+void LogbookView::onSessionLoaded()
+{
+    if (m_totalStubs <= 0)
+        return;
+
+    ++m_loadedCount;
+    m_progressBar->setValue(m_loadedCount);
+
+    if (m_loadedCount >= m_totalStubs) {
+        m_progressBar->setVisible(false);
     }
 }
 

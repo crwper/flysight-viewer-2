@@ -26,6 +26,14 @@ LogbookDockFeature::LogbookDockFeature(const AppContext& ctx, QObject* parent)
             this, &LogbookDockFeature::deleteRequested);
     connect(m_logbookView, &LogbookView::focusSessionRequested,
             this, &LogbookDockFeature::focusSessionRequested);
+
+    // Connect session loaded signal to progress bar updates
+    connect(ctx.sessionModel, &SessionModel::sessionLoaded,
+            m_logbookView, &LogbookView::onSessionLoaded);
+
+    // Initialize progress bar with remaining stub count
+    int stubs = ctx.sessionModel->remainingStubCount();
+    m_logbookView->startProgress(stubs);
 }
 
 QString LogbookDockFeature::id() const

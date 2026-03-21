@@ -4,6 +4,7 @@
 
 #include <QWidget>
 #include <QTreeView>
+#include <QProgressBar>
 #include "sessionmodel.h"
 
 namespace FlySight {
@@ -24,6 +25,8 @@ signals:
 
 public slots:
     void selectSessions(const QList<QString> &sessionIds);
+    void startProgress(int totalStubs);
+    void onSessionLoaded();
 
 private slots:
     void onContextMenuRequested(const QPoint &pos);
@@ -34,6 +37,9 @@ protected:
 private:
     QTreeView *treeView;
     SessionModel *model;
+    QProgressBar *m_progressBar;
+    int m_totalStubs = 0;
+    int m_loadedCount = 0;
 
     void setupView();
 };
