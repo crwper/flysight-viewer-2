@@ -5,7 +5,6 @@
 
 #include <QAbstractTableModel>
 #include <QMap>
-#include <QSet>
 #include <QTimer>
 #include <QVector>
 #include "logbookcolumn.h"
@@ -18,6 +17,7 @@ struct SessionRow {
     QMap<int, QVariant> cachedValues;  // column index -> cached value from index
     std::optional<SessionData> session; // std::nullopt = stub, has_value = loaded
     bool visible = false;  // all sessions default to not visible
+    bool dirty = false;    // true when in-memory data has not been persisted
 
     bool isLoaded() const { return session.has_value(); }
 };
@@ -86,20 +86,25 @@ signals:
     void sessionLoaded(const QString &sessionId);
     void hoveredSessionChanged(const QString& sessionId);
     void dependencyChanged(const QString &sessionId, const DependencyKey &key);
+    void saveProgressChanged(int remaining, int total);
+    void loadProgressChanged(int remaining, int total);
 
 private:
     QVector<SessionRow> m_rows;
     QVector<LogbookColumn> m_columns;
     QString m_hoveredSessionId;
 
-    // Deferred logbook persistence
+    // Deferred logbook persistence (saver worker)
     QTimer m_saveTimer;
-    QSet<QString> m_dirtySessions;
+    int m_saveHighWater = 0;   // total dirty sessions in current save wave
+    int m_saveRemaining = 0;   // dirty sessions remaining in current wave
     void scheduleSave(const QString &sessionId);
 
     // Background loader
     QTimer m_loadTimer;
     QVector<QString> m_loadQueue;  // session IDs ordered by lastAccessed descending
+    int m_loadHighWater = 0;   // total stubs in current load wave
+    int m_loadRemaining = 0;   // stubs remaining in current wave
 
     // Formatting helpers for data()
     QVariant formatAttributeValue(const SessionData &session, const LogbookColumn &col) const;
@@ -114,6 +119,7 @@ private:
 private slots:
     void rebuildColumns();
     void loadNextSession();
+    void saveNextSession();
 };
 
 } // namespace FlySight

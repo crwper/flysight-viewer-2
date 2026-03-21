@@ -322,7 +322,6 @@ MainWindow::~MainWindow()
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     model->flushDirtySessions();
-    LogbookManager::instance().flushIndex();
     saveDockLayout();
     KDDockWidgets::QtWidgets::MainWindow::closeEvent(event);
 }
@@ -625,19 +624,6 @@ void MainWindow::importFiles(
 
     // Batch merge all imported sessions
     model->mergeSessions(importedSessions);
-
-    // Persist the merged sessions to the logbook directory
-    for (const SessionData &imported : importedSessions) {
-        QString sessionId = imported.getAttribute(SessionKeys::SessionId).toString();
-        if (sessionId.isEmpty()) continue;
-
-        int row = model->getSessionRow(sessionId);
-        if (row < 0) continue;
-
-        if (!LogbookManager::instance().saveSession(model->sessionRef(row))) {
-            qWarning() << "Failed to save session to logbook:" << sessionId;
-        }
-    }
 
     // Make imported sessions visible; optionally hide all others
     if (!importedSessions.isEmpty()) {

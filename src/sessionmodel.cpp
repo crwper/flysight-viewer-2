@@ -1,5 +1,7 @@
 #include "sessionmodel.h"
 
+#include <algorithm>
+
 #include <QDateTime>
 #include <QMessageBox>
 #include <QTimeZone>
@@ -25,7 +27,7 @@ SessionModel::SessionModel(QObject *parent)
 
     m_saveTimer.setSingleShot(true);
     m_saveTimer.setInterval(0);
-    connect(&m_saveTimer, &QTimer::timeout, this, &SessionModel::flushDirtySessions);
+    connect(&m_saveTimer, &QTimer::timeout, this, &SessionModel::saveNextSession);
 
     m_loadTimer.setSingleShot(true);
     m_loadTimer.setInterval(0);
@@ -394,12 +396,25 @@ void SessionModel::mergeSessions(const QList<SessionData>& sessions)
                     }
                 }
 
+                if (!rowIt->dirty) {
+                    rowIt->dirty = true;
+                    m_saveHighWater++;
+                    m_saveRemaining++;
+                }
                 qDebug() << "Merged SessionData into loaded row with SESSION_ID:" << newSessionID;
             } else {
                 // Replace stub with loaded data
                 rowIt->session = newSession;
                 rowIt->visible = newSession.isVisible();
                 rowIt->session->setVisible(rowIt->visible);
+                // Remove from background load queue if present (stub no longer needs loading)
+                if (m_loadQueue.removeOne(newSessionID)) {
+                    m_loadRemaining--;
+                }
+
+                rowIt->dirty = true;
+                m_saveHighWater++;
+                m_saveRemaining++;
                 qDebug() << "Replaced stub with loaded SessionData for SESSION_ID:" << newSessionID;
             }
         } else {
@@ -409,6 +424,9 @@ void SessionModel::mergeSessions(const QList<SessionData>& sessions)
             newRow.session = newSession;
             newRow.visible = newSession.isVisible();
             newRow.session->setVisible(newRow.visible);
+            newRow.dirty = true;
+            m_saveHighWater++;
+            m_saveRemaining++;
             m_rows.append(std::move(newRow));
             qDebug() << "Added new SessionData with SESSION_ID:" << newSessionID;
         }
@@ -422,6 +440,26 @@ void SessionModel::mergeSessions(const QList<SessionData>& sessions)
             logbook.setCachedValues(row.sessionId, computeColumnValues(row.session.value()));
         }
     }
+
+    // Start saver worker for newly dirty rows
+    bool hasDirty = std::any_of(m_rows.cbegin(), m_rows.cend(),
+                                [](const SessionRow &r) { return r.dirty; });
+    if (hasDirty && !m_saveTimer.isActive()) {
+        m_loadTimer.stop();  // saver has priority
+        m_saveTimer.start();
+    }
+
+    // Emit initial save progress so the UI can show the saver bar immediately
+    if (m_saveRemaining > 0) {
+        emit saveProgressChanged(m_saveRemaining, m_saveHighWater);
+    }
+
+    // Emit updated load progress (stubs may have been replaced by the merge)
+    if (m_loadRemaining <= 0) {
+        m_loadHighWater = 0;
+        m_loadRemaining = 0;
+    }
+    emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
 
     emit modelChanged();
 }
@@ -502,11 +540,21 @@ bool SessionModel::removeSessions(const QList<QString> &sessionIds)
         if (it != m_rows.end()) {
             int row = it - m_rows.begin();
 
+            // Update save counters if this session is dirty
+            if (it->dirty) {
+                m_saveHighWater--;
+                m_saveRemaining--;
+            }
+
+            // Update load counters if this session is in the load queue
+            if (m_loadQueue.removeOne(sessionId)) {
+                m_loadRemaining--;
+                m_loadHighWater--;
+            }
+
             beginRemoveRows(QModelIndex(), row, row);
             m_rows.erase(it);
             endRemoveRows();
-
-            m_loadQueue.removeOne(sessionId);
 
             anyRemoved = true;
 
@@ -517,6 +565,18 @@ bool SessionModel::removeSessions(const QList<QString> &sessionIds)
     }
 
     if (anyRemoved) {
+        // Clamp counters to zero (should never go negative)
+        if (m_saveHighWater <= 0) {
+            m_saveHighWater = 0;
+            m_saveRemaining = 0;
+        }
+        if (m_loadHighWater <= 0) {
+            m_loadHighWater = 0;
+            m_loadRemaining = 0;
+        }
+
+        emit saveProgressChanged(m_saveRemaining, m_saveHighWater);
+        emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
         emit modelChanged();
     }
 
@@ -552,7 +612,11 @@ SessionData &SessionModel::sessionRef(int row)
         sr.session->setVisible(sr.visible);
 
         // Remove from background queue to avoid double-loading
-        m_loadQueue.removeOne(sr.sessionId);
+        bool removed = m_loadQueue.removeOne(sr.sessionId);
+        if (removed) {
+            m_loadRemaining--;
+            emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
+        }
 
         // Emit sessionLoaded for consistency
         emit sessionLoaded(sr.sessionId);
@@ -692,27 +756,103 @@ bool SessionModel::removeAttribute(const QString &sessionId,
 
 void SessionModel::scheduleSave(const QString &sessionId)
 {
-    m_dirtySessions.insert(sessionId);
-    m_saveTimer.start();
+    int row = getSessionRow(sessionId);
+    if (row < 0) return;
+
+    SessionRow &sr = m_rows[row];
+    if (!sr.dirty) {
+        sr.dirty = true;
+        m_saveHighWater++;
+        m_saveRemaining++;
+    }
+    // else: row is already dirty, data is updated in memory,
+    // saver will save the current (modified) version when it reaches this row
+
+    if (!m_saveTimer.isActive()) {
+        m_loadTimer.stop();  // saver has priority over loader
+        m_saveTimer.start();
+    }
 }
 
 void SessionModel::flushDirtySessions()
 {
-    LogbookManager &logbook = LogbookManager::instance();
-    for (const QString &sessionId : std::as_const(m_dirtySessions)) {
-        int row = getSessionRow(sessionId);
-        if (row < 0) continue;
-        logbook.saveSession(sessionRef(row));
+    m_saveTimer.stop();
+    m_loadTimer.stop();
 
-        // Update cached column values for this session
-        const SessionRow &sr = m_rows[row];
+    LogbookManager &logbook = LogbookManager::instance();
+    bool anySaved = false;
+    for (int i = 0; i < m_rows.size(); ++i) {
+        SessionRow &sr = m_rows[i];
+        if (!sr.dirty)
+            continue;
+        logbook.saveSession(sessionRef(i));
         if (sr.isLoaded()) {
-            logbook.setCachedValues(sessionId, computeColumnValues(sr.session.value()));
+            logbook.setCachedValues(sr.sessionId, computeColumnValues(sr.session.value()));
+        }
+        sr.dirty = false;
+        anySaved = true;
+    }
+    if (anySaved) {
+        logbook.flushIndex();
+    }
+
+    // Reset high-water-mark counters (UI is about to be destroyed during shutdown)
+    m_saveHighWater = 0;
+    m_saveRemaining = 0;
+    m_loadHighWater = 0;
+    m_loadRemaining = 0;
+}
+
+void SessionModel::saveNextSession()
+{
+    // Find the first dirty row
+    int dirtyIdx = -1;
+    for (int i = 0; i < m_rows.size(); ++i) {
+        if (m_rows[i].dirty) {
+            dirtyIdx = i;
+            break;
         }
     }
-    if (!m_dirtySessions.isEmpty()) {
+
+    if (dirtyIdx < 0) {
+        // No dirty rows remain
+        LogbookManager::instance().flushIndex();
+        m_saveHighWater = 0;
+        m_saveRemaining = 0;
+        emit saveProgressChanged(0, 0);
+        // Resume loader if it has work
+        if (!m_loadQueue.isEmpty()) {
+            m_loadTimer.start();
+        }
+        return;
+    }
+
+    SessionRow &sr = m_rows[dirtyIdx];
+    LogbookManager &logbook = LogbookManager::instance();
+
+    logbook.saveSession(sessionRef(dirtyIdx));
+    if (sr.isLoaded()) {
+        logbook.setCachedValues(sr.sessionId, computeColumnValues(sr.session.value()));
+    }
+    sr.dirty = false;
+
+    m_saveRemaining--;
+    emit saveProgressChanged(m_saveRemaining, m_saveHighWater);
+
+    // Check if more dirty rows remain
+    bool hasDirty = std::any_of(m_rows.cbegin(), m_rows.cend(),
+                                [](const SessionRow &r) { return r.dirty; });
+    if (hasDirty) {
+        m_saveTimer.start();
+    } else {
+        // All saves complete; flush index and resume loader
         logbook.flushIndex();
-        m_dirtySessions.clear();
+        m_saveHighWater = 0;
+        m_saveRemaining = 0;
+        emit saveProgressChanged(0, 0);
+        if (!m_loadQueue.isEmpty()) {
+            m_loadTimer.start();
+        }
     }
 }
 
@@ -747,15 +887,35 @@ void SessionModel::startBackgroundLoader(const QMap<QString, double> &lastAccess
         return ta > tb;
     });
 
+    m_loadHighWater = m_loadQueue.size();
+    m_loadRemaining = m_loadQueue.size();
+
+    if (m_loadHighWater > 0) {
+        emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
+    }
+
     if (!m_loadQueue.isEmpty()) {
-        m_loadTimer.start();
+        // Only start if saver is idle
+        bool hasDirty = std::any_of(m_rows.cbegin(), m_rows.cend(),
+                                    [](const SessionRow &r) { return r.dirty; });
+        if (!hasDirty) {
+            m_loadTimer.start();
+        }
     }
 }
 
 void SessionModel::loadNextSession()
 {
+    // Saver has priority over loader
+    if (m_saveTimer.isActive()) {
+        return;
+    }
+
     if (m_loadQueue.isEmpty()) {
         LogbookManager::instance().flushIndex();
+        m_loadHighWater = 0;
+        m_loadRemaining = 0;
+        emit loadProgressChanged(0, 0);
         return;
     }
 
@@ -765,10 +925,15 @@ void SessionModel::loadNextSession()
     int rowIdx = getSessionRow(sessionId);
     if (rowIdx < 0) {
         // Session was removed; skip and continue
+        m_loadRemaining--;
+        emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
         if (!m_loadQueue.isEmpty()) {
             m_loadTimer.start();
         } else {
             LogbookManager::instance().flushIndex();
+            m_loadHighWater = 0;
+            m_loadRemaining = 0;
+            emit loadProgressChanged(0, 0);
         }
         return;
     }
@@ -777,10 +942,15 @@ void SessionModel::loadNextSession()
 
     // Already loaded (e.g. via on-demand sessionRef())
     if (sr.isLoaded()) {
+        m_loadRemaining--;
+        emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
         if (!m_loadQueue.isEmpty()) {
             m_loadTimer.start();
         } else {
             LogbookManager::instance().flushIndex();
+            m_loadHighWater = 0;
+            m_loadRemaining = 0;
+            emit loadProgressChanged(0, 0);
         }
         return;
     }
@@ -793,10 +963,15 @@ void SessionModel::loadNextSession()
     } else {
         qWarning() << "Background loader: failed to load session" << sessionId;
         // Leave as stub, flush or continue
+        m_loadRemaining--;
+        emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
         if (!m_loadQueue.isEmpty()) {
             m_loadTimer.start();
         } else {
             LogbookManager::instance().flushIndex();
+            m_loadHighWater = 0;
+            m_loadRemaining = 0;
+            emit loadProgressChanged(0, 0);
         }
         return;
     }
@@ -809,6 +984,9 @@ void SessionModel::loadNextSession()
     QModelIndex bottomRight = index(rowIdx, columnCount() - 1);
     emit dataChanged(topLeft, bottomRight, {Qt::DisplayRole});
 
+    m_loadRemaining--;
+    emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
+
     // Emit sessionLoaded (NOT modelChanged)
     emit sessionLoaded(sessionId);
 
@@ -817,6 +995,9 @@ void SessionModel::loadNextSession()
         m_loadTimer.start();
     } else {
         LogbookManager::instance().flushIndex();
+        m_loadHighWater = 0;
+        m_loadRemaining = 0;
+        emit loadProgressChanged(0, 0);
     }
 }
 

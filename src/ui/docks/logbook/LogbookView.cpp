@@ -15,13 +15,18 @@ LogbookView::LogbookView(SessionModel *model, QWidget *parent)
       treeView(new QTreeView(this)),
       model(model)
 {
-    m_progressBar = new QProgressBar(this);
-    m_progressBar->setVisible(false);
-    m_progressBar->setTextVisible(true);
+    m_saveProgressBar = new QProgressBar(this);
+    m_saveProgressBar->setVisible(false);
+    m_saveProgressBar->setTextVisible(true);
+
+    m_loadProgressBar = new QProgressBar(this);
+    m_loadProgressBar->setVisible(false);
+    m_loadProgressBar->setTextVisible(true);
 
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(treeView);
-    layout->addWidget(m_progressBar);
+    layout->addWidget(m_saveProgressBar);
+    layout->addWidget(m_loadProgressBar);
     setLayout(layout);
 
     setupView();
@@ -157,30 +162,28 @@ void LogbookView::selectSessions(const QList<QString> &sessionIds)
     }
 }
 
-void LogbookView::startProgress(int totalStubs)
+void LogbookView::onSaveProgressChanged(int remaining, int total)
 {
-    if (totalStubs <= 0)
+    if (total <= 0) {
+        m_saveProgressBar->setVisible(false);
         return;
-
-    m_totalStubs = totalStubs;
-    m_loadedCount = 0;
-    m_progressBar->setRange(0, totalStubs);
-    m_progressBar->setValue(0);
-    m_progressBar->setFormat(tr("Loading sessions: %v / %m"));
-    m_progressBar->setVisible(true);
+    }
+    m_saveProgressBar->setRange(0, total);
+    m_saveProgressBar->setValue(total - remaining);
+    m_saveProgressBar->setFormat(tr("Saving sessions: %v / %m"));
+    m_saveProgressBar->setVisible(true);
 }
 
-void LogbookView::onSessionLoaded()
+void LogbookView::onLoadProgressChanged(int remaining, int total)
 {
-    if (m_totalStubs <= 0)
+    if (total <= 0) {
+        m_loadProgressBar->setVisible(false);
         return;
-
-    ++m_loadedCount;
-    m_progressBar->setValue(m_loadedCount);
-
-    if (m_loadedCount >= m_totalStubs) {
-        m_progressBar->setVisible(false);
     }
+    m_loadProgressBar->setRange(0, total);
+    m_loadProgressBar->setValue(total - remaining);
+    m_loadProgressBar->setFormat(tr("Loading sessions: %v / %m"));
+    m_loadProgressBar->setVisible(true);
 }
 
 } // namespace FlySight
