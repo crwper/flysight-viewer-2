@@ -52,13 +52,20 @@ bool DataExporter::exportSession(const QString &filePath, const SessionData &ses
 
     // Data marker
     stream << "$DATA\n";
+    stream.flush();
 
-    // Data rows: for each sensor, write all samples
+    // Data rows: build into a QByteArray buffer, then write in bulk.
+    // This avoids per-value QTextStream overhead for double formatting.
+    QByteArray buf;
+    buf.reserve(1024 * 1024); // pre-allocate 1 MB
+
     for (const QString &sensorKey : sensors) {
         const QStringList columns = sessionData.measurementKeys(sensorKey);
         if (columns.isEmpty()) {
             continue;
         }
+
+        const QByteArray sensorPrefix = QByteArray("$") + sensorKey.toUtf8();
 
         // Determine sample count from the first column
         const QVector<double> firstCol = sessionData.getMeasurement(sensorKey, columns.first());
@@ -71,17 +78,28 @@ bool DataExporter::exportSession(const QString &filePath, const SessionData &ses
             columnData.append(sessionData.getMeasurement(sensorKey, col));
         }
 
+        const int numCols = columnData.size();
         for (int i = 0; i < sampleCount; ++i) {
-            stream << "$" << sensorKey;
-            for (int c = 0; c < columnData.size(); ++c) {
-                stream << "," << columnData[c][i];
+            buf.append(sensorPrefix);
+            for (int c = 0; c < numCols; ++c) {
+                buf.append(',');
+                buf.append(QByteArray::number(columnData[c][i], 'g', 15));
             }
-            stream << "\n";
+            buf.append('\n');
+
+            // Flush buffer periodically to avoid excessive memory use
+            if (buf.size() > 4 * 1024 * 1024) {
+                saveFile.write(buf);
+                buf.clear();
+            }
         }
     }
 
+    if (!buf.isEmpty()) {
+        saveFile.write(buf);
+    }
+
     // Flush and commit atomically
-    stream.flush();
     if (saveFile.error() != QFileDevice::NoError) {
         saveFile.cancelWriting();
         return false;
