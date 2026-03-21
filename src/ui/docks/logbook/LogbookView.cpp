@@ -162,6 +162,13 @@ void LogbookView::selectSessions(const QList<QString> &sessionIds)
     }
 }
 
+QSize LogbookView::minimumSizeHint() const
+{
+    // Return a constant to prevent KDDockWidgets from resizing the dock
+    // when progress bars are shown or hidden.
+    return QSize(0, 0);
+}
+
 void LogbookView::onSaveProgressChanged(int remaining, int total)
 {
     if (total <= 0) {

@@ -31,6 +31,8 @@ public slots:
 private slots:
     void onContextMenuRequested(const QPoint &pos);
 
+    QSize minimumSizeHint() const override;
+
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
 
