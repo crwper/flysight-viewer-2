@@ -1,7 +1,10 @@
 #ifndef SESSIONMODEL_H
 #define SESSIONMODEL_H
 
+#include <optional>
+
 #include <QAbstractTableModel>
+#include <QMap>
 #include <QSet>
 #include <QTimer>
 #include <QVector>
@@ -9,6 +12,15 @@
 #include "sessiondata.h"
 
 namespace FlySight {
+
+struct SessionRow {
+    QString sessionId;
+    QMap<int, QVariant> cachedValues;  // column index -> cached value from index
+    std::optional<SessionData> session; // std::nullopt = stub, has_value = loaded
+    bool visible = false;  // all sessions default to not visible
+
+    bool isLoaded() const { return session.has_value(); }
+};
 
 class SessionModel : public QAbstractTableModel
 {
@@ -36,8 +48,13 @@ public:
 
     void setRowsVisibility(const QMap<int, bool>& rowVisibility);
 
-    const QVector<SessionData>& getAllSessions() const;
+    const SessionRow& rowAt(int row) const;
+    SessionRow& rowAt(int row);
     SessionData &sessionRef(int row);
+
+    // Populate model from cached index data (stubs only, no CSV parsing)
+    void populateFromIndex(const QMap<QString, QMap<int, QVariant>> &cachedValues,
+                           const QMap<QString, double> &lastAccessed);
 
     // Hovered session management
     QString hoveredSessionId() const;
@@ -55,13 +72,20 @@ public:
     // Enable sorting
     void sort(int column, Qt::SortOrder order = Qt::AscendingOrder) override;
 
+    // Start background loading of all stub sessions, ordered by lastAccessed descending
+    void startBackgroundLoader(const QMap<QString, double> &lastAccessed);
+
+    // Flush dirty sessions to disk (public so MainWindow can call on shutdown)
+    void flushDirtySessions();
+
 signals:
     void modelChanged();
+    void sessionLoaded(const QString &sessionId);
     void hoveredSessionChanged(const QString& sessionId);
     void dependencyChanged(const QString &sessionId, const DependencyKey &key);
 
 private:
-    QVector<SessionData> m_sessionData;
+    QVector<SessionRow> m_rows;
     QVector<LogbookColumn> m_columns;
     QString m_hoveredSessionId;
 
@@ -70,15 +94,23 @@ private:
     QSet<QString> m_dirtySessions;
     void scheduleSave(const QString &sessionId);
 
+    // Background loader
+    QTimer m_loadTimer;
+    QVector<QString> m_loadQueue;  // session IDs ordered by lastAccessed descending
+
     // Formatting helpers for data()
     QVariant formatAttributeValue(const SessionData &session, const LogbookColumn &col) const;
     QVariant formatMeasurementValue(const SessionData &session, const LogbookColumn &col) const;
     QVariant formatDeltaValue(const SessionData &session, const LogbookColumn &col) const;
+    QVariant formatRawValue(const QVariant &rawValue, const LogbookColumn &col) const;
     QString columnUnitLabel(const LogbookColumn &col) const;
+
+    // Extract raw column values from a loaded session (used by index maintenance)
+    QMap<LogbookColumn, QVariant> computeColumnValues(const SessionData &session) const;
 
 private slots:
     void rebuildColumns();
-    void flushDirtySessions();
+    void loadNextSession();
 };
 
 } // namespace FlySight

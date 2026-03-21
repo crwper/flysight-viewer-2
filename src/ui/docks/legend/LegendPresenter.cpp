@@ -186,15 +186,14 @@ void LegendPresenter::recompute()
         return;
     }
 
-    const QVector<SessionData> &sessions = m_sessionModel->getAllSessions();
-
     // Build a fast id -> session lookup.
     QHash<QString, const SessionData *> sessionById;
-    sessionById.reserve(sessions.size());
-    for (const auto &s : sessions) {
-        const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
-        if (!sid.isEmpty()) {
-            sessionById.insert(sid, &s);
+    sessionById.reserve(m_sessionModel->rowCount());
+    for (int si = 0; si < m_sessionModel->rowCount(); ++si) {
+        const SessionRow &sr = m_sessionModel->rowAt(si);
+        if (!sr.isLoaded()) continue;
+        if (!sr.sessionId.isEmpty()) {
+            sessionById.insert(sr.sessionId, &sr.session.value());
         }
     }
 
@@ -213,14 +212,16 @@ void LegendPresenter::recompute()
         }
     } else {
         // Auto-visible-overlap: derive from visible sessions that overlap at the moment's position.
-        for (const auto &s : sessions) {
-            if (!s.isVisible())
+        for (int si = 0; si < m_sessionModel->rowCount(); ++si) {
+            const SessionRow &sr = m_sessionModel->rowAt(si);
+            if (!sr.isLoaded() || !sr.visible)
                 continue;
 
-            const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
+            const QString &sid = sr.sessionId;
             if (sid.isEmpty())
                 continue;
 
+            const SessionData &s = sr.session.value();
             const auto utcOpt = utcSecondsForMoment(moment, s);
             if (!utcOpt.has_value())
                 continue;

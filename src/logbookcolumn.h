@@ -53,6 +53,16 @@ struct LogbookColumn {
             && enabled == other.enabled
             && customLabel == other.customLabel;
     }
+
+    bool operator<(const LogbookColumn &other) const {
+        if (type != other.type) return type < other.type;
+        if (attributeKey != other.attributeKey) return attributeKey < other.attributeKey;
+        if (sensorID != other.sensorID) return sensorID < other.sensorID;
+        if (measurementID != other.measurementID) return measurementID < other.measurementID;
+        if (measurementType != other.measurementType) return measurementType < other.measurementType;
+        if (markerAttributeKey != other.markerAttributeKey) return markerAttributeKey < other.markerAttributeKey;
+        return marker2AttributeKey < other.marker2AttributeKey;
+    }
 };
 
 /// Auto-generated display name based on column type and registry lookups

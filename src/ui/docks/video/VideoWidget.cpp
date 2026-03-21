@@ -658,12 +658,13 @@ void VideoWidget::rebuildSessionSelector()
     int selectIndex = -1;
     int visibleCount = 0;
 
-    const QVector<SessionData> &sessions = m_sessionModel->getAllSessions();
-    for (const SessionData &s : sessions) {
-        if (!s.isVisible())
+    for (int si = 0; si < m_sessionModel->rowCount(); ++si) {
+        const SessionRow &sr = m_sessionModel->rowAt(si);
+        if (!sr.isLoaded() || !sr.visible)
             continue;
 
-        const QString id = s.getAttribute(SessionKeys::SessionId).toString();
+        const SessionData &s = sr.session.value();
+        const QString id = sr.sessionId;
         if (id.isEmpty())
             continue;
 

@@ -147,11 +147,12 @@ void TrackMapModel::rebuild()
     double minLat = 0.0, maxLat = 0.0, minLon = 0.0, maxLon = 0.0;
 
     if (m_sessionModel) {
-        const auto &sessions = m_sessionModel->getAllSessions();
-
-        for (const auto &session : sessions) {
-            if (!session.isVisible())
+        for (int si = 0; si < m_sessionModel->rowCount(); ++si) {
+            const SessionRow &sr = m_sessionModel->rowAt(si);
+            if (!sr.isLoaded() || !sr.visible)
                 continue;
+
+            const SessionData &session = sr.session.value();
 
             const QVector<double> lat =
                 session.getMeasurement(QString::fromLatin1(kDefaultSensor), QString::fromLatin1(kLatKey));

@@ -292,7 +292,6 @@ void MapCursorDotModel::rebuild()
 
     if (m_sessionModel && m_momentModel) {
         const auto moments = m_momentModel->enabledMoments();
-        const auto &sessions = m_sessionModel->getAllSessions();
 
         for (const MomentModel::Moment &moment : moments) {
             // Skip moments with no map presence
@@ -304,12 +303,13 @@ void MapCursorDotModel::rebuild()
                                        ? m_largeDotSize
                                        : m_smallDotSize;
 
-            for (const auto &session : sessions) {
-                if (!session.isVisible())
+            for (int si = 0; si < m_sessionModel->rowCount(); ++si) {
+                const SessionRow &sr = m_sessionModel->rowAt(si);
+                if (!sr.isLoaded() || !sr.visible)
                     continue;
 
-                const QString sessionId =
-                    session.getAttribute(SessionKeys::SessionId).toString();
+                const SessionData &session = sr.session.value();
+                const QString sessionId = sr.sessionId;
 
                 if (sessionId.isEmpty())
                     continue;

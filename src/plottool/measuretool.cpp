@@ -222,10 +222,11 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
 
         // Build session lookup.
         QHash<QString, const SessionData *> sessionById;
-        for (const auto &s : m_model->getAllSessions()) {
-            const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
-            if (visibleSessionIds.contains(sid))
-                sessionById.insert(sid, &s);
+        for (int si = 0; si < m_model->rowCount(); ++si) {
+            const SessionRow &sr = m_model->rowAt(si);
+            if (!sr.isLoaded()) continue;
+            if (visibleSessionIds.contains(sr.sessionId))
+                sessionById.insert(sr.sessionId, &sr.session.value());
         }
 
         if (sessionById.isEmpty()) {
@@ -315,11 +316,11 @@ void MeasureTool::updateMeasurement(const QPoint &currentPixel)
 
     // Find the locked session.
     const SessionData *session = nullptr;
-    for (const auto &s : m_model->getAllSessions()) {
-        if (s.getAttribute(SessionKeys::SessionId).toString() == m_lockedSessionId) {
-            session = &s;
-            break;
-        }
+    int lockedRow = m_model->getSessionRow(m_lockedSessionId);
+    if (lockedRow >= 0) {
+        const SessionRow &sr = m_model->rowAt(lockedRow);
+        if (sr.isLoaded())
+            session = &sr.session.value();
     }
     if (!session) {
         m_measureModel->clear();

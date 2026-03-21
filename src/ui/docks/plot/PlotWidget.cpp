@@ -285,11 +285,11 @@ void PlotWidget::revertToPrimaryTool()
 void PlotWidget::zoomToExtent()
 {
     // Use all visible sessions
-    const QVector<SessionData> &allSessions = model->getAllSessions();
     QVector<SessionData> visible;
-    for (const SessionData &s : allSessions) {
-        if (s.isVisible())
-            visible.append(s);
+    for (int i = 0; i < model->rowCount(); ++i) {
+        const SessionRow &row = model->rowAt(i);
+        if (!row.isLoaded() || !row.visible) continue;
+        visible.append(row.session.value());
     }
     zoomToExtent(visible);
 }
@@ -392,7 +392,7 @@ double PlotWidget::xCoordToUtcSeconds(double xCoord, const QString &sessionId) c
     if (row < 0)
         return 0.0;
 
-    const SessionData &session = model->getAllSessions().at(row);
+    const SessionData &session = model->sessionRef(row);
     auto offset = referenceOffsetForSession(session);
     if (!offset.has_value())
         return 0.0;
@@ -417,8 +417,6 @@ void PlotWidget::updatePlot()
         customPlot->axisRect()->removeAxis(axis);
     }
 
-    // Retrieve all session data
-    const QVector<SessionData> &sessions = model->getAllSessions();
     QString hoveredSessionId = model->hoveredSessionId(); // Retrieve hovered session ID
 
     // Add graphs for each enabled plot
@@ -498,12 +496,14 @@ void PlotWidget::updatePlot()
         QCPAxis *assignedYAxis = m_plotValueAxes.value(plotValueID);
 
         // Add graphs for each visible session
-        for (const auto &session : sessions) {
-            if (!session.isVisible()) {
+        for (int si = 0; si < model->rowCount(); ++si) {
+            const SessionRow &sr = model->rowAt(si);
+            if (!sr.isLoaded() || !sr.visible)
                 continue;
-            }
 
-            QVector<double> yData = const_cast<SessionData &>(session).getMeasurement(sensorID, measurementID);
+            SessionData &session = model->sessionRef(si);
+
+            QVector<double> yData = session.getMeasurement(sensorID, measurementID);
             if (yData.isEmpty()) {
                 qWarning() << "No data available for plot:" << plotName << "in session:" << session.getAttribute(SessionKeys::SessionId);
                 continue;
@@ -513,7 +513,7 @@ void PlotWidget::updatePlot()
             if (!offset.has_value())
                 continue;  // session lacks reference marker value; skip it
 
-            QVector<double> xData = const_cast<SessionData &>(session).getMeasurement(sensorID, m_xVariable);
+            QVector<double> xData = session.getMeasurement(sensorID, m_xVariable);
             if (xData.isEmpty() || xData.size() != yData.size()) {
                 qWarning() << "Time and measurement data size mismatch for session:" << session.getAttribute(SessionKeys::SessionId);
                 continue;
@@ -796,11 +796,12 @@ void PlotWidget::onReferenceMarkerKeyChanged(const QString &oldKey, const QStrin
     double newUpper = std::numeric_limits<double>::lowest();
     bool hasValid = false;
 
-    const QVector<SessionData> &sessions = model->getAllSessions();
-    for (const SessionData &session : sessions) {
-        if (!session.isVisible())
+    for (int si = 0; si < model->rowCount(); ++si) {
+        const SessionRow &sr = model->rowAt(si);
+        if (!sr.isLoaded() || !sr.visible)
             continue;
 
+        const SessionData &session = sr.session.value();
         auto oldOffset = markerOffsetSeconds(session, oldKey, m_xVariable);
         auto newOffset = markerOffsetSeconds(session, newKey, m_xVariable);
         if (!oldOffset.has_value() || !newOffset.has_value())
@@ -1081,13 +1082,18 @@ const SessionData* PlotWidget::referenceSession() const
     // 1. hovered?
     QString hovered = model->hoveredSessionId();
     if (!hovered.isEmpty()) {
-        for (const auto& s : model->getAllSessions())
-            if (s.getAttribute(SessionKeys::SessionId).toString() == hovered)
-                return &s;
+        for (int i = 0; i < model->rowCount(); ++i) {
+            const SessionRow &row = model->rowAt(i);
+            if (row.isLoaded() && row.sessionId == hovered)
+                return &row.session.value();
+        }
     }
     // 2. first visible
-    for (const auto& s : model->getAllSessions())
-        if (s.isVisible()) return &s;
+    for (int i = 0; i < model->rowCount(); ++i) {
+        const SessionRow &row = model->rowAt(i);
+        if (row.isLoaded() && row.visible)
+            return &row.session.value();
+    }
 
     return nullptr;           // should not happen
 }
@@ -1264,11 +1270,14 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
         };
 
         QVector<DrawableInstance> drawable;
-        drawable.reserve(model->getAllSessions().size());
+        drawable.reserve(model->rowCount());
 
-        for (const auto &s : model->getAllSessions()) {
-            if (!s.isVisible())
+        for (int si = 0; si < model->rowCount(); ++si) {
+            const SessionRow &sr = model->rowAt(si);
+            if (!sr.isLoaded() || !sr.visible)
                 continue;
+
+            const SessionData &s = sr.session.value();
 
             double markerUtcSeconds = 0.0;
             if (!tryAttributeUtcSeconds(s, def.attributeKey, &markerUtcSeconds))
@@ -1286,7 +1295,7 @@ void PlotWidget::updateReferenceMarkers(UpdateMode mode)
             DrawableInstance di;
             di.xPixel = customPlot->xAxis->coordToPixel(xCoord);
             di.markerUtcSeconds = markerUtcSeconds;
-            di.sessionId = s.getAttribute(SessionKeys::SessionId).toString();
+            di.sessionId = sr.sessionId;
             drawable.append(di);
         }
 
@@ -1686,15 +1695,14 @@ void PlotWidget::updateCrosshairFromMoments()
         return;
     }
 
-    const QVector<SessionData> &sessions = model->getAllSessions();
-
     // Build a fast id -> session lookup.
     QHash<QString, const SessionData *> sessionById;
-    sessionById.reserve(sessions.size());
-    for (const auto &s : sessions) {
-        const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
-        if (!sid.isEmpty())
-            sessionById.insert(sid, &s);
+    sessionById.reserve(model->rowCount());
+    for (int si = 0; si < model->rowCount(); ++si) {
+        const SessionRow &sr = model->rowAt(si);
+        if (!sr.isLoaded()) continue;
+        if (!sr.sessionId.isEmpty())
+            sessionById.insert(sr.sessionId, &sr.session.value());
     }
 
     // Convert moment UTC position to plot-axis coordinate for a given session.
@@ -1774,14 +1782,16 @@ void PlotWidget::updateCrosshairFromMoments()
         }
     } else if (effective->traits.positionSource == PositionSource::Attribute) {
         // Attribute-sourced without explicit targets: all visible sessions
-        for (const auto &s : sessions) {
-            if (!s.isVisible())
+        for (int si = 0; si < model->rowCount(); ++si) {
+            const SessionRow &sr = model->rowAt(si);
+            if (!sr.isLoaded() || !sr.visible)
                 continue;
 
-            const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
+            const QString &sid = sr.sessionId;
             if (sid.isEmpty())
                 continue;
 
+            const SessionData &s = sr.session.value();
             double xPlot = 0.0;
             if (!xPlotForMoment(*effective, s, &xPlot))
                 continue;
@@ -1790,14 +1800,16 @@ void PlotWidget::updateCrosshairFromMoments()
         }
     } else {
         // Non-attribute without explicit targets: all visible sessions that overlap
-        for (const auto &s : sessions) {
-            if (!s.isVisible())
+        for (int si = 0; si < model->rowCount(); ++si) {
+            const SessionRow &sr = model->rowAt(si);
+            if (!sr.isLoaded() || !sr.visible)
                 continue;
 
-            const QString sid = s.getAttribute(SessionKeys::SessionId).toString();
+            const QString &sid = sr.sessionId;
             if (sid.isEmpty())
                 continue;
 
+            const SessionData &s = sr.session.value();
             double xPlot = 0.0;
             if (!xPlotForMoment(*effective, s, &xPlot))
                 continue;
@@ -1932,10 +1944,12 @@ void PlotWidget::updateMomentVLines()
 
         if (moment.traits.positionSource == PositionSource::Attribute) {
             // Use the first visible session that has the attribute
-            for (const auto &s : model->getAllSessions()) {
-                if (!s.isVisible())
+            for (int si = 0; si < model->rowCount(); ++si) {
+                const SessionRow &sr = model->rowAt(si);
+                if (!sr.isLoaded() || !sr.visible)
                     continue;
 
+                const SessionData &s = sr.session.value();
                 QVariant v = s.getAttribute(moment.traits.attributeKey);
                 if (!v.canConvert<double>())
                     continue;

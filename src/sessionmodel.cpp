@@ -18,7 +18,7 @@ SessionModel::SessionModel(QObject *parent)
             this, &SessionModel::rebuildColumns);
 
     connect(&UnitConverter::instance(), &UnitConverter::systemChanged, this, [this]() {
-        if (m_sessionData.isEmpty() || m_columns.isEmpty()) return;
+        if (m_rows.isEmpty() || m_columns.isEmpty()) return;
         emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1), {Qt::DisplayRole});
         emit headerDataChanged(Qt::Horizontal, 0, columnCount() - 1);
     });
@@ -26,6 +26,10 @@ SessionModel::SessionModel(QObject *parent)
     m_saveTimer.setSingleShot(true);
     m_saveTimer.setInterval(0);
     connect(&m_saveTimer, &QTimer::timeout, this, &SessionModel::flushDirtySessions);
+
+    m_loadTimer.setSingleShot(true);
+    m_loadTimer.setInterval(0);
+    connect(&m_loadTimer, &QTimer::timeout, this, &SessionModel::loadNextSession);
 
     rebuildColumns();
 }
@@ -35,12 +39,23 @@ void SessionModel::rebuildColumns()
     beginResetModel();
     m_columns = LogbookColumnStore::instance().enabledColumns();
     endResetModel();
+
+    // Update cached values for all loaded sessions to reflect new column set
+    LogbookManager &logbook = LogbookManager::instance();
+    for (const SessionRow &row : std::as_const(m_rows)) {
+        if (row.isLoaded()) {
+            logbook.setCachedValues(row.sessionId, computeColumnValues(row.session.value()));
+        }
+    }
+    if (!m_rows.isEmpty()) {
+        logbook.flushIndex();
+    }
 }
 
 int SessionModel::rowCount(const QModelIndex &parent) const
 {
     Q_UNUSED(parent);
-    return m_sessionData.size();
+    return m_rows.size();
 }
 
 int SessionModel::columnCount(const QModelIndex &parent) const {
@@ -123,39 +138,98 @@ QVariant SessionModel::formatDeltaValue(const SessionData &session, const Logboo
     return UnitConverter::instance().formatValue(delta, col.measurementType);
 }
 
-QVariant SessionModel::data(const QModelIndex &index, int role) const {
-    if (!index.isValid() || index.row() >= m_sessionData.size() || index.column() >= m_columns.size())
+QVariant SessionModel::formatRawValue(const QVariant &rawValue, const LogbookColumn &col) const
+{
+    if (!rawValue.isValid())
         return QVariant();
 
-    const SessionData &item = m_sessionData.at(index.row());
+    switch (col.type) {
+    case ColumnType::SessionAttribute: {
+        const auto *def = AttributeRegistry::instance().findByKey(col.attributeKey);
+        AttributeFormatType formatType = def ? def->formatType : AttributeFormatType::Text;
+
+        switch (formatType) {
+        case AttributeFormatType::Text:
+            return rawValue.toString();
+
+        case AttributeFormatType::DateTime: {
+            bool ok = false;
+            double utcSeconds = rawValue.toDouble(&ok);
+            if (!ok) return QVariant();
+            QDateTime dt = QDateTime::fromMSecsSinceEpoch(
+                qint64(utcSeconds * 1000.0), QTimeZone::utc());
+            return dt.toString("yyyy/MM/dd HH:mm:ss");
+        }
+
+        case AttributeFormatType::Duration: {
+            bool ok = false;
+            double durationSec = rawValue.toDouble(&ok);
+            if (!ok) return QVariant();
+            int totalSec = static_cast<int>(durationSec);
+            int minutes = totalSec / 60;
+            int seconds = totalSec % 60;
+            return QString("%1:%2").arg(minutes).arg(seconds, 2, 10, QChar('0'));
+        }
+
+        case AttributeFormatType::Double: {
+            bool ok = false;
+            double val = rawValue.toDouble(&ok);
+            if (!ok) return QVariant();
+            if (def && !def->measurementType.isEmpty())
+                return UnitConverter::instance().formatValue(val, def->measurementType);
+            return QString::number(val);
+        }
+        }
+        break;
+    }
+    case ColumnType::MeasurementAtMarker:
+    case ColumnType::Delta:
+        return UnitConverter::instance().formatValue(rawValue.toDouble(), col.measurementType);
+    }
+
+    return QVariant();
+}
+
+QVariant SessionModel::data(const QModelIndex &index, int role) const {
+    if (!index.isValid() || index.row() >= m_rows.size() || index.column() >= m_columns.size())
+        return QVariant();
+
+    const SessionRow &row = m_rows.at(index.row());
     const LogbookColumn &col = m_columns[index.column()];
 
     switch (role) {
     case Qt::DisplayRole:
     case Qt::EditRole:
-        switch (col.type) {
-        case ColumnType::SessionAttribute:
-            return formatAttributeValue(item, col);
-        case ColumnType::MeasurementAtMarker:
-            return formatMeasurementValue(item, col);
-        case ColumnType::Delta:
-            return formatDeltaValue(item, col);
+        if (row.isLoaded()) {
+            // Loaded row: use existing formatting logic
+            const SessionData &item = row.session.value();
+            switch (col.type) {
+            case ColumnType::SessionAttribute:
+                return formatAttributeValue(item, col);
+            case ColumnType::MeasurementAtMarker:
+                return formatMeasurementValue(item, col);
+            case ColumnType::Delta:
+                return formatDeltaValue(item, col);
+            }
+        } else {
+            // Stub row: use cached values
+            QVariant cached = row.cachedValues.value(index.column());
+            if (!cached.isValid())
+                return QVariant();
+            return formatRawValue(cached, col);
         }
         break;
 
     case Qt::CheckStateRole:
         // Handle checkbox only for the first column
         if (index.column() == 0) {
-            bool visible = item.isVisible();
-            return visible ? Qt::Checked : Qt::Unchecked;
+            return row.visible ? Qt::Checked : Qt::Unchecked;
         }
         break;
 
     case CustomRoles::IsHoveredRole:
-    {
-        QString currentSessionId = item.getAttribute(SessionKeys::SessionId).toString();
-        return (currentSessionId == m_hoveredSessionId);
-    }
+        return (row.sessionId == m_hoveredSessionId);
+
     default:
         break;
     }
@@ -201,10 +275,10 @@ Qt::ItemFlags SessionModel::flags(const QModelIndex &index) const {
 }
 
 bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int role) {
-    if (!index.isValid() || index.row() >= m_sessionData.size() || index.column() >= m_columns.size())
+    if (!index.isValid() || index.row() >= m_rows.size() || index.column() >= m_columns.size())
         return false;
 
-    SessionData &item = m_sessionData[index.row()];
+    SessionRow &sr = m_rows[index.row()];
     const LogbookColumn &col = m_columns[index.column()];
 
     bool somethingChanged = false;
@@ -213,11 +287,27 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
     if (role == Qt::CheckStateRole && index.column() == 0) {
         // Update visibility based on the checkbox
         bool newVisible = (value.toInt() == Qt::Checked);
-        if (item.isVisible() != newVisible) {
-            item.setVisible(newVisible);
+        if (sr.visible != newVisible) {
+            sr.visible = newVisible;
+            // Force-load if setting visible on a stub
+            if (newVisible && !sr.isLoaded()) {
+                sessionRef(index.row());
+            }
+            // Sync to loaded SessionData if present
+            if (sr.isLoaded()) {
+                sr.session->setVisible(newVisible);
+            }
+            // Update lastAccessed when toggling visibility to true
+            if (newVisible) {
+                double now = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch() / 1000.0;
+                LogbookManager::instance().setLastAccessed(sr.sessionId, now);
+            }
             somethingChanged = true;
         }
     } else if (role == Qt::EditRole && col.type == ColumnType::SessionAttribute) {
+        // Force-load before editing
+        SessionData &item = sessionRef(index.row());
+
         // Look up the attribute definition
         const auto *def = AttributeRegistry::instance().findByKey(col.attributeKey);
         if (!def || !def->editable)
@@ -258,9 +348,8 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
         emit dataChanged(index, index, {role});
         emit modelChanged();
         if (attributeChanged) {
-            QString sessionId = item.getAttribute(SessionKeys::SessionId).toString();
-            if (!sessionId.isEmpty())
-                scheduleSave(sessionId);
+            if (!sr.sessionId.isEmpty())
+                scheduleSave(sr.sessionId);
         }
         return true;
     }
@@ -282,34 +371,78 @@ void SessionModel::mergeSessions(const QList<SessionData>& sessions)
 
         QString newSessionID = newSession.getAttribute(SessionKeys::SessionId).toString();
 
-        auto sessionIt = std::find_if(
-            m_sessionData.begin(), m_sessionData.end(),
-            [&newSessionID](const SessionData &item) {
-                return item.getAttribute(SessionKeys::SessionId) == newSessionID;
+        auto rowIt = std::find_if(
+            m_rows.begin(), m_rows.end(),
+            [&newSessionID](const SessionRow &row) {
+                return row.sessionId == newSessionID;
             });
 
-        if (sessionIt != m_sessionData.end()) {
-            // Merge into existing session
-            SessionData &existingSession = *sessionIt;
+        if (rowIt != m_rows.end()) {
+            // Found existing row
+            if (rowIt->isLoaded()) {
+                // Merge into existing loaded session
+                SessionData &existingSession = rowIt->session.value();
 
-            for (const QString &attributeKey : newSession.attributeKeys()) {
-                existingSession.setAttribute(attributeKey, newSession.getAttribute(attributeKey));
-            }
-
-            for (const QString &sensorKey : newSession.sensorKeys()) {
-                for (const QString &measurementKey : newSession.measurementKeys(sensorKey)) {
-                    existingSession.setMeasurement(sensorKey, measurementKey,
-                        newSession.getMeasurement(sensorKey, measurementKey));
+                for (const QString &attributeKey : newSession.attributeKeys()) {
+                    existingSession.setAttribute(attributeKey, newSession.getAttribute(attributeKey));
                 }
-            }
 
-            qDebug() << "Merged SessionData with SESSION_ID:" << newSessionID;
+                for (const QString &sensorKey : newSession.sensorKeys()) {
+                    for (const QString &measurementKey : newSession.measurementKeys(sensorKey)) {
+                        existingSession.setMeasurement(sensorKey, measurementKey,
+                            newSession.getMeasurement(sensorKey, measurementKey));
+                    }
+                }
+
+                qDebug() << "Merged SessionData into loaded row with SESSION_ID:" << newSessionID;
+            } else {
+                // Replace stub with loaded data
+                rowIt->session = newSession;
+                rowIt->visible = newSession.isVisible();
+                rowIt->session->setVisible(rowIt->visible);
+                qDebug() << "Replaced stub with loaded SessionData for SESSION_ID:" << newSessionID;
+            }
         } else {
-            // Add as new session
-            m_sessionData.append(newSession);
+            // Add as new loaded row
+            SessionRow newRow;
+            newRow.sessionId = newSessionID;
+            newRow.session = newSession;
+            newRow.visible = newSession.isVisible();
+            newRow.session->setVisible(newRow.visible);
+            m_rows.append(std::move(newRow));
             qDebug() << "Added new SessionData with SESSION_ID:" << newSessionID;
         }
     }
+    endResetModel();
+
+    // Cache column values for all loaded sessions so the index is populated
+    LogbookManager &logbook = LogbookManager::instance();
+    for (const SessionRow &row : std::as_const(m_rows)) {
+        if (row.isLoaded()) {
+            logbook.setCachedValues(row.sessionId, computeColumnValues(row.session.value()));
+        }
+    }
+
+    emit modelChanged();
+}
+
+void SessionModel::populateFromIndex(const QMap<QString, QMap<int, QVariant>> &cachedValues,
+                                     const QMap<QString, double> &lastAccessed)
+{
+    Q_UNUSED(lastAccessed);
+
+    beginResetModel();
+    m_rows.clear();
+
+    for (auto it = cachedValues.constBegin(); it != cachedValues.constEnd(); ++it) {
+        SessionRow row;
+        row.sessionId = it.key();
+        row.cachedValues = it.value();
+        row.session = std::nullopt;
+        row.visible = false;
+        m_rows.append(std::move(row));
+    }
+
     endResetModel();
     emit modelChanged();
 }
@@ -321,12 +454,25 @@ void SessionModel::setRowsVisibility(const QMap<int, bool>& rowVisibility)
 
     int minRow = INT_MAX;
     int maxRow = 0;
+    double now = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch() / 1000.0;
 
     for (auto it = rowVisibility.constBegin(); it != rowVisibility.constEnd(); ++it) {
         int row = it.key();
         bool visible = it.value();
-        if (row >= 0 && row < m_sessionData.size()) {
-            m_sessionData[row].setVisible(visible);
+        if (row >= 0 && row < m_rows.size()) {
+            m_rows[row].visible = visible;
+            // Force-load if setting visible on a stub
+            if (visible && !m_rows[row].isLoaded()) {
+                sessionRef(row);
+            }
+            // Sync to loaded SessionData if present
+            if (m_rows[row].isLoaded()) {
+                m_rows[row].session->setVisible(visible);
+            }
+            // Update lastAccessed when toggling visibility to true
+            if (visible) {
+                LogbookManager::instance().setLastAccessed(m_rows[row].sessionId, now);
+            }
             minRow = std::min(minRow, row);
             maxRow = std::max(maxRow, row);
         }
@@ -345,22 +491,22 @@ bool SessionModel::removeSessions(const QList<QString> &sessionIds)
 
     bool anyRemoved = false;
 
-    // Iterate over the list of SESSION_IDs to remove
     for (const QString &sessionId : sessionIds) {
-        // Find the session in m_sessionData
         auto it = std::find_if(
-            m_sessionData.begin(),
-            m_sessionData.end(),
-            [&sessionId](const SessionData &item) {
-                return item.getAttribute(SessionKeys::SessionId).toString() == sessionId;
+            m_rows.begin(),
+            m_rows.end(),
+            [&sessionId](const SessionRow &row) {
+                return row.sessionId == sessionId;
             });
 
-        if (it != m_sessionData.end()) {
-            int row = it - m_sessionData.begin();
+        if (it != m_rows.end()) {
+            int row = it - m_rows.begin();
 
             beginRemoveRows(QModelIndex(), row, row);
-            m_sessionData.erase(it);
+            m_rows.erase(it);
             endRemoveRows();
+
+            m_loadQueue.removeOne(sessionId);
 
             anyRemoved = true;
 
@@ -377,15 +523,41 @@ bool SessionModel::removeSessions(const QList<QString> &sessionIds)
     return anyRemoved;
 }
 
-const QVector<SessionData>& SessionModel::getAllSessions() const
+const SessionRow& SessionModel::rowAt(int row) const
 {
-    return m_sessionData;
+    Q_ASSERT(row >= 0 && row < m_rows.size());
+    return m_rows.at(row);
+}
+
+SessionRow& SessionModel::rowAt(int row)
+{
+    Q_ASSERT(row >= 0 && row < m_rows.size());
+    return m_rows[row];
 }
 
 SessionData &SessionModel::sessionRef(int row)
 {
-    Q_ASSERT(row >= 0 && row < m_sessionData.size());
-    return m_sessionData[row];
+    Q_ASSERT(row >= 0 && row < m_rows.size());
+    SessionRow &sr = m_rows[row];
+    if (!sr.isLoaded()) {
+        auto loaded = LogbookManager::instance().loadSession(sr.sessionId);
+        if (loaded.has_value()) {
+            sr.session = std::move(loaded.value());
+        } else {
+            qWarning() << "SessionModel::sessionRef: failed to load session"
+                        << sr.sessionId << "- creating empty SessionData";
+            sr.session = SessionData();
+        }
+        // Sync visibility from SessionRow to the newly loaded SessionData
+        sr.session->setVisible(sr.visible);
+
+        // Remove from background queue to avoid double-loading
+        m_loadQueue.removeOne(sr.sessionId);
+
+        // Emit sessionLoaded for consistency
+        emit sessionLoaded(sr.sessionId);
+    }
+    return sr.session.value();
 }
 
 QString SessionModel::hoveredSessionId() const
@@ -395,8 +567,8 @@ QString SessionModel::hoveredSessionId() const
 
 int SessionModel::getSessionRow(const QString& sessionId) const
 {
-    for(int row = 0; row < m_sessionData.size(); ++row){
-        if(m_sessionData[row].getAttribute(SessionKeys::SessionId) == sessionId){
+    for (int row = 0; row < m_rows.size(); ++row) {
+        if (m_rows[row].sessionId == sessionId) {
             return row;
         }
     }
@@ -447,31 +619,32 @@ bool SessionModel::updateAttribute(const QString &sessionId,
         return false;
     }
 
-    // 2. Retrieve the existing value
-    SessionData &session = m_sessionData[row];
+    // 2. Force-load before mutating
+    SessionData &session = sessionRef(row);
+
+    // 3. Retrieve the existing value
     QVariant oldValue = session.getAttribute(attributeKey);
 
-    // 3. Check if there's actually a change
+    // 4. Check if there's actually a change
     if (oldValue == newValue) {
         return false;  // Nothing to update
     }
 
-    // 4. Update the attribute in SessionData (captures all BFS-visited keys)
+    // 5. Update the attribute in SessionData (captures all BFS-visited keys)
     QSet<DependencyKey> visitedKeys = session.setAttribute(attributeKey, newValue);
 
-    // 5. Notify views that data has changed
-    //    (Emit dataChanged for all columns in this row to ensure full refresh.)
+    // 6. Notify views that data has changed
     QModelIndex topLeft = index(row, 0);
     QModelIndex bottomRight = index(row, columnCount() - 1);
     emit dataChanged(topLeft, bottomRight,
                      {Qt::DisplayRole, Qt::EditRole, Qt::CheckStateRole});
 
-    // 6. Emit fine-grained dependencyChanged for each key visited during BFS invalidation
+    // 7. Emit fine-grained dependencyChanged for each key visited during BFS invalidation
     for (const DependencyKey &key : visitedKeys) {
         emit dependencyChanged(sessionId, key);
     }
 
-    // 7. Schedule deferred logbook save
+    // 8. Schedule deferred logbook save
     scheduleSave(sessionId);
 
     return true;
@@ -487,8 +660,8 @@ bool SessionModel::removeAttribute(const QString &sessionId,
         return false;
     }
 
-    // 2. Get a reference to the SessionData
-    SessionData &session = m_sessionData[row];
+    // 2. Force-load before mutating
+    SessionData &session = sessionRef(row);
 
     // 3. If the attribute is not stored, there is nothing to remove
     if (!session.hasAttribute(attributeKey)) {
@@ -530,11 +703,146 @@ void SessionModel::flushDirtySessions()
         int row = getSessionRow(sessionId);
         if (row < 0) continue;
         logbook.saveSession(sessionRef(row));
+
+        // Update cached column values for this session
+        const SessionRow &sr = m_rows[row];
+        if (sr.isLoaded()) {
+            logbook.setCachedValues(sessionId, computeColumnValues(sr.session.value()));
+        }
     }
     if (!m_dirtySessions.isEmpty()) {
         logbook.flushIndex();
         m_dirtySessions.clear();
     }
+}
+
+// ---- Background loader ------------------------------------------------
+
+void SessionModel::startBackgroundLoader(const QMap<QString, double> &lastAccessed)
+{
+    m_loadQueue.clear();
+
+    // Build queue from all stub rows
+    for (const SessionRow &row : std::as_const(m_rows)) {
+        if (!row.isLoaded()) {
+            m_loadQueue.append(row.sessionId);
+        }
+    }
+
+    // Sort by lastAccessed descending (most recently used first)
+    std::sort(m_loadQueue.begin(), m_loadQueue.end(),
+              [&lastAccessed](const QString &a, const QString &b) {
+        double ta = lastAccessed.value(a, 0.0);
+        double tb = lastAccessed.value(b, 0.0);
+        return ta > tb;
+    });
+
+    if (!m_loadQueue.isEmpty()) {
+        m_loadTimer.start();
+    }
+}
+
+void SessionModel::loadNextSession()
+{
+    if (m_loadQueue.isEmpty()) {
+        LogbookManager::instance().flushIndex();
+        return;
+    }
+
+    QString sessionId = m_loadQueue.takeFirst();
+
+    // Find the row index
+    int rowIdx = getSessionRow(sessionId);
+    if (rowIdx < 0) {
+        // Session was removed; skip and continue
+        if (!m_loadQueue.isEmpty()) {
+            m_loadTimer.start();
+        } else {
+            LogbookManager::instance().flushIndex();
+        }
+        return;
+    }
+
+    SessionRow &sr = m_rows[rowIdx];
+
+    // Already loaded (e.g. via on-demand sessionRef())
+    if (sr.isLoaded()) {
+        if (!m_loadQueue.isEmpty()) {
+            m_loadTimer.start();
+        } else {
+            LogbookManager::instance().flushIndex();
+        }
+        return;
+    }
+
+    // Load the session
+    auto loaded = LogbookManager::instance().loadSession(sessionId);
+    if (loaded.has_value()) {
+        sr.session = std::move(loaded.value());
+        sr.session->setVisible(sr.visible);
+    } else {
+        qWarning() << "Background loader: failed to load session" << sessionId;
+        // Leave as stub, flush or continue
+        if (!m_loadQueue.isEmpty()) {
+            m_loadTimer.start();
+        } else {
+            LogbookManager::instance().flushIndex();
+        }
+        return;
+    }
+
+    // Update cached column values for this session
+    LogbookManager::instance().setCachedValues(sessionId, computeColumnValues(sr.session.value()));
+
+    // Emit dataChanged for the entire row
+    QModelIndex topLeft = index(rowIdx, 0);
+    QModelIndex bottomRight = index(rowIdx, columnCount() - 1);
+    emit dataChanged(topLeft, bottomRight, {Qt::DisplayRole});
+
+    // Emit sessionLoaded (NOT modelChanged)
+    emit sessionLoaded(sessionId);
+
+    // Re-arm if queue non-empty, otherwise flush index
+    if (!m_loadQueue.isEmpty()) {
+        m_loadTimer.start();
+    } else {
+        LogbookManager::instance().flushIndex();
+    }
+}
+
+// ---- Column value extraction ------------------------------------------
+
+QMap<LogbookColumn, QVariant> SessionModel::computeColumnValues(const SessionData &session) const
+{
+    QMap<LogbookColumn, QVariant> result;
+    for (const LogbookColumn &col : std::as_const(m_columns)) {
+        QVariant value;
+        switch (col.type) {
+        case ColumnType::SessionAttribute:
+            value = session.getAttribute(col.attributeKey);
+            break;
+        case ColumnType::MeasurementAtMarker: {
+            QString interpKey = SessionData::interpolationKey(
+                col.markerAttributeKey, col.sensorID, SessionKeys::Time, col.measurementID);
+            value = session.getAttribute(interpKey);
+            break;
+        }
+        case ColumnType::Delta: {
+            QString interpKey1 = SessionData::interpolationKey(
+                col.markerAttributeKey, col.sensorID, SessionKeys::Time, col.measurementID);
+            QString interpKey2 = SessionData::interpolationKey(
+                col.marker2AttributeKey, col.sensorID, SessionKeys::Time, col.measurementID);
+            QVariant v1 = session.getAttribute(interpKey1);
+            QVariant v2 = session.getAttribute(interpKey2);
+            if (v1.isValid() && v2.isValid())
+                value = v2.toDouble() - v1.toDouble();
+            break;
+        }
+        }
+        if (value.isValid())
+            result[col] = value;
+    }
+    return result;
 }
 
 // ----------------------------------------------------------------------
@@ -546,27 +854,33 @@ void SessionModel::sort(int column, Qt::SortOrder order)
 
     const LogbookColumn &col = m_columns[column];
 
-    // Determine the comparison function based on column type
-    auto getRawValue = [&col](const SessionData &s) -> QVariant {
-        switch (col.type) {
-        case ColumnType::SessionAttribute:
-            return s.getAttribute(col.attributeKey);
-        case ColumnType::MeasurementAtMarker: {
-            QString interpKey = SessionData::interpolationKey(
-                col.markerAttributeKey, col.sensorID, SessionKeys::Time, col.measurementID);
-            return s.getAttribute(interpKey);
-        }
-        case ColumnType::Delta: {
-            QString interpKey1 = SessionData::interpolationKey(
-                col.markerAttributeKey, col.sensorID, SessionKeys::Time, col.measurementID);
-            QString interpKey2 = SessionData::interpolationKey(
-                col.marker2AttributeKey, col.sensorID, SessionKeys::Time, col.measurementID);
-            QVariant v1 = s.getAttribute(interpKey1);
-            QVariant v2 = s.getAttribute(interpKey2);
-            if (!v1.isValid() || !v2.isValid())
-                return QVariant();
-            return v2.toDouble() - v1.toDouble();
-        }
+    // Lambda to extract raw value from a SessionRow (handles both stubs and loaded rows)
+    auto getRawValue = [&col, column](const SessionRow &sr) -> QVariant {
+        if (sr.isLoaded()) {
+            const SessionData &s = sr.session.value();
+            switch (col.type) {
+            case ColumnType::SessionAttribute:
+                return s.getAttribute(col.attributeKey);
+            case ColumnType::MeasurementAtMarker: {
+                QString interpKey = SessionData::interpolationKey(
+                    col.markerAttributeKey, col.sensorID, SessionKeys::Time, col.measurementID);
+                return s.getAttribute(interpKey);
+            }
+            case ColumnType::Delta: {
+                QString interpKey1 = SessionData::interpolationKey(
+                    col.markerAttributeKey, col.sensorID, SessionKeys::Time, col.measurementID);
+                QString interpKey2 = SessionData::interpolationKey(
+                    col.marker2AttributeKey, col.sensorID, SessionKeys::Time, col.measurementID);
+                QVariant v1 = s.getAttribute(interpKey1);
+                QVariant v2 = s.getAttribute(interpKey2);
+                if (!v1.isValid() || !v2.isValid())
+                    return QVariant();
+                return v2.toDouble() - v1.toDouble();
+            }
+            }
+        } else {
+            // Stub: use cached values
+            return sr.cachedValues.value(column);
         }
         return QVariant();
     };
@@ -581,8 +895,8 @@ void SessionModel::sort(int column, Qt::SortOrder order)
 
     beginResetModel();
 
-    std::sort(m_sessionData.begin(), m_sessionData.end(),
-              [&getRawValue, useStringCompare, order](const SessionData &a, const SessionData &b) {
+    std::sort(m_rows.begin(), m_rows.end(),
+              [&getRawValue, useStringCompare, order](const SessionRow &a, const SessionRow &b) {
         QVariant va = getRawValue(a);
         QVariant vb = getRawValue(b);
 

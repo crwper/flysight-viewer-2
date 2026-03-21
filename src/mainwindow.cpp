@@ -166,12 +166,23 @@ MainWindow::MainWindow(QWidget *parent)
     m_altitudeMarkerManager->registerAll();
 
     // Load saved sessions from the logbook directory
-    QList<SessionData> savedSessions = LogbookManager::instance().initialize();
-    if (savedSessions.isEmpty()) {
-        savedSessions = LogbookManager::instance().loadAllSessions();
-    }
-    if (!savedSessions.isEmpty()) {
-        model->mergeSessions(savedSessions);
+    LogbookManager &logbook = LogbookManager::instance();
+    QList<SessionData> savedSessions = logbook.initialize();
+
+    if (logbook.hasIndexData()) {
+        QVector<LogbookColumn> liveColumns = LogbookColumnStore::instance().enabledColumns();
+        QMap<QString, QMap<int, QVariant>> cached = logbook.cachedColumnValues(liveColumns);
+        model->populateFromIndex(cached, logbook.lastAccessedMap());
+
+        // Start background loading of all stub sessions
+        model->startBackgroundLoader(logbook.lastAccessedMap());
+    } else {
+        if (savedSessions.isEmpty()) {
+            savedSessions = logbook.loadAllSessions();
+        }
+        if (!savedSessions.isEmpty()) {
+            model->mergeSessions(savedSessions);
+        }
     }
 
     // Create range model for synchronizing plot x-axis range with other docks
@@ -310,6 +321,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    model->flushDirtySessions();
     LogbookManager::instance().flushIndex();
     saveDockLayout();
     KDDockWidgets::QtWidgets::MainWindow::closeEvent(event);
@@ -638,10 +650,9 @@ void MainWindow::importFiles(
                               .getValue(PreferenceKeys::ImportHideOthersOnImport).toBool();
 
         QMap<int, bool> visibilityMap;
-        const auto &allSessions = model->getAllSessions();
-        for (int row = 0; row < allSessions.size(); ++row) {
-            QString id = allSessions[row].getAttribute(SessionKeys::SessionId).toString();
-            if (importedIds.contains(id)) {
+        for (int row = 0; row < model->rowCount(); ++row) {
+            const SessionRow &sr = model->rowAt(row);
+            if (importedIds.contains(sr.sessionId)) {
                 visibilityMap.insert(row, true);
             } else if (hideOthers) {
                 visibilityMap.insert(row, false);
@@ -798,8 +809,8 @@ void MainWindow::on_action_Delete_triggered()
 
         // Assuming the SESSION_ID is stored as an attribute in SessionData
         // You might need to adjust this based on your actual implementation
-        const SessionData &session = model->getAllSessions().at(index.row());
-        QString sessionId = session.getAttribute(SessionKeys::SessionId).toString();
+        const SessionRow &sr = model->rowAt(index.row());
+        QString sessionId = sr.sessionId;
         sessionIdsToRemove.append(sessionId);
     }
 

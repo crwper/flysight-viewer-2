@@ -1,11 +1,16 @@
 #ifndef LOGBOOKMANAGER_H
 #define LOGBOOKMANAGER_H
 
+#include <optional>
+
+#include <QJsonValue>
 #include <QList>
 #include <QMap>
 #include <QObject>
 #include <QString>
+#include <QVector>
 
+#include "logbookcolumn.h"
 #include "sessiondata.h"
 
 namespace FlySight {
@@ -32,6 +37,30 @@ public:
     // Writes index.json mapping SESSION_IDs to UUIDs
     void flushIndex();
 
+    // Stores cached column values for a session, to be written on next flushIndex().
+    // columnValues maps a LogbookColumn (matched by definition) to its QVariant value.
+    void setCachedValues(const QString &sessionId,
+                         const QMap<LogbookColumn, QVariant> &columnValues);
+
+    // Loads and parses the CSV for a single session. Returns std::nullopt on failure.
+    std::optional<SessionData> loadSession(const QString &sessionId);
+
+    // Updates the lastAccessed timestamp for a session (persisted on next flushIndex())
+    void setLastAccessed(const QString &sessionId, double timestamp);
+
+    // --- Accessors for index data (populated after initialize()) ---
+
+    // Returns true if the index contained column definitions (new format)
+    bool hasIndexData() const;
+
+    // Returns the lastAccessed map (SESSION_ID -> epoch seconds)
+    const QMap<QString, double>& lastAccessedMap() const;
+
+    // Matches index columns to liveColumns by definition and returns
+    // SESSION_ID -> { liveColumnIndex -> QVariant value }
+    QMap<QString, QMap<int, QVariant>> cachedColumnValues(
+        const QVector<LogbookColumn> &liveColumns) const;
+
 private:
     LogbookManager();
     Q_DISABLE_COPY(LogbookManager)
@@ -47,6 +76,18 @@ private:
 
     // Maps SESSION_ID strings to UUID filename stems (without extension)
     QMap<QString, QString> m_sessionIdToUuid;
+
+    // Maps SESSION_ID -> epoch seconds (last accessed time)
+    QMap<QString, double> m_lastAccessed;
+
+    // Maps SESSION_ID -> { columnDefinitionKey -> QJsonValue }
+    // Populated by setCachedValues(), read back by readIndex()
+    QMap<QString, QMap<QString, QJsonValue>> m_cachedValues;
+
+    // Stored from index read, used by cachedColumnValues()
+    QVector<LogbookColumn> m_indexColumns;              // column defs from index
+    QMap<QString, QString> m_indexColumnUuids;           // index column UUID for each def (by definition key)
+    QMap<QString, QMap<QString, QJsonValue>> m_indexValues;  // SESSION_ID -> {columnUUID -> value}
 };
 
 } // namespace FlySight
