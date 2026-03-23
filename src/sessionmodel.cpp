@@ -447,11 +447,6 @@ void SessionModel::mergeSessions(const QList<SessionData>& sessions)
                 m_saveHighWater++;
                 m_saveRemaining++;
                 qDebug() << "Replaced stub with loaded SessionData for SESSION_ID:" << newSessionID;
-
-                // Add to LRU pool if non-visible
-                if (!rowIt->visible) {
-                    lruInsert(newSessionID);
-                }
             }
         } else {
             // Add as new loaded row
@@ -465,17 +460,9 @@ void SessionModel::mergeSessions(const QList<SessionData>& sessions)
             m_saveRemaining++;
             m_rows.append(std::move(newRow));
             qDebug() << "Added new SessionData with SESSION_ID:" << newSessionID;
-
-            // Add to LRU pool if non-visible
-            if (!newSession.isVisible()) {
-                lruInsert(newSessionID);
-            }
         }
     }
     endResetModel();
-
-    // Enforce cache bounds after all merges
-    evictIfNeeded();
 
     // Cache column values for all loaded sessions so the index is populated
     LogbookManager &logbook = LogbookManager::instance();
