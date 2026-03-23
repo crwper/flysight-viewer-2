@@ -303,6 +303,27 @@ void LogbookManager::setCachedValues(const QString &sessionId,
     m_cachedValues[sessionId] = converted;
 }
 
+const QMap<QString, QJsonValue> &LogbookManager::cachedValuesForSession(const QString &sessionId) const
+{
+    static const QMap<QString, QJsonValue> empty;
+    auto it = m_cachedValues.constFind(sessionId);
+    return (it != m_cachedValues.constEnd()) ? it.value() : empty;
+}
+
+QString LogbookManager::columnDefKey(const LogbookColumn &col)
+{
+    return columnDefinitionKey(col);
+}
+
+QVariant LogbookManager::jsonToVariant(const QJsonValue &jv)
+{
+    if (jv.isDouble())
+        return QVariant(jv.toDouble());
+    if (jv.isString())
+        return QVariant(jv.toString());
+    return QVariant();
+}
+
 // ============================================================================
 // setLastAccessed
 // ============================================================================

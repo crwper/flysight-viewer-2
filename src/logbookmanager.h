@@ -61,6 +61,15 @@ public:
     QMap<QString, QMap<int, QVariant>> cachedColumnValues(
         const QVector<LogbookColumn> &liveColumns) const;
 
+    // Returns the raw cached values map for a single session (defKey -> QJsonValue)
+    const QMap<QString, QJsonValue> &cachedValuesForSession(const QString &sessionId) const;
+
+    // Returns the definition key for a LogbookColumn
+    static QString columnDefKey(const LogbookColumn &col);
+
+    // Converts a QJsonValue to QVariant (double, string, or invalid for null)
+    static QVariant jsonToVariant(const QJsonValue &jv);
+
 private:
     LogbookManager();
     Q_DISABLE_COPY(LogbookManager)

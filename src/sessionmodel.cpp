@@ -55,12 +55,12 @@ void SessionModel::rebuildColumns()
 {
     beginResetModel();
     m_columns = LogbookColumnStore::instance().enabledColumns();
-    endResetModel();
 
-    // Update cached values for all loaded sessions to reflect new column set
+    // Rebuild cached values for all sessions to reflect new column set
     LogbookManager &logbook = LogbookManager::instance();
     for (SessionRow &row : m_rows) {
         if (row.isLoaded()) {
+            // Loaded session: recompute all column values from in-memory data
             QMap<LogbookColumn, QVariant> colValues = computeColumnValues(row.session.value());
             logbook.setCachedValues(row.sessionId, colValues);
             QMap<int, QVariant> indexed;
@@ -68,12 +68,24 @@ void SessionModel::rebuildColumns()
                 indexed[i] = colValues.value(m_columns[i]);
             row.cachedValues = indexed;
         } else {
-            // Clear cached values for stub sessions; the column worker will recompute them
-            row.cachedValues.clear();
+            // Stub session: remap existing cached values to new column indices.
+            // Columns that already have values keep them; new columns are left
+            // absent so the column worker will fill them in.
+            QMap<int, QVariant> indexed;
+            const auto &stored = logbook.cachedValuesForSession(row.sessionId);
+            for (int i = 0; i < m_columns.size(); ++i) {
+                const QString defKey = logbook.columnDefKey(m_columns[i]);
+                auto it = stored.constFind(defKey);
+                if (it != stored.constEnd())
+                    indexed[i] = logbook.jsonToVariant(it.value());
+            }
+            row.cachedValues = indexed;
         }
     }
 
-    // Start the dirty column worker to recompute values for stub sessions
+    endResetModel();
+
+    // Start the dirty column worker to compute values for any missing columns
     startColumnWorker();
 }
 
