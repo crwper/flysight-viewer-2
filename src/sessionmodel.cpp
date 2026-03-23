@@ -85,6 +85,10 @@ void SessionModel::rebuildColumns()
 
     endResetModel();
 
+    // Flush the index so it reflects the current column set
+    if (!m_rows.isEmpty())
+        logbook.flushIndex();
+
     // Start the dirty column worker to compute values for any missing columns
     startColumnWorker();
 }
