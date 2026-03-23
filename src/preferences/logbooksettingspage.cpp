@@ -1,10 +1,14 @@
 #include "logbooksettingspage.h"
 #include "addcolumndialog.h"
+#include "preferencekeys.h"
+#include "preferencesmanager.h"
 
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QVBoxLayout>
 
 namespace FlySight {
@@ -14,6 +18,7 @@ LogbookSettingsPage::LogbookSettingsPage(QWidget *parent)
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(createColumnsGroup());
+    layout->addWidget(createCacheGroup());
     layout->addStretch();
 
     loadSettings();
@@ -60,9 +65,29 @@ QGroupBox* LogbookSettingsPage::createColumnsGroup()
     return group;
 }
 
+QGroupBox* LogbookSettingsPage::createCacheGroup()
+{
+    QGroupBox *group = new QGroupBox(tr("Cache"), this);
+    QHBoxLayout *groupLayout = new QHBoxLayout(group);
+
+    QLabel *label = new QLabel(tr("Maximum cached sessions:"), this);
+    m_cacheSizeSpinBox = new QSpinBox(this);
+    m_cacheSizeSpinBox->setRange(0, 1000);
+
+    groupLayout->addWidget(label);
+    groupLayout->addWidget(m_cacheSizeSpinBox);
+    groupLayout->addStretch();
+
+    return group;
+}
+
 void LogbookSettingsPage::loadSettings()
 {
     populateList();
+
+    int cacheSize = PreferencesManager::instance()
+                        .getValue(PreferenceKeys::LogbookCacheSize).toInt();
+    m_cacheSizeSpinBox->setValue(cacheSize);
 }
 
 void LogbookSettingsPage::populateList()
@@ -187,6 +212,8 @@ void LogbookSettingsPage::onItemChanged(QListWidgetItem *item)
 void LogbookSettingsPage::saveSettings()
 {
     LogbookColumnStore::instance().setColumns(m_columns);
+    PreferencesManager::instance().setValue(
+        PreferenceKeys::LogbookCacheSize, m_cacheSizeSpinBox->value());
 }
 
 } // namespace FlySight

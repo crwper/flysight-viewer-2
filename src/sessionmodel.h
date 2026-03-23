@@ -72,14 +72,8 @@ public:
     // Enable sorting
     void sort(int column, Qt::SortOrder order = Qt::AscendingOrder) override;
 
-    // Start background loading of all stub sessions, ordered by lastAccessed descending
-    void startBackgroundLoader(const QMap<QString, double> &lastAccessed);
-
     // Flush dirty sessions to disk (public so MainWindow can call on shutdown)
     void flushDirtySessions();
-
-    // Count of sessions still in stub state (not yet loaded)
-    int remainingStubCount() const;
 
 signals:
     void modelChanged();
@@ -87,12 +81,25 @@ signals:
     void hoveredSessionChanged(const QString& sessionId);
     void dependencyChanged(const QString &sessionId, const DependencyKey &key);
     void saveProgressChanged(int remaining, int total);
-    void loadProgressChanged(int remaining, int total);
+    void columnWorkerProgressChanged(int remaining, int total);
+
+public:
+    void startColumnWorker();
+    void cancelColumnWorker();
 
 private:
     QVector<SessionRow> m_rows;
     QVector<LogbookColumn> m_columns;
     QString m_hoveredSessionId;
+
+    // LRU cache for non-visible loaded sessions
+    QList<QString> m_lruList;  // front = most recently used, back = eviction candidate
+    int m_cacheCapacity = 50;
+    void lruTouch(const QString &sessionId);
+    void lruRemove(const QString &sessionId);
+    void lruInsert(const QString &sessionId);
+    void evictIfNeeded();
+    void evictSession(const QString &sessionId);
 
     // Deferred logbook persistence (saver worker)
     QTimer m_saveTimer;
@@ -100,11 +107,10 @@ private:
     int m_saveRemaining = 0;   // dirty sessions remaining in current wave
     void scheduleSave(const QString &sessionId);
 
-    // Background loader
-    QTimer m_loadTimer;
-    QVector<QString> m_loadQueue;  // session IDs ordered by lastAccessed descending
-    int m_loadHighWater = 0;   // total stubs in current load wave
-    int m_loadRemaining = 0;   // stubs remaining in current wave
+    // Dirty column worker (computes missing cached column values in background)
+    QTimer m_columnWorkerTimer;
+    int m_columnWorkerHighWater = 0;
+    int m_columnWorkerRemaining = 0;
 
     // Formatting helpers for data()
     QVariant formatAttributeValue(const SessionData &session, const LogbookColumn &col) const;
@@ -118,8 +124,8 @@ private:
 
 private slots:
     void rebuildColumns();
-    void loadNextSession();
     void saveNextSession();
+    void processNextDirtyColumn();
 };
 
 } // namespace FlySight

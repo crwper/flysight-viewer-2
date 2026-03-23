@@ -1,7 +1,9 @@
 // LogbookView.cpp
 #include "LogbookView.h"
+#include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QMouseEvent>
+#include <QPushButton>
 #include <QDebug>
 #include <QFontMetrics>
 #include <QItemSelectionModel>
@@ -19,14 +21,22 @@ LogbookView::LogbookView(SessionModel *model, QWidget *parent)
     m_saveProgressBar->setVisible(false);
     m_saveProgressBar->setTextVisible(true);
 
-    m_loadProgressBar = new QProgressBar(this);
-    m_loadProgressBar->setVisible(false);
-    m_loadProgressBar->setTextVisible(true);
+    m_columnWorkerProgressBar = new QProgressBar(this);
+    m_columnWorkerProgressBar->setVisible(false);
+    m_columnWorkerProgressBar->setTextVisible(true);
+
+    m_columnWorkerCancelButton = new QPushButton(tr("Cancel"), this);
+    m_columnWorkerCancelButton->setVisible(false);
+    connect(m_columnWorkerCancelButton, &QPushButton::clicked, this, &LogbookView::cancelColumnWorkerRequested);
+
+    QHBoxLayout *columnWorkerLayout = new QHBoxLayout();
+    columnWorkerLayout->addWidget(m_columnWorkerProgressBar, 1);
+    columnWorkerLayout->addWidget(m_columnWorkerCancelButton);
 
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(treeView);
     layout->addWidget(m_saveProgressBar);
-    layout->addWidget(m_loadProgressBar);
+    layout->addLayout(columnWorkerLayout);
     setLayout(layout);
 
     setupView();
@@ -181,16 +191,18 @@ void LogbookView::onSaveProgressChanged(int remaining, int total)
     m_saveProgressBar->setVisible(true);
 }
 
-void LogbookView::onLoadProgressChanged(int remaining, int total)
+void LogbookView::onColumnWorkerProgressChanged(int remaining, int total)
 {
     if (total <= 0) {
-        m_loadProgressBar->setVisible(false);
+        m_columnWorkerProgressBar->setVisible(false);
+        m_columnWorkerCancelButton->setVisible(false);
         return;
     }
-    m_loadProgressBar->setRange(0, total);
-    m_loadProgressBar->setValue(total - remaining);
-    m_loadProgressBar->setFormat(tr("Loading sessions: %v / %m"));
-    m_loadProgressBar->setVisible(true);
+    m_columnWorkerProgressBar->setRange(0, total);
+    m_columnWorkerProgressBar->setValue(total - remaining);
+    m_columnWorkerProgressBar->setFormat(tr("Computing columns: %v / %m"));
+    m_columnWorkerProgressBar->setVisible(true);
+    m_columnWorkerCancelButton->setVisible(true);
 }
 
 } // namespace FlySight

@@ -9,6 +9,8 @@
 #include "attributeregistry.h"
 #include "logbookcolumn.h"
 #include "logbookmanager.h"
+#include "preferences/preferencekeys.h"
+#include "preferences/preferencesmanager.h"
 #include "units/unitconverter.h"
 
 namespace FlySight {
@@ -29,9 +31,22 @@ SessionModel::SessionModel(QObject *parent)
     m_saveTimer.setInterval(0);
     connect(&m_saveTimer, &QTimer::timeout, this, &SessionModel::saveNextSession);
 
-    m_loadTimer.setSingleShot(true);
-    m_loadTimer.setInterval(0);
-    connect(&m_loadTimer, &QTimer::timeout, this, &SessionModel::loadNextSession);
+    m_columnWorkerTimer.setSingleShot(true);
+    m_columnWorkerTimer.setInterval(0);
+    connect(&m_columnWorkerTimer, &QTimer::timeout, this, &SessionModel::processNextDirtyColumn);
+
+    // LRU cache capacity preference
+    PreferencesManager &prefs = PreferencesManager::instance();
+    prefs.registerPreference(PreferenceKeys::LogbookCacheSize, 50);
+    m_cacheCapacity = prefs.getValue(PreferenceKeys::LogbookCacheSize).toInt();
+
+    connect(&prefs, &PreferencesManager::preferenceChanged,
+            this, [this](const QString &key, const QVariant &value) {
+        if (key == PreferenceKeys::LogbookCacheSize) {
+            m_cacheCapacity = value.toInt();
+            evictIfNeeded();
+        }
+    });
 
     rebuildColumns();
 }
@@ -44,14 +59,25 @@ void SessionModel::rebuildColumns()
 
     // Update cached values for all loaded sessions to reflect new column set
     LogbookManager &logbook = LogbookManager::instance();
-    for (const SessionRow &row : std::as_const(m_rows)) {
+    for (SessionRow &row : m_rows) {
         if (row.isLoaded()) {
-            logbook.setCachedValues(row.sessionId, computeColumnValues(row.session.value()));
+            QMap<LogbookColumn, QVariant> colValues = computeColumnValues(row.session.value());
+            logbook.setCachedValues(row.sessionId, colValues);
+            QMap<int, QVariant> indexed;
+            for (int i = 0; i < m_columns.size(); ++i) {
+                auto it = colValues.find(m_columns[i]);
+                if (it != colValues.end())
+                    indexed[i] = it.value();
+            }
+            row.cachedValues = indexed;
+        } else {
+            // Clear cached values for stub sessions; the column worker will recompute them
+            row.cachedValues.clear();
         }
     }
-    if (!m_rows.isEmpty()) {
-        logbook.flushIndex();
-    }
+
+    // Start the dirty column worker to recompute values for stub sessions
+    startColumnWorker();
 }
 
 int SessionModel::rowCount(const QModelIndex &parent) const
@@ -299,6 +325,15 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
             if (sr.isLoaded()) {
                 sr.session->setVisible(newVisible);
             }
+            // LRU transitions
+            if (newVisible) {
+                // Becoming visible: remove from LRU pool (now pinned)
+                lruRemove(sr.sessionId);
+            } else if (sr.isLoaded()) {
+                // Becoming non-visible while loaded: enter LRU pool
+                lruInsert(sr.sessionId);
+                evictIfNeeded();
+            }
             // Update lastAccessed when toggling visibility to true
             if (newVisible) {
                 double now = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch() / 1000.0;
@@ -407,15 +442,16 @@ void SessionModel::mergeSessions(const QList<SessionData>& sessions)
                 rowIt->session = newSession;
                 rowIt->visible = newSession.isVisible();
                 rowIt->session->setVisible(rowIt->visible);
-                // Remove from background load queue if present (stub no longer needs loading)
-                if (m_loadQueue.removeOne(newSessionID)) {
-                    m_loadRemaining--;
-                }
 
                 rowIt->dirty = true;
                 m_saveHighWater++;
                 m_saveRemaining++;
                 qDebug() << "Replaced stub with loaded SessionData for SESSION_ID:" << newSessionID;
+
+                // Add to LRU pool if non-visible
+                if (!rowIt->visible) {
+                    lruInsert(newSessionID);
+                }
             }
         } else {
             // Add as new loaded row
@@ -429,9 +465,17 @@ void SessionModel::mergeSessions(const QList<SessionData>& sessions)
             m_saveRemaining++;
             m_rows.append(std::move(newRow));
             qDebug() << "Added new SessionData with SESSION_ID:" << newSessionID;
+
+            // Add to LRU pool if non-visible
+            if (!newSession.isVisible()) {
+                lruInsert(newSessionID);
+            }
         }
     }
     endResetModel();
+
+    // Enforce cache bounds after all merges
+    evictIfNeeded();
 
     // Cache column values for all loaded sessions so the index is populated
     LogbookManager &logbook = LogbookManager::instance();
@@ -445,7 +489,6 @@ void SessionModel::mergeSessions(const QList<SessionData>& sessions)
     bool hasDirty = std::any_of(m_rows.cbegin(), m_rows.cend(),
                                 [](const SessionRow &r) { return r.dirty; });
     if (hasDirty && !m_saveTimer.isActive()) {
-        m_loadTimer.stop();  // saver has priority
         m_saveTimer.start();
     }
 
@@ -453,13 +496,6 @@ void SessionModel::mergeSessions(const QList<SessionData>& sessions)
     if (m_saveRemaining > 0) {
         emit saveProgressChanged(m_saveRemaining, m_saveHighWater);
     }
-
-    // Emit updated load progress (stubs may have been replaced by the merge)
-    if (m_loadRemaining <= 0) {
-        m_loadHighWater = 0;
-        m_loadRemaining = 0;
-    }
-    emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
 
     emit modelChanged();
 }
@@ -498,6 +534,7 @@ void SessionModel::setRowsVisibility(const QMap<int, bool>& rowVisibility)
         int row = it.key();
         bool visible = it.value();
         if (row >= 0 && row < m_rows.size()) {
+            bool wasVisible = m_rows[row].visible;
             m_rows[row].visible = visible;
             // Force-load if setting visible on a stub
             if (visible && !m_rows[row].isLoaded()) {
@@ -507,6 +544,14 @@ void SessionModel::setRowsVisibility(const QMap<int, bool>& rowVisibility)
             if (m_rows[row].isLoaded()) {
                 m_rows[row].session->setVisible(visible);
             }
+            // LRU transitions
+            if (visible && !wasVisible) {
+                // Becoming visible: remove from LRU pool (now pinned)
+                lruRemove(m_rows[row].sessionId);
+            } else if (!visible && wasVisible && m_rows[row].isLoaded()) {
+                // Becoming non-visible while loaded: enter LRU pool
+                lruInsert(m_rows[row].sessionId);
+            }
             // Update lastAccessed when toggling visibility to true
             if (visible) {
                 LogbookManager::instance().setLastAccessed(m_rows[row].sessionId, now);
@@ -515,6 +560,9 @@ void SessionModel::setRowsVisibility(const QMap<int, bool>& rowVisibility)
             maxRow = std::max(maxRow, row);
         }
     }
+
+    // Enforce cache bounds once after all visibility changes
+    evictIfNeeded();
 
     if (minRow <= maxRow) {
         emit dataChanged(index(minRow, 0), index(maxRow, columnCount() - 1), {Qt::CheckStateRole});
@@ -540,16 +588,19 @@ bool SessionModel::removeSessions(const QList<QString> &sessionIds)
         if (it != m_rows.end()) {
             int row = it - m_rows.begin();
 
+            // Remove from LRU list before erasing
+            lruRemove(sessionId);
+
             // Update save counters if this session is dirty
             if (it->dirty) {
                 m_saveHighWater--;
                 m_saveRemaining--;
             }
 
-            // Update load counters if this session is in the load queue
-            if (m_loadQueue.removeOne(sessionId)) {
-                m_loadRemaining--;
-                m_loadHighWater--;
+            // Update column worker counters if this session has missing values
+            if (m_columnWorkerRemaining > 0 && it->cachedValues.size() < m_columns.size()) {
+                m_columnWorkerHighWater--;
+                m_columnWorkerRemaining--;
             }
 
             beginRemoveRows(QModelIndex(), row, row);
@@ -570,13 +621,14 @@ bool SessionModel::removeSessions(const QList<QString> &sessionIds)
             m_saveHighWater = 0;
             m_saveRemaining = 0;
         }
-        if (m_loadHighWater <= 0) {
-            m_loadHighWater = 0;
-            m_loadRemaining = 0;
-        }
-
         emit saveProgressChanged(m_saveRemaining, m_saveHighWater);
-        emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
+
+        if (m_columnWorkerHighWater <= 0) {
+            m_columnWorkerHighWater = 0;
+            m_columnWorkerRemaining = 0;
+        }
+        emit columnWorkerProgressChanged(m_columnWorkerRemaining, m_columnWorkerHighWater);
+
         emit modelChanged();
     }
 
@@ -611,15 +663,19 @@ SessionData &SessionModel::sessionRef(int row)
         // Sync visibility from SessionRow to the newly loaded SessionData
         sr.session->setVisible(sr.visible);
 
-        // Remove from background queue to avoid double-loading
-        bool removed = m_loadQueue.removeOne(sr.sessionId);
-        if (removed) {
-            m_loadRemaining--;
-            emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
-        }
-
         // Emit sessionLoaded for consistency
         emit sessionLoaded(sr.sessionId);
+
+        // LRU tracking: only track non-visible sessions
+        if (!sr.visible) {
+            lruTouch(sr.sessionId);
+            evictIfNeeded();
+        }
+    } else {
+        // Already loaded: bump recency for non-visible sessions
+        if (!sr.visible) {
+            lruTouch(sr.sessionId);
+        }
     }
     return sr.session.value();
 }
@@ -768,8 +824,10 @@ void SessionModel::scheduleSave(const QString &sessionId)
     // else: row is already dirty, data is updated in memory,
     // saver will save the current (modified) version when it reaches this row
 
+    // Pause column worker while saver is active (saver has priority)
+    m_columnWorkerTimer.stop();
+
     if (!m_saveTimer.isActive()) {
-        m_loadTimer.stop();  // saver has priority over loader
         m_saveTimer.start();
     }
 }
@@ -777,7 +835,9 @@ void SessionModel::scheduleSave(const QString &sessionId)
 void SessionModel::flushDirtySessions()
 {
     m_saveTimer.stop();
-    m_loadTimer.stop();
+    m_columnWorkerTimer.stop();
+    m_columnWorkerHighWater = 0;
+    m_columnWorkerRemaining = 0;
 
     LogbookManager &logbook = LogbookManager::instance();
     bool anySaved = false;
@@ -799,8 +859,6 @@ void SessionModel::flushDirtySessions()
     // Reset high-water-mark counters (UI is about to be destroyed during shutdown)
     m_saveHighWater = 0;
     m_saveRemaining = 0;
-    m_loadHighWater = 0;
-    m_loadRemaining = 0;
 }
 
 void SessionModel::saveNextSession()
@@ -820,9 +878,9 @@ void SessionModel::saveNextSession()
         m_saveHighWater = 0;
         m_saveRemaining = 0;
         emit saveProgressChanged(0, 0);
-        // Resume loader if it has work
-        if (!m_loadQueue.isEmpty()) {
-            m_loadTimer.start();
+        // Restart column worker if it has remaining work
+        if (m_columnWorkerRemaining > 0) {
+            m_columnWorkerTimer.start();
         }
         return;
     }
@@ -845,160 +903,187 @@ void SessionModel::saveNextSession()
     if (hasDirty) {
         m_saveTimer.start();
     } else {
-        // All saves complete; flush index and resume loader
+        // All saves complete; flush index
         logbook.flushIndex();
         m_saveHighWater = 0;
         m_saveRemaining = 0;
         emit saveProgressChanged(0, 0);
-        if (!m_loadQueue.isEmpty()) {
-            m_loadTimer.start();
+        // Restart column worker if it has remaining work
+        if (m_columnWorkerRemaining > 0) {
+            m_columnWorkerTimer.start();
         }
     }
 }
 
-int SessionModel::remainingStubCount() const
+// ---- LRU cache management ---------------------------------------------
+
+void SessionModel::lruTouch(const QString &sessionId)
 {
-    int count = 0;
-    for (const SessionRow &row : std::as_const(m_rows)) {
-        if (!row.isLoaded())
-            ++count;
-    }
-    return count;
+    m_lruList.removeOne(sessionId);
+    m_lruList.prepend(sessionId);
 }
 
-// ---- Background loader ------------------------------------------------
-
-void SessionModel::startBackgroundLoader(const QMap<QString, double> &lastAccessed)
+void SessionModel::lruRemove(const QString &sessionId)
 {
-    m_loadQueue.clear();
+    m_lruList.removeOne(sessionId);
+}
 
-    // Build queue from all stub rows
-    for (const SessionRow &row : std::as_const(m_rows)) {
-        if (!row.isLoaded()) {
-            m_loadQueue.append(row.sessionId);
-        }
-    }
+void SessionModel::lruInsert(const QString &sessionId)
+{
+    m_lruList.removeOne(sessionId);
+    m_lruList.prepend(sessionId);
+}
 
-    // Sort by lastAccessed descending (most recently used first)
-    std::sort(m_loadQueue.begin(), m_loadQueue.end(),
-              [&lastAccessed](const QString &a, const QString &b) {
-        double ta = lastAccessed.value(a, 0.0);
-        double tb = lastAccessed.value(b, 0.0);
-        return ta > tb;
-    });
-
-    m_loadHighWater = m_loadQueue.size();
-    m_loadRemaining = m_loadQueue.size();
-
-    if (m_loadHighWater > 0) {
-        emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
-    }
-
-    if (!m_loadQueue.isEmpty()) {
-        // Only start if saver is idle
-        bool hasDirty = std::any_of(m_rows.cbegin(), m_rows.cend(),
-                                    [](const SessionRow &r) { return r.dirty; });
-        if (!hasDirty) {
-            m_loadTimer.start();
-        }
+void SessionModel::evictIfNeeded()
+{
+    while (m_lruList.size() > m_cacheCapacity) {
+        QString sessionId = m_lruList.last();
+        evictSession(sessionId);
     }
 }
 
-void SessionModel::loadNextSession()
+void SessionModel::evictSession(const QString &sessionId)
 {
-    // Saver has priority over loader
-    if (m_saveTimer.isActive()) {
+    // Remove from LRU list first
+    lruRemove(sessionId);
+
+    // Find the row
+    int row = getSessionRow(sessionId);
+    if (row < 0)
         return;
-    }
 
-    if (m_loadQueue.isEmpty()) {
-        LogbookManager::instance().flushIndex();
-        m_loadHighWater = 0;
-        m_loadRemaining = 0;
-        emit loadProgressChanged(0, 0);
+    SessionRow &sr = m_rows[row];
+
+    // Already a stub -- nothing to do
+    if (!sr.isLoaded())
         return;
-    }
 
-    QString sessionId = m_loadQueue.takeFirst();
+    LogbookManager &logbook = LogbookManager::instance();
 
-    // Find the row index
-    int rowIdx = getSessionRow(sessionId);
-    if (rowIdx < 0) {
-        // Session was removed; skip and continue
-        m_loadRemaining--;
-        emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
-        if (!m_loadQueue.isEmpty()) {
-            m_loadTimer.start();
-        } else {
-            LogbookManager::instance().flushIndex();
-            m_loadHighWater = 0;
-            m_loadRemaining = 0;
-            emit loadProgressChanged(0, 0);
+    // Save if dirty
+    if (sr.dirty) {
+        logbook.saveSession(sr.session.value());
+        logbook.setCachedValues(sr.sessionId, computeColumnValues(sr.session.value()));
+        sr.dirty = false;
+
+        // Update saver progress if the saver is active
+        if (m_saveTimer.isActive() || m_saveRemaining > 0) {
+            m_saveRemaining--;
+            emit saveProgressChanged(m_saveRemaining, m_saveHighWater);
         }
-        return;
-    }
-
-    SessionRow &sr = m_rows[rowIdx];
-
-    // Already loaded (e.g. via on-demand sessionRef())
-    if (sr.isLoaded()) {
-        m_loadRemaining--;
-        emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
-        if (!m_loadQueue.isEmpty()) {
-            m_loadTimer.start();
-        } else {
-            LogbookManager::instance().flushIndex();
-            m_loadHighWater = 0;
-            m_loadRemaining = 0;
-            emit loadProgressChanged(0, 0);
-        }
-        return;
-    }
-
-    // Load the session
-    auto loaded = LogbookManager::instance().loadSession(sessionId);
-    if (loaded.has_value()) {
-        sr.session = std::move(loaded.value());
-        sr.session->setVisible(sr.visible);
     } else {
-        qWarning() << "Background loader: failed to load session" << sessionId;
-        // Leave as stub, flush or continue
-        m_loadRemaining--;
-        emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
-        if (!m_loadQueue.isEmpty()) {
-            m_loadTimer.start();
-        } else {
-            LogbookManager::instance().flushIndex();
-            m_loadHighWater = 0;
-            m_loadRemaining = 0;
-            emit loadProgressChanged(0, 0);
+        // Update cached column values before eviction
+        logbook.setCachedValues(sr.sessionId, computeColumnValues(sr.session.value()));
+    }
+
+    // Reset to stub
+    sr.session = std::nullopt;
+}
+
+// ---- Dirty column worker ----------------------------------------------
+
+void SessionModel::startColumnWorker()
+{
+    // Count sessions with missing column values
+    int dirtyCount = 0;
+    for (const SessionRow &row : std::as_const(m_rows)) {
+        if (row.cachedValues.size() < m_columns.size()) {
+            dirtyCount++;
         }
+    }
+
+    if (dirtyCount == 0)
+        return;
+
+    m_columnWorkerHighWater = dirtyCount;
+    m_columnWorkerRemaining = dirtyCount;
+
+    // Only start if the saver is not active (saver has priority)
+    if (!m_saveTimer.isActive()) {
+        m_columnWorkerTimer.start();
+    }
+
+    emit columnWorkerProgressChanged(m_columnWorkerRemaining, m_columnWorkerHighWater);
+}
+
+void SessionModel::cancelColumnWorker()
+{
+    m_columnWorkerTimer.stop();
+    m_columnWorkerHighWater = 0;
+    m_columnWorkerRemaining = 0;
+    emit columnWorkerProgressChanged(0, 0);
+}
+
+void SessionModel::processNextDirtyColumn()
+{
+    // Yield to the saver worker (saver has priority)
+    bool hasDirty = std::any_of(m_rows.cbegin(), m_rows.cend(),
+                                [](const SessionRow &r) { return r.dirty; });
+    if (hasDirty)
+        return;  // Do not re-arm; saver will restart us when it finishes
+
+    // Find next session with missing column values
+    int dirtyIdx = -1;
+    for (int i = 0; i < m_rows.size(); ++i) {
+        const SessionRow &row = m_rows[i];
+        if (row.cachedValues.size() < m_columns.size()) {
+            dirtyIdx = i;
+            break;
+        }
+    }
+
+    if (dirtyIdx < 0) {
+        // All column values are computed
+        LogbookManager::instance().flushIndex();
+        m_columnWorkerHighWater = 0;
+        m_columnWorkerRemaining = 0;
+        emit columnWorkerProgressChanged(0, 0);
         return;
     }
 
-    // Update cached column values for this session
-    LogbookManager::instance().setCachedValues(sessionId, computeColumnValues(sr.session.value()));
+    SessionRow &row = m_rows[dirtyIdx];
+    LogbookManager &logbook = LogbookManager::instance();
 
-    // Emit dataChanged for the entire row
-    QModelIndex topLeft = index(rowIdx, 0);
-    QModelIndex bottomRight = index(rowIdx, columnCount() - 1);
-    emit dataChanged(topLeft, bottomRight, {Qt::DisplayRole});
+    QMap<LogbookColumn, QVariant> colValues;
 
-    m_loadRemaining--;
-    emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
-
-    // Emit sessionLoaded (NOT modelChanged)
-    emit sessionLoaded(sessionId);
-
-    // Re-arm if queue non-empty, otherwise flush index
-    if (!m_loadQueue.isEmpty()) {
-        m_loadTimer.start();
+    if (row.isLoaded()) {
+        // Session is already loaded; compute from in-memory data
+        colValues = computeColumnValues(row.session.value());
     } else {
-        LogbookManager::instance().flushIndex();
-        m_loadHighWater = 0;
-        m_loadRemaining = 0;
-        emit loadProgressChanged(0, 0);
+        // Stub session: load temporarily via LogbookManager::loadSession()
+        auto loaded = logbook.loadSession(row.sessionId);
+        if (loaded.has_value()) {
+            colValues = computeColumnValues(loaded.value());
+        } else {
+            // Load failed; skip this session
+            m_columnWorkerRemaining--;
+            emit columnWorkerProgressChanged(m_columnWorkerRemaining, m_columnWorkerHighWater);
+            m_columnWorkerTimer.start();
+            return;
+        }
+        // Temporarily loaded session is discarded here
     }
+
+    // Persist computed values
+    logbook.setCachedValues(row.sessionId, colValues);
+
+    // Rebuild index-based cached values map
+    QMap<int, QVariant> indexed;
+    for (int i = 0; i < m_columns.size(); ++i) {
+        auto it = colValues.find(m_columns[i]);
+        if (it != colValues.end())
+            indexed[i] = it.value();
+    }
+    row.cachedValues = indexed;
+
+    m_columnWorkerRemaining--;
+    emit columnWorkerProgressChanged(m_columnWorkerRemaining, m_columnWorkerHighWater);
+
+    // Notify the view that this row has been updated
+    emit dataChanged(index(dirtyIdx, 0), index(dirtyIdx, columnCount() - 1), {Qt::DisplayRole});
+
+    // Re-arm the timer for the next session
+    m_columnWorkerTimer.start();
 }
 
 // ---- Column value extraction ------------------------------------------

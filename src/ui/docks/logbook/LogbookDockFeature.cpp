@@ -30,8 +30,12 @@ LogbookDockFeature::LogbookDockFeature(const AppContext& ctx, QObject* parent)
     // Connect progress signals to progress bar updates
     connect(ctx.sessionModel, &SessionModel::saveProgressChanged,
             m_logbookView, &LogbookView::onSaveProgressChanged);
-    connect(ctx.sessionModel, &SessionModel::loadProgressChanged,
-            m_logbookView, &LogbookView::onLoadProgressChanged);
+
+    // Connect column worker progress and cancel signals
+    connect(ctx.sessionModel, &SessionModel::columnWorkerProgressChanged,
+            m_logbookView, &LogbookView::onColumnWorkerProgressChanged);
+    connect(m_logbookView, &LogbookView::cancelColumnWorkerRequested,
+            ctx.sessionModel, &SessionModel::cancelColumnWorker);
 }
 
 QString LogbookDockFeature::id() const

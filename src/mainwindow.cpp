@@ -173,9 +173,7 @@ MainWindow::MainWindow(QWidget *parent)
         QVector<LogbookColumn> liveColumns = LogbookColumnStore::instance().enabledColumns();
         QMap<QString, QMap<int, QVariant>> cached = logbook.cachedColumnValues(liveColumns);
         model->populateFromIndex(cached, logbook.lastAccessedMap());
-
-        // Start background loading of all stub sessions
-        model->startBackgroundLoader(logbook.lastAccessedMap());
+        model->startColumnWorker();
     } else {
         if (savedSessions.isEmpty()) {
             savedSessions = logbook.loadAllSessions();

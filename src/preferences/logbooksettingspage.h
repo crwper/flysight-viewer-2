@@ -10,6 +10,7 @@ class QListWidget;
 class QListWidgetItem;
 class QPushButton;
 class QGroupBox;
+class QSpinBox;
 
 namespace FlySight {
 
@@ -36,8 +37,10 @@ private:
     QPushButton *m_moveUpButton;
     QPushButton *m_moveDownButton;
     QVector<LogbookColumn> m_columns;  // parallel vector synced with list widget
+    QSpinBox *m_cacheSizeSpinBox;
 
     QGroupBox* createColumnsGroup();
+    QGroupBox* createCacheGroup();
     void loadSettings();
     void populateList();
     void updateButtonStates();
