@@ -950,7 +950,6 @@ void SessionModel::evictSession(const QString &sessionId)
     // Save if dirty
     if (sr.dirty) {
         logbook.saveSession(sr.session.value());
-        logbook.setCachedValues(sr.sessionId, computeColumnValues(sr.session.value()));
         sr.dirty = false;
 
         // Update saver progress if the saver is active
@@ -958,10 +957,19 @@ void SessionModel::evictSession(const QString &sessionId)
             m_saveRemaining--;
             emit saveProgressChanged(m_saveRemaining, m_saveHighWater);
         }
-    } else {
-        // Update cached column values before eviction
-        logbook.setCachedValues(sr.sessionId, computeColumnValues(sr.session.value()));
     }
+
+    // Compute and cache column values before eviction
+    QMap<LogbookColumn, QVariant> colValues = computeColumnValues(sr.session.value());
+    logbook.setCachedValues(sr.sessionId, colValues);
+
+    QMap<int, QVariant> indexed;
+    for (int i = 0; i < m_columns.size(); ++i) {
+        auto it = colValues.find(m_columns[i]);
+        if (it != colValues.end())
+            indexed[i] = it.value();
+    }
+    sr.cachedValues = indexed;
 
     // Reset to stub
     sr.session = std::nullopt;
