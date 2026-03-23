@@ -24,14 +24,20 @@ TrackMapModel::TrackMapModel(SessionModel *sessionModel,
     , m_sessionModel(sessionModel)
     , m_rangeModel(rangeModel)
 {
+    m_rebuildTimer.setSingleShot(true);
+    m_rebuildTimer.setInterval(0);
+    connect(&m_rebuildTimer, &QTimer::timeout, this, &TrackMapModel::rebuild);
+
     if (m_sessionModel) {
         connect(m_sessionModel, &SessionModel::modelChanged,
-                this, &TrackMapModel::rebuild);
+                this, &TrackMapModel::scheduleRebuild);
+        connect(m_sessionModel, &SessionModel::visibilityChanged, this,
+                [this](const QSet<QString> &, const QSet<QString> &) { scheduleRebuild(); });
     }
 
     if (m_rangeModel) {
         connect(m_rangeModel, &PlotRangeModel::rangeChanged,
-                this, &TrackMapModel::rebuild);
+                this, &TrackMapModel::scheduleRebuild);
     }
 
     // Connect to preferences system
@@ -127,6 +133,11 @@ bool TrackMapModel::computeSessionUtcRange(const SessionData &session,
         *outUpper = absUpper;
     }
     return true;
+}
+
+void TrackMapModel::scheduleRebuild()
+{
+    m_rebuildTimer.start();
 }
 
 void TrackMapModel::rebuild()

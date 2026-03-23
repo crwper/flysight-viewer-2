@@ -31,6 +31,12 @@ LogbookDockFeature::LogbookDockFeature(const AppContext& ctx, QObject* parent)
     connect(ctx.sessionModel, &SessionModel::saveProgressChanged,
             m_logbookView, &LogbookView::onSaveProgressChanged);
 
+    // Connect loader progress and cancel signals
+    connect(ctx.sessionModel, &SessionModel::loadProgressChanged,
+            m_logbookView, &LogbookView::onLoadProgressChanged);
+    connect(m_logbookView, &LogbookView::cancelLoaderRequested,
+            ctx.sessionModel, &SessionModel::cancelLoader);
+
     // Connect column worker progress and cancel signals
     connect(ctx.sessionModel, &SessionModel::columnWorkerProgressChanged,
             m_logbookView, &LogbookView::onColumnWorkerProgressChanged);

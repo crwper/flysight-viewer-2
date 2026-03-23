@@ -82,6 +82,8 @@ LegendPresenter::LegendPresenter(SessionModel *sessionModel,
     if (m_sessionModel) {
         connect(m_sessionModel, &SessionModel::modelChanged,
                 this, &LegendPresenter::scheduleUpdate);
+        connect(m_sessionModel, &SessionModel::visibilityChanged, this,
+                [this](const QSet<QString> &, const QSet<QString> &) { scheduleUpdate(); });
     }
 
     if (m_plotModel) {

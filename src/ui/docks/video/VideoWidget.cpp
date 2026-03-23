@@ -225,6 +225,8 @@ VideoWidget::VideoWidget(SessionModel *sessionModel,
     if (m_sessionModel) {
         connect(m_sessionModel, &SessionModel::modelChanged,
                 this, &VideoWidget::rebuildSessionSelector);
+        connect(m_sessionModel, &SessionModel::visibilityChanged, this,
+                [this](const QSet<QString> &, const QSet<QString> &) { rebuildSessionSelector(); });
         connect(m_sessionModel, &SessionModel::dependencyChanged,
                 this, &VideoWidget::onDependencyChanged);
     }

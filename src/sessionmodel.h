@@ -5,6 +5,7 @@
 
 #include <QAbstractTableModel>
 #include <QMap>
+#include <QSet>
 #include <QTimer>
 #include <QVector>
 #include "logbookcolumn.h"
@@ -80,12 +81,15 @@ signals:
     void sessionLoaded(const QString &sessionId);
     void hoveredSessionChanged(const QString& sessionId);
     void dependencyChanged(const QString &sessionId, const DependencyKey &key);
+    void visibilityChanged(QSet<QString> shown, QSet<QString> hidden);
     void saveProgressChanged(int remaining, int total);
+    void loadProgressChanged(int remaining, int total);
     void columnWorkerProgressChanged(int remaining, int total);
 
 public:
     void startColumnWorker();
     void cancelColumnWorker();
+    void cancelLoader();
 
 private:
     QVector<SessionRow> m_rows;
@@ -107,6 +111,14 @@ private:
     int m_saveRemaining = 0;   // dirty sessions remaining in current wave
     void scheduleSave(const QString &sessionId);
 
+    // Background visibility loader (loads stub sessions made visible)
+    QTimer m_loadTimer;
+    int m_loadHighWater = 0;
+    int m_loadRemaining = 0;
+    QList<QString> m_loadQueue;       // session IDs of stubs to load
+    QSet<QString> m_loadedDuringBatch; // sessions loaded so far (emitted on completion/cancel)
+    static constexpr int kSyncLoadThreshold = 3;
+
     // Dirty column worker (computes missing cached column values in background)
     QTimer m_columnWorkerTimer;
     int m_columnWorkerHighWater = 0;
@@ -125,6 +137,7 @@ private:
 private slots:
     void rebuildColumns();
     void saveNextSession();
+    void loadNextVisibleSession();
     void processNextDirtyColumn();
 };
 

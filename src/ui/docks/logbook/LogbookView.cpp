@@ -3,12 +3,12 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QMouseEvent>
-#include <QPushButton>
 #include <QDebug>
 #include <QFontMetrics>
 #include <QItemSelectionModel>
 #include <QHeaderView>
 #include <QMenu>
+#include <QStyle>
 
 namespace FlySight {
 
@@ -17,17 +17,35 @@ LogbookView::LogbookView(SessionModel *model, QWidget *parent)
       treeView(new QTreeView(this)),
       model(model)
 {
+    QIcon closeIcon = style()->standardIcon(QStyle::SP_TitleBarCloseButton);
+
     m_saveProgressBar = new QProgressBar(this);
     m_saveProgressBar->setVisible(false);
     m_saveProgressBar->setTextVisible(true);
+
+    m_loadProgressBar = new QProgressBar(this);
+    m_loadProgressBar->setVisible(false);
+    m_loadProgressBar->setTextVisible(true);
+
+    m_loadCancelButton = new QToolButton(this);
+    m_loadCancelButton->setIcon(closeIcon);
+    m_loadCancelButton->setAutoRaise(true);
+    m_loadCancelButton->setVisible(false);
+    connect(m_loadCancelButton, &QToolButton::clicked, this, &LogbookView::cancelLoaderRequested);
 
     m_columnWorkerProgressBar = new QProgressBar(this);
     m_columnWorkerProgressBar->setVisible(false);
     m_columnWorkerProgressBar->setTextVisible(true);
 
-    m_columnWorkerCancelButton = new QPushButton(tr("Cancel"), this);
+    m_columnWorkerCancelButton = new QToolButton(this);
+    m_columnWorkerCancelButton->setIcon(closeIcon);
+    m_columnWorkerCancelButton->setAutoRaise(true);
     m_columnWorkerCancelButton->setVisible(false);
-    connect(m_columnWorkerCancelButton, &QPushButton::clicked, this, &LogbookView::cancelColumnWorkerRequested);
+    connect(m_columnWorkerCancelButton, &QToolButton::clicked, this, &LogbookView::cancelColumnWorkerRequested);
+
+    QHBoxLayout *loadLayout = new QHBoxLayout();
+    loadLayout->addWidget(m_loadProgressBar, 1);
+    loadLayout->addWidget(m_loadCancelButton);
 
     QHBoxLayout *columnWorkerLayout = new QHBoxLayout();
     columnWorkerLayout->addWidget(m_columnWorkerProgressBar, 1);
@@ -36,6 +54,7 @@ LogbookView::LogbookView(SessionModel *model, QWidget *parent)
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(treeView);
     layout->addWidget(m_saveProgressBar);
+    layout->addLayout(loadLayout);
     layout->addLayout(columnWorkerLayout);
     setLayout(layout);
 
@@ -189,6 +208,20 @@ void LogbookView::onSaveProgressChanged(int remaining, int total)
     m_saveProgressBar->setValue(total - remaining);
     m_saveProgressBar->setFormat(tr("Saving sessions: %v / %m"));
     m_saveProgressBar->setVisible(true);
+}
+
+void LogbookView::onLoadProgressChanged(int remaining, int total)
+{
+    if (total <= 0) {
+        m_loadProgressBar->setVisible(false);
+        m_loadCancelButton->setVisible(false);
+        return;
+    }
+    m_loadProgressBar->setRange(0, total);
+    m_loadProgressBar->setValue(total - remaining);
+    m_loadProgressBar->setFormat(tr("Loading sessions: %v / %m"));
+    m_loadProgressBar->setVisible(true);
+    m_loadCancelButton->setVisible(true);
 }
 
 void LogbookView::onColumnWorkerProgressChanged(int remaining, int total)

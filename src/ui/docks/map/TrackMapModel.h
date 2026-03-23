@@ -3,6 +3,7 @@
 
 #include <QAbstractListModel>
 #include <QColor>
+#include <QTimer>
 #include <QVariantList>
 #include <QVector>
 
@@ -65,6 +66,7 @@ public slots:
     void rebuild();
 
 private slots:
+    void scheduleRebuild();
     void onPreferenceChanged(const QString &key, const QVariant &value);
 
 signals:
@@ -96,6 +98,7 @@ private:
     double m_boundsWest = 0.0;
 
     double m_trackOpacity = 0.85;
+    QTimer m_rebuildTimer;
 
     QColor colorForSession(const QString &sessionId) const;
 };

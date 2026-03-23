@@ -2,7 +2,7 @@
 #ifndef LOGBOOKVIEW_H
 #define LOGBOOKVIEW_H
 
-#include <QPushButton>
+#include <QToolButton>
 #include <QWidget>
 #include <QTreeView>
 #include <QProgressBar>
@@ -24,10 +24,12 @@ signals:
     void deleteRequested();
     void focusSessionRequested(int row);
     void cancelColumnWorkerRequested();
+    void cancelLoaderRequested();
 
 public slots:
     void selectSessions(const QList<QString> &sessionIds);
     void onSaveProgressChanged(int remaining, int total);
+    void onLoadProgressChanged(int remaining, int total);
     void onColumnWorkerProgressChanged(int remaining, int total);
 
 private slots:
@@ -41,8 +43,10 @@ private:
     QTreeView *treeView;
     SessionModel *model;
     QProgressBar *m_saveProgressBar;
+    QProgressBar *m_loadProgressBar;
+    QToolButton *m_loadCancelButton;
     QProgressBar *m_columnWorkerProgressBar;
-    QPushButton *m_columnWorkerCancelButton;
+    QToolButton *m_columnWorkerCancelButton;
 
     void setupView();
 };

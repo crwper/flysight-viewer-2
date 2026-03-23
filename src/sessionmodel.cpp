@@ -31,6 +31,10 @@ SessionModel::SessionModel(QObject *parent)
     m_saveTimer.setInterval(0);
     connect(&m_saveTimer, &QTimer::timeout, this, &SessionModel::saveNextSession);
 
+    m_loadTimer.setSingleShot(true);
+    m_loadTimer.setInterval(0);
+    connect(&m_loadTimer, &QTimer::timeout, this, &SessionModel::loadNextVisibleSession);
+
     m_columnWorkerTimer.setSingleShot(true);
     m_columnWorkerTimer.setInterval(0);
     connect(&m_columnWorkerTimer, &QTimer::timeout, this, &SessionModel::processNextDirtyColumn);
@@ -396,7 +400,16 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
 
     if (somethingChanged) {
         emit dataChanged(index, index, {role});
-        emit modelChanged();
+        if (role == Qt::CheckStateRole) {
+            QSet<QString> shown, hidden;
+            if (sr.visible)
+                shown.insert(sr.sessionId);
+            else
+                hidden.insert(sr.sessionId);
+            emit visibilityChanged(shown, hidden);
+        } else {
+            emit modelChanged();
+        }
         if (attributeChanged) {
             if (!sr.sessionId.isEmpty())
                 scheduleSave(sr.sessionId);
@@ -489,6 +502,8 @@ void SessionModel::mergeSessions(const QList<SessionData>& sessions)
     bool hasDirty = std::any_of(m_rows.cbegin(), m_rows.cend(),
                                 [](const SessionRow &r) { return r.dirty; });
     if (hasDirty && !m_saveTimer.isActive()) {
+        m_loadTimer.stop();       // saver has priority over loader
+        m_columnWorkerTimer.stop();
         m_saveTimer.start();
     }
 
@@ -529,6 +544,8 @@ void SessionModel::setRowsVisibility(const QMap<int, bool>& rowVisibility)
     int minRow = INT_MAX;
     int maxRow = 0;
     double now = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch() / 1000.0;
+    QSet<QString> shownIds, hiddenIds;
+    QList<QString> newStubs;  // stubs that need background loading
 
     for (auto it = rowVisibility.constBegin(); it != rowVisibility.constEnd(); ++it) {
         int row = it.key();
@@ -536,22 +553,37 @@ void SessionModel::setRowsVisibility(const QMap<int, bool>& rowVisibility)
         if (row >= 0 && row < m_rows.size()) {
             bool wasVisible = m_rows[row].visible;
             m_rows[row].visible = visible;
-            // Force-load if setting visible on a stub
+
             if (visible && !m_rows[row].isLoaded()) {
-                sessionRef(row);
+                // Stub becoming visible: queue for background loading
+                newStubs.append(m_rows[row].sessionId);
             }
+
             // Sync to loaded SessionData if present
             if (m_rows[row].isLoaded()) {
                 m_rows[row].session->setVisible(visible);
             }
+
             // LRU transitions
             if (visible && !wasVisible) {
                 // Becoming visible: remove from LRU pool (now pinned)
                 lruRemove(m_rows[row].sessionId);
-            } else if (!visible && wasVisible && m_rows[row].isLoaded()) {
-                // Becoming non-visible while loaded: enter LRU pool
-                lruInsert(m_rows[row].sessionId);
+                if (m_rows[row].isLoaded())
+                    shownIds.insert(m_rows[row].sessionId);
+                // else: will be added to shownIds when loaded by the worker
+            } else if (!visible && wasVisible) {
+                hiddenIds.insert(m_rows[row].sessionId);
+                // Remove from load queue if it was pending
+                if (m_loadQueue.removeOne(m_rows[row].sessionId)) {
+                    m_loadRemaining--;
+                    m_loadHighWater--;
+                }
+                if (m_rows[row].isLoaded()) {
+                    // Becoming non-visible while loaded: enter LRU pool
+                    lruInsert(m_rows[row].sessionId);
+                }
             }
+
             // Update lastAccessed when toggling visibility to true
             if (visible) {
                 LogbookManager::instance().setLastAccessed(m_rows[row].sessionId, now);
@@ -561,12 +593,58 @@ void SessionModel::setRowsVisibility(const QMap<int, bool>& rowVisibility)
         }
     }
 
+    // Handle stubs that need loading
+    int totalPending = m_loadQueue.size() + newStubs.size();
+    if (totalPending > 0 && totalPending <= kSyncLoadThreshold) {
+        // Small batch: load everything synchronously (including any prior queue)
+        for (const QString &id : std::as_const(m_loadQueue)) {
+            int row = getSessionRow(id);
+            if (row >= 0 && m_rows[row].visible && !m_rows[row].isLoaded()) {
+                sessionRef(row);
+                shownIds.insert(id);
+            }
+        }
+        m_loadQueue.clear();
+        m_loadHighWater = 0;
+        m_loadRemaining = 0;
+        emit loadProgressChanged(0, 0);
+
+        for (const QString &id : std::as_const(newStubs)) {
+            int row = getSessionRow(id);
+            if (row >= 0 && m_rows[row].visible && !m_rows[row].isLoaded()) {
+                sessionRef(row);
+                shownIds.insert(id);
+            }
+        }
+    } else if (!newStubs.isEmpty()) {
+        // Large batch: append to background load queue
+        m_loadQueue.append(newStubs);
+        m_loadHighWater += newStubs.size();
+        m_loadRemaining += newStubs.size();
+
+        // Pause column worker (loader has priority)
+        m_columnWorkerTimer.stop();
+
+        // Start loader if saver is idle
+        if (!m_saveTimer.isActive() && !m_loadTimer.isActive()) {
+            m_loadTimer.start();
+        }
+        emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
+    }
+
     // Enforce cache bounds once after all visibility changes
     evictIfNeeded();
 
+    // Clamp load counters
+    if (m_loadHighWater <= 0) {
+        m_loadHighWater = 0;
+        m_loadRemaining = 0;
+    }
+
     if (minRow <= maxRow) {
         emit dataChanged(index(minRow, 0), index(maxRow, columnCount() - 1), {Qt::CheckStateRole});
-        emit modelChanged();
+        if (!shownIds.isEmpty() || !hiddenIds.isEmpty())
+            emit visibilityChanged(shownIds, hiddenIds);
     }
 }
 
@@ -597,6 +675,12 @@ bool SessionModel::removeSessions(const QList<QString> &sessionIds)
                 m_saveRemaining--;
             }
 
+            // Update load queue if this session was pending load
+            if (m_loadQueue.removeOne(sessionId)) {
+                m_loadRemaining--;
+                m_loadHighWater--;
+            }
+
             // Update column worker counters if this session has missing values
             if (m_columnWorkerRemaining > 0 && it->cachedValues.size() < m_columns.size()) {
                 m_columnWorkerHighWater--;
@@ -622,6 +706,12 @@ bool SessionModel::removeSessions(const QList<QString> &sessionIds)
             m_saveRemaining = 0;
         }
         emit saveProgressChanged(m_saveRemaining, m_saveHighWater);
+
+        if (m_loadHighWater <= 0) {
+            m_loadHighWater = 0;
+            m_loadRemaining = 0;
+        }
+        emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
 
         if (m_columnWorkerHighWater <= 0) {
             m_columnWorkerHighWater = 0;
@@ -824,7 +914,8 @@ void SessionModel::scheduleSave(const QString &sessionId)
     // else: row is already dirty, data is updated in memory,
     // saver will save the current (modified) version when it reaches this row
 
-    // Pause column worker while saver is active (saver has priority)
+    // Pause loader and column worker while saver is active (saver has priority)
+    m_loadTimer.stop();
     m_columnWorkerTimer.stop();
 
     if (!m_saveTimer.isActive()) {
@@ -835,6 +926,11 @@ void SessionModel::scheduleSave(const QString &sessionId)
 void SessionModel::flushDirtySessions()
 {
     m_saveTimer.stop();
+    m_loadTimer.stop();
+    m_loadQueue.clear();
+    m_loadedDuringBatch.clear();
+    m_loadHighWater = 0;
+    m_loadRemaining = 0;
     m_columnWorkerTimer.stop();
     m_columnWorkerHighWater = 0;
     m_columnWorkerRemaining = 0;
@@ -878,8 +974,10 @@ void SessionModel::saveNextSession()
         m_saveHighWater = 0;
         m_saveRemaining = 0;
         emit saveProgressChanged(0, 0);
-        // Restart column worker if it has remaining work
-        if (m_columnWorkerRemaining > 0) {
+        // Resume loader first, then column worker
+        if (!m_loadQueue.isEmpty()) {
+            m_loadTimer.start();
+        } else if (m_columnWorkerRemaining > 0) {
             m_columnWorkerTimer.start();
         }
         return;
@@ -908,10 +1006,114 @@ void SessionModel::saveNextSession()
         m_saveHighWater = 0;
         m_saveRemaining = 0;
         emit saveProgressChanged(0, 0);
-        // Restart column worker if it has remaining work
-        if (m_columnWorkerRemaining > 0) {
+        // Resume loader first, then column worker
+        if (!m_loadQueue.isEmpty()) {
+            m_loadTimer.start();
+        } else if (m_columnWorkerRemaining > 0) {
             m_columnWorkerTimer.start();
         }
+    }
+}
+
+// ---- Background visibility loader --------------------------------------
+
+void SessionModel::loadNextVisibleSession()
+{
+    // Yield to saver (saver has priority)
+    if (m_saveTimer.isActive())
+        return;  // saver will restart us when done
+
+    while (!m_loadQueue.isEmpty()) {
+        QString sessionId = m_loadQueue.takeFirst();
+
+        int row = getSessionRow(sessionId);
+        // Validate: row exists, still visible, still a stub
+        if (row < 0 || !m_rows[row].visible || m_rows[row].isLoaded()) {
+            // Skip invalid entry
+            m_loadRemaining--;
+            emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
+            continue;
+        }
+
+        // Load one session
+        sessionRef(row);
+        m_loadedDuringBatch.insert(sessionId);
+
+        m_loadRemaining--;
+        emit loadProgressChanged(m_loadRemaining, m_loadHighWater);
+
+        // Re-arm for next session or finish
+        if (!m_loadQueue.isEmpty()) {
+            m_loadTimer.start();
+        } else {
+            // All done — emit one visibilityChanged for the entire batch
+            m_loadHighWater = 0;
+            m_loadRemaining = 0;
+            emit loadProgressChanged(0, 0);
+            if (!m_loadedDuringBatch.isEmpty()) {
+                QSet<QString> shown = std::move(m_loadedDuringBatch);
+                m_loadedDuringBatch.clear();
+                emit visibilityChanged(shown, {});
+            }
+            // Restart column worker if it has remaining work
+            if (m_columnWorkerRemaining > 0) {
+                m_columnWorkerTimer.start();
+            }
+        }
+        return;
+    }
+
+    // Queue exhausted (all entries were skipped)
+    m_loadHighWater = 0;
+    m_loadRemaining = 0;
+    emit loadProgressChanged(0, 0);
+    if (!m_loadedDuringBatch.isEmpty()) {
+        QSet<QString> shown = std::move(m_loadedDuringBatch);
+        m_loadedDuringBatch.clear();
+        emit visibilityChanged(shown, {});
+    }
+    if (m_columnWorkerRemaining > 0) {
+        m_columnWorkerTimer.start();
+    }
+}
+
+void SessionModel::cancelLoader()
+{
+    m_loadTimer.stop();
+
+    // Untick sessions that were queued but not yet loaded
+    QSet<QString> hiddenIds;
+    int minRow = INT_MAX;
+    int maxRow = 0;
+    for (const QString &sessionId : std::as_const(m_loadQueue)) {
+        int row = getSessionRow(sessionId);
+        if (row >= 0 && m_rows[row].visible && !m_rows[row].isLoaded()) {
+            m_rows[row].visible = false;
+            hiddenIds.insert(sessionId);
+            minRow = std::min(minRow, row);
+            maxRow = std::max(maxRow, row);
+        }
+    }
+
+    m_loadQueue.clear();
+    m_loadHighWater = 0;
+    m_loadRemaining = 0;
+    emit loadProgressChanged(0, 0);
+
+    // Emit visibility updates: shown for sessions loaded before cancel,
+    // hidden for sessions whose checkboxes we just unticked
+    QSet<QString> shownIds = std::move(m_loadedDuringBatch);
+    m_loadedDuringBatch.clear();
+
+    if (!shownIds.isEmpty() || !hiddenIds.isEmpty())
+        emit visibilityChanged(shownIds, hiddenIds);
+
+    if (minRow <= maxRow)
+        emit dataChanged(index(minRow, 0), index(maxRow, columnCount() - 1), {Qt::CheckStateRole});
+
+    // Restart column worker if it has remaining work
+    if (m_columnWorkerRemaining > 0) {
+        m_columnWorkerTimer.start();
     }
 }
 
@@ -1026,6 +1228,10 @@ void SessionModel::processNextDirtyColumn()
                                 [](const SessionRow &r) { return r.dirty; });
     if (hasDirty)
         return;  // Do not re-arm; saver will restart us when it finishes
+
+    // Yield to the loader (loader has priority over column worker)
+    if (!m_loadQueue.isEmpty())
+        return;  // Do not re-arm; loader will restart us when it finishes
 
     // Find next session with missing column values
     int dirtyIdx = -1;

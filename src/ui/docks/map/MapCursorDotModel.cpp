@@ -186,6 +186,8 @@ MapCursorDotModel::MapCursorDotModel(SessionModel *sessionModel, MomentModel *mo
     if (m_sessionModel) {
         connect(m_sessionModel, &SessionModel::modelChanged,
                 this, &MapCursorDotModel::scheduleRebuild);
+        connect(m_sessionModel, &SessionModel::visibilityChanged, this,
+                [this](const QSet<QString> &, const QSet<QString> &) { scheduleRebuild(); });
     }
 
     if (m_momentModel) {
