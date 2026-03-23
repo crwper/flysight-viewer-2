@@ -45,6 +45,8 @@ env:
   # Boost version for Windows (match existing local development setup)
   BOOST_VERSION: '1.87.0'
   BOOST_VERSION_UNDERSCORE: '1_87_0'
+  # Minimum macOS deployment target (Qt 6.9 requires macOS 12+)
+  MACOS_DEPLOYMENT_TARGET: '12.0'
 
 jobs:
   # ===========================================================================
@@ -65,7 +67,7 @@ jobs:
             platform: macOS
             arch: arm64
             artifact_ext: dmg
-          - os: macos-13
+          - os: macos-15-intel
             platform: macOS
             arch: x86_64
             artifact_ext: dmg
@@ -361,10 +363,15 @@ jobs:
         if: steps.cache-third-party.outputs.cache-hit != 'true'
         shell: bash
         run: |
+          CMAKE_EXTRA_ARGS=""
+          if [ "${{ runner.os }}" == "macOS" ]; then
+            CMAKE_EXTRA_ARGS="-DCMAKE_OSX_DEPLOYMENT_TARGET=${{ env.MACOS_DEPLOYMENT_TARGET }}"
+          fi
           cmake -G Ninja -B build-third-party -S . \
             -DCMAKE_BUILD_TYPE=Release \
             -DFLYSIGHT_BUILD_THIRD_PARTY=ON \
-            -DFLYSIGHT_THIRD_PARTY_ONLY=ON
+            -DFLYSIGHT_THIRD_PARTY_ONLY=ON \
+            $CMAKE_EXTRA_ARGS
 
       - name: Build third-party dependencies
         if: steps.cache-third-party.outputs.cache-hit != 'true'
@@ -464,6 +471,10 @@ jobs:
         run: |
           # Configure the main application build
           # Use src/ directory directly since we have pre-built third-party deps
+          CMAKE_EXTRA_ARGS=""
+          if [ "${{ runner.os }}" == "macOS" ]; then
+            CMAKE_EXTRA_ARGS="-DCMAKE_OSX_DEPLOYMENT_TARGET=${{ env.MACOS_DEPLOYMENT_TARGET }}"
+          fi
           cmake -G Ninja -B build -S src \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=build/install \
@@ -477,7 +488,8 @@ jobs:
             ${GOOGLE_MAPS_API_KEY:+-DGOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY"} \
             ${FLYSIGHT_VERSION:+-DFLYSIGHT_VERSION_OVERRIDE="$FLYSIGHT_VERSION"} \
             -DFLYSIGHT_CODESIGN_IDENTITY="${FLYSIGHT_CODESIGN_IDENTITY:--}" \
-            -DFLYSIGHT_CODESIGN_ENTITLEMENTS="${GITHUB_WORKSPACE}/src/FlySightViewer.entitlements"
+            -DFLYSIGHT_CODESIGN_ENTITLEMENTS="${GITHUB_WORKSPACE}/src/FlySightViewer.entitlements" \
+            $CMAKE_EXTRA_ARGS
 
       # =========================================================================
       # Task 3.5: Verify Boost Discovery

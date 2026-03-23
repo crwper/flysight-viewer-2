@@ -9,23 +9,25 @@ using namespace FlySight;
 
 std::optional<double> Calculations::systemTimeToUtc(const SessionData &session, double systemTime)
 {
-    if (!session.hasAttribute(SessionKeys::TimeFitA) ||
-        !session.hasAttribute(SessionKeys::TimeFitB)) {
+    QVariant vA = session.getAttribute(SessionKeys::TimeFitA);
+    QVariant vB = session.getAttribute(SessionKeys::TimeFitB);
+    if (!vA.isValid() || !vB.isValid()) {
         return std::nullopt;
     }
-    double a = session.getAttribute(SessionKeys::TimeFitA).toDouble();
-    double b = session.getAttribute(SessionKeys::TimeFitB).toDouble();
+    double a = vA.toDouble();
+    double b = vB.toDouble();
     return a * systemTime + b;
 }
 
 std::optional<double> Calculations::utcToSystemTime(const SessionData &session, double utc)
 {
-    if (!session.hasAttribute(SessionKeys::TimeFitA) ||
-        !session.hasAttribute(SessionKeys::TimeFitB)) {
+    QVariant vA = session.getAttribute(SessionKeys::TimeFitA);
+    QVariant vB = session.getAttribute(SessionKeys::TimeFitB);
+    if (!vA.isValid() || !vB.isValid()) {
         return std::nullopt;
     }
-    double a = session.getAttribute(SessionKeys::TimeFitA).toDouble();
-    double b = session.getAttribute(SessionKeys::TimeFitB).toDouble();
+    double a = vA.toDouble();
+    double b = vB.toDouble();
     if (a == 0.0) {
         return std::nullopt;  // Cannot invert: degenerate fit
     }
