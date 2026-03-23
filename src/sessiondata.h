@@ -18,6 +18,7 @@ namespace SessionKeys {
     constexpr char DeviceId[] = "DEVICE_ID";
     constexpr char SessionId[] = "SESSION_ID";
     constexpr char Description[] = "_DESCRIPTION";
+    constexpr char ImportTime[] = "_IMPORT_TIME";
     constexpr char Time[] = "_time";
     constexpr char SystemTime[] = "_system_time";
     constexpr char TimeFitA[] = "_TIME_FIT_A";

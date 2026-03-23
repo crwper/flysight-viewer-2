@@ -42,6 +42,14 @@ void FlySight::registerBuiltInAttributes() {
 
     reg.registerAttribute({
         QStringLiteral("Session"),
+        QStringLiteral("Import Time"),
+        SessionKeys::ImportTime,
+        AttributeFormatType::DateTime,
+        false
+    });
+
+    reg.registerAttribute({
+        QStringLiteral("Session"),
         QStringLiteral("Exit Time"),
         SessionKeys::ExitTime,
         AttributeFormatType::DateTime,

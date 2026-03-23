@@ -112,6 +112,10 @@ void DataImporter::initializeFromDevice(const QString& fileName, const QByteArra
         QString md5HashString = md5Hash.toHex();
         sessionData.setAttribute(SessionKeys::SessionId, md5HashString);
     }
+
+    // Record the import time
+    double now = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch() / 1000.0;
+    sessionData.setAttribute(SessionKeys::ImportTime, now);
 }
 
 void DataImporter::importSimple(QTextStream& in, SessionData& sessionData, const QString &sensorName) {
