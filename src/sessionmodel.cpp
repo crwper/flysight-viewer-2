@@ -1101,8 +1101,7 @@ QMap<LogbookColumn, QVariant> SessionModel::computeColumnValues(const SessionDat
             break;
         }
         }
-        if (value.isValid())
-            result[col] = value;
+        result[col] = value;
     }
     return result;
 }

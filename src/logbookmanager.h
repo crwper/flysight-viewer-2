@@ -81,13 +81,10 @@ private:
     QMap<QString, double> m_lastAccessed;
 
     // Maps SESSION_ID -> { columnDefinitionKey -> QJsonValue }
-    // Populated by setCachedValues(), read back by readIndex()
+    // Populated on index load and by setCachedValues(); persisted by flushIndex()
     QMap<QString, QMap<QString, QJsonValue>> m_cachedValues;
 
-    // Stored from index read, used by cachedColumnValues()
-    QVector<LogbookColumn> m_indexColumns;              // column defs from index
-    QMap<QString, QString> m_indexColumnUuids;           // index column UUID for each def (by definition key)
-    QMap<QString, QMap<QString, QJsonValue>> m_indexValues;  // SESSION_ID -> {columnUUID -> value}
+    bool m_hasIndexData = false;
 };
 
 } // namespace FlySight

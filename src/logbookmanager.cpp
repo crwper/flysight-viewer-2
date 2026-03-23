@@ -82,17 +82,6 @@ LogbookColumn columnFromJson(const QJsonObject &obj)
     return col;
 }
 
-bool columnsMatchDefinition(const LogbookColumn &live, const LogbookColumn &index)
-{
-    return live.type == index.type
-        && live.attributeKey == index.attributeKey
-        && live.sensorID == index.sensorID
-        && live.measurementID == index.measurementID
-        && live.measurementType == index.measurementType
-        && live.markerAttributeKey == index.markerAttributeKey
-        && live.marker2AttributeKey == index.marker2AttributeKey;
-}
-
 // Build a deterministic string key from column definition fields.
 // Used for m_cachedValues internal storage.
 QString columnDefinitionKey(const LogbookColumn &col)
@@ -174,18 +163,14 @@ QList<SessionData> LogbookManager::initialize()
                 const QJsonObject columnsObj = root[QStringLiteral("columns")].toObject();
                 const QJsonObject sessionsObj = root[QStringLiteral("sessions")].toObject();
 
-                // Parse column definitions
-                m_indexColumns.clear();
-                m_indexColumnUuids.clear();
+                // Build ephemeral UUID → definition key mapping
+                QMap<QString, QString> uuidToDefKey;
                 for (auto it = columnsObj.constBegin(); it != columnsObj.constEnd(); ++it) {
-                    const QString colUuid = it.key();
                     const LogbookColumn col = columnFromJson(it.value().toObject());
-                    m_indexColumns.append(col);
-                    m_indexColumnUuids[columnDefinitionKey(col)] = colUuid;
+                    uuidToDefKey[it.key()] = columnDefinitionKey(col);
                 }
 
                 // Parse sessions
-                m_indexValues.clear();
                 for (auto it = sessionsObj.constBegin(); it != sessionsObj.constEnd(); ++it) {
                     const QString sessionId = it.key();
                     const QJsonObject entry = it.value().toObject();
@@ -199,17 +184,21 @@ QList<SessionData> LogbookManager::initialize()
                         m_lastAccessed[sessionId] = entry[QStringLiteral("lastAccessed")].toDouble();
                     }
 
-                    // values
+                    // values — translate UUID-keyed entries to definition-key-keyed
                     if (entry.contains(QStringLiteral("values"))) {
                         const QJsonObject valuesObj = entry[QStringLiteral("values")].toObject();
                         QMap<QString, QJsonValue> sessionValues;
                         for (auto vit = valuesObj.constBegin(); vit != valuesObj.constEnd(); ++vit) {
-                            sessionValues[vit.key()] = vit.value();
+                            const QString defKey = uuidToDefKey.value(vit.key());
+                            if (!defKey.isEmpty())
+                                sessionValues[defKey] = vit.value();
                         }
-                        m_indexValues[sessionId] = sessionValues;
+                        if (!sessionValues.isEmpty())
+                            m_cachedValues[sessionId] = sessionValues;
                     }
                 }
 
+                m_hasIndexData = true;
                 return {};
             } else {
                 // --- Legacy flat format ---
@@ -238,7 +227,7 @@ QList<SessionData> LogbookManager::initialize()
 
 bool LogbookManager::hasIndexData() const
 {
-    return !m_indexColumns.isEmpty();
+    return m_hasIndexData;
 }
 
 const QMap<QString, double>& LogbookManager::lastAccessedMap() const
@@ -251,43 +240,32 @@ QMap<QString, QMap<int, QVariant>> LogbookManager::cachedColumnValues(
 {
     QMap<QString, QMap<int, QVariant>> result;
 
-    // Build mapping: liveColumnIndex -> index column UUID
-    QMap<int, QString> liveToIndexUuid;
-    for (int i = 0; i < liveColumns.size(); ++i) {
-        const LogbookColumn &liveCol = liveColumns[i];
-        for (const LogbookColumn &indexCol : m_indexColumns) {
-            if (columnsMatchDefinition(liveCol, indexCol)) {
-                const QString defKey = columnDefinitionKey(indexCol);
-                if (m_indexColumnUuids.contains(defKey)) {
-                    liveToIndexUuid[i] = m_indexColumnUuids[defKey];
-                }
-                break;
-            }
-        }
-    }
+    // Build mapping: definition key → live column index
+    QMap<QString, int> defKeyToLiveIndex;
+    for (int i = 0; i < liveColumns.size(); ++i)
+        defKeyToLiveIndex[columnDefinitionKey(liveColumns[i])] = i;
 
-    // For each session, look up values by index column UUID and map to live column index
-    for (auto sit = m_indexValues.constBegin(); sit != m_indexValues.constEnd(); ++sit) {
+    // For each session, translate definition-key-keyed values to index-keyed
+    for (auto sit = m_cachedValues.constBegin(); sit != m_cachedValues.constEnd(); ++sit) {
         const QString &sessionId = sit.key();
         const QMap<QString, QJsonValue> &sessionValues = sit.value();
 
         QMap<int, QVariant> columnValues;
-        for (auto lit = liveToIndexUuid.constBegin(); lit != liveToIndexUuid.constEnd(); ++lit) {
-            int liveIdx = lit.key();
-            const QString &colUuid = lit.value();
-            if (sessionValues.contains(colUuid)) {
-                const QJsonValue &jv = sessionValues[colUuid];
+        for (auto vit = sessionValues.constBegin(); vit != sessionValues.constEnd(); ++vit) {
+            auto liveIt = defKeyToLiveIndex.constFind(vit.key());
+            if (liveIt != defKeyToLiveIndex.constEnd()) {
+                const QJsonValue &jv = vit.value();
                 if (jv.isDouble()) {
-                    columnValues[liveIdx] = QVariant(jv.toDouble());
+                    columnValues[liveIt.value()] = QVariant(jv.toDouble());
                 } else if (jv.isString()) {
-                    columnValues[liveIdx] = QVariant(jv.toString());
+                    columnValues[liveIt.value()] = QVariant(jv.toString());
+                } else if (jv.isNull()) {
+                    // Null means "computed but no value" — store invalid QVariant
+                    columnValues[liveIt.value()] = QVariant();
                 }
-                // null or absent means no cached value -- skip
             }
         }
-        if (!columnValues.isEmpty()) {
-            result[sessionId] = columnValues;
-        }
+        result[sessionId] = columnValues;
     }
 
     // Ensure ALL known sessions appear in the result so that
