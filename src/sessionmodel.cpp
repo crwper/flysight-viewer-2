@@ -64,11 +64,8 @@ void SessionModel::rebuildColumns()
             QMap<LogbookColumn, QVariant> colValues = computeColumnValues(row.session.value());
             logbook.setCachedValues(row.sessionId, colValues);
             QMap<int, QVariant> indexed;
-            for (int i = 0; i < m_columns.size(); ++i) {
-                auto it = colValues.find(m_columns[i]);
-                if (it != colValues.end())
-                    indexed[i] = it.value();
-            }
+            for (int i = 0; i < m_columns.size(); ++i)
+                indexed[i] = colValues.value(m_columns[i]);
             row.cachedValues = indexed;
         } else {
             // Clear cached values for stub sessions; the column worker will recompute them
@@ -964,11 +961,8 @@ void SessionModel::evictSession(const QString &sessionId)
     logbook.setCachedValues(sr.sessionId, colValues);
 
     QMap<int, QVariant> indexed;
-    for (int i = 0; i < m_columns.size(); ++i) {
-        auto it = colValues.find(m_columns[i]);
-        if (it != colValues.end())
-            indexed[i] = it.value();
-    }
+    for (int i = 0; i < m_columns.size(); ++i)
+        indexed[i] = colValues.value(m_columns[i]);
     sr.cachedValues = indexed;
 
     // Reset to stub
@@ -1064,11 +1058,8 @@ void SessionModel::processNextDirtyColumn()
 
     // Rebuild index-based cached values map
     QMap<int, QVariant> indexed;
-    for (int i = 0; i < m_columns.size(); ++i) {
-        auto it = colValues.find(m_columns[i]);
-        if (it != colValues.end())
-            indexed[i] = it.value();
-    }
+    for (int i = 0; i < m_columns.size(); ++i)
+        indexed[i] = colValues.value(m_columns[i]);
     row.cachedValues = indexed;
 
     m_columnWorkerRemaining--;
