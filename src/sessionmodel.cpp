@@ -536,6 +536,24 @@ void SessionModel::populateFromIndex(const QMap<QString, QMap<int, QVariant>> &c
     emit modelChanged();
 }
 
+void SessionModel::populateFromUuids(const QStringList &uuids)
+{
+    beginResetModel();
+    m_rows.clear();
+
+    for (const QString &uuid : uuids) {
+        SessionRow row;
+        row.sessionId = uuid;
+        row.cachedValues = {};
+        row.session = std::nullopt;
+        row.visible = false;
+        m_rows.append(std::move(row));
+    }
+
+    endResetModel();
+    emit modelChanged();
+}
+
 void SessionModel::setRowsVisibility(const QMap<int, bool>& rowVisibility)
 {
     if (rowVisibility.isEmpty())
@@ -744,6 +762,13 @@ SessionData &SessionModel::sessionRef(int row)
     if (!sr.isLoaded()) {
         auto loaded = LogbookManager::instance().loadSession(sr.sessionId);
         if (loaded.has_value()) {
+            // Remap UUID-based session ID to real SESSION_ID if needed
+            const QString realId = loaded->getAttribute(SessionKeys::SessionId).toString();
+            if (!realId.isEmpty() && realId != sr.sessionId) {
+                LogbookManager &logbook = LogbookManager::instance();
+                if (logbook.remapSessionId(sr.sessionId, realId))
+                    sr.sessionId = realId;
+            }
             sr.session = std::move(loaded.value());
         } else {
             qWarning() << "SessionModel::sessionRef: failed to load session"
@@ -1264,6 +1289,12 @@ void SessionModel::processNextDirtyColumn()
         // Stub session: load temporarily via LogbookManager::loadSession()
         auto loaded = logbook.loadSession(row.sessionId);
         if (loaded.has_value()) {
+            // Remap UUID-based session ID to real SESSION_ID if needed
+            const QString realId = loaded->getAttribute(SessionKeys::SessionId).toString();
+            if (!realId.isEmpty() && realId != row.sessionId) {
+                if (logbook.remapSessionId(row.sessionId, realId))
+                    row.sessionId = realId;
+            }
             colValues = computeColumnValues(loaded.value());
         } else {
             // Load failed; skip this session

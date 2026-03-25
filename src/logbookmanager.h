@@ -53,6 +53,17 @@ public:
     // Returns true if the index contained column definitions (new format)
     bool hasIndexData() const;
 
+    // Returns true if a filename-only scan was used (no CSV parsing)
+    bool hasDeferredScan() const;
+
+    // Returns UUIDs found by the deferred filename scan
+    const QStringList &scannedUuids() const;
+
+    // Atomically replaces a temporary UUID-based session ID with the real SESSION_ID.
+    // Updates m_sessionIdToUuid, m_lastAccessed, and m_cachedValues.
+    // Returns false if oldId not found or newId already exists.
+    bool remapSessionId(const QString &oldId, const QString &newId);
+
     // Returns the lastAccessed map (SESSION_ID -> epoch seconds)
     const QMap<QString, double>& lastAccessedMap() const;
 
@@ -83,6 +94,9 @@ private:
     // Scans *.csv files in the sessions directory, parses each, and populates m_sessionIdToUuid
     QList<SessionData> scanSessionFiles();
 
+    // Scans *.csv filenames only (no parsing); populates m_sessionIdToUuid with identity mappings
+    QStringList scanSessionFilenames();
+
     // Maps SESSION_ID strings to UUID filename stems (without extension)
     QMap<QString, QString> m_sessionIdToUuid;
 
@@ -94,6 +108,8 @@ private:
     QMap<QString, QMap<QString, QJsonValue>> m_cachedValues;
 
     bool m_hasIndexData = false;
+    bool m_deferredScan = false;
+    QStringList m_scannedUuids;
 };
 
 } // namespace FlySight

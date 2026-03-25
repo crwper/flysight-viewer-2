@@ -215,10 +215,11 @@ QList<SessionData> LogbookManager::initialize()
         }
     }
 
-    // Fallback: scan *.csv files and return parsed sessions.
-    // Don't flush the index here — m_cachedValues is still empty.
-    // The index will be flushed on close or after mergeSessions populates it.
-    return scanSessionFiles();
+    // Fallback: scan filenames only (no CSV parsing) for instant startup.
+    // The column worker will parse each CSV in the background and rebuild the index.
+    m_scannedUuids = scanSessionFilenames();
+    m_deferredScan = true;
+    return {};
 }
 
 // ============================================================================
@@ -228,6 +229,16 @@ QList<SessionData> LogbookManager::initialize()
 bool LogbookManager::hasIndexData() const
 {
     return m_hasIndexData;
+}
+
+bool LogbookManager::hasDeferredScan() const
+{
+    return m_deferredScan;
+}
+
+const QStringList &LogbookManager::scannedUuids() const
+{
+    return m_scannedUuids;
 }
 
 const QMap<QString, double>& LogbookManager::lastAccessedMap() const
@@ -433,6 +444,53 @@ QList<SessionData> LogbookManager::scanSessionFiles()
     }
 
     return result;
+}
+
+// ============================================================================
+// Scan Session Filenames (no CSV parsing)
+// ============================================================================
+
+QStringList LogbookManager::scanSessionFilenames()
+{
+    QStringList uuids;
+    const QString dir = sessionsDirectory();
+    const QDir sessDir(dir);
+    const QStringList csvFiles = sessDir.entryList(
+        QStringList() << QStringLiteral("*.csv"),
+        QDir::Files, QDir::Name);
+
+    for (const QString &filename : csvFiles) {
+        const QString uuid = QFileInfo(filename).completeBaseName();
+        m_sessionIdToUuid[uuid] = uuid;  // identity mapping
+        uuids.append(uuid);
+    }
+    return uuids;
+}
+
+// ============================================================================
+// Remap Session ID
+// ============================================================================
+
+bool LogbookManager::remapSessionId(const QString &oldId, const QString &newId)
+{
+    if (!m_sessionIdToUuid.contains(oldId))
+        return false;
+    if (oldId == newId)
+        return true;
+    if (m_sessionIdToUuid.contains(newId))
+        return false;
+
+    const QString uuid = m_sessionIdToUuid.take(oldId);
+    m_sessionIdToUuid[newId] = uuid;
+
+    if (m_lastAccessed.contains(oldId)) {
+        m_lastAccessed[newId] = m_lastAccessed.take(oldId);
+    }
+    if (m_cachedValues.contains(oldId)) {
+        m_cachedValues[newId] = m_cachedValues.take(oldId);
+    }
+
+    return true;
 }
 
 // ============================================================================

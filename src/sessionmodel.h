@@ -57,6 +57,9 @@ public:
     void populateFromIndex(const QMap<QString, QMap<int, QVariant>> &cachedValues,
                            const QMap<QString, double> &lastAccessed);
 
+    // Populate model from UUID filenames only (no cached values, no CSV parsing)
+    void populateFromUuids(const QStringList &uuids);
+
     // Hovered session management
     QString hoveredSessionId() const;
     void setHoveredSessionId(const QString& sessionId);

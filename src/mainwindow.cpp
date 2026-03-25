@@ -174,6 +174,9 @@ MainWindow::MainWindow(QWidget *parent)
         QMap<QString, QMap<int, QVariant>> cached = logbook.cachedColumnValues(liveColumns);
         model->populateFromIndex(cached, logbook.lastAccessedMap());
         model->startColumnWorker();
+    } else if (logbook.hasDeferredScan()) {
+        model->populateFromUuids(logbook.scannedUuids());
+        model->startColumnWorker();
     } else {
         if (savedSessions.isEmpty()) {
             savedSessions = logbook.loadAllSessions();
