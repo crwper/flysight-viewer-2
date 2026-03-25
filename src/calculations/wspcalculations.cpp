@@ -117,6 +117,7 @@ void Calculations::registerWspCalculations()
             session.setCalculatedAttribute(SessionKeys::WspTimeResult,  QVariant());
             session.setCalculatedAttribute(SessionKeys::WspDistResult,  QVariant());
             session.setCalculatedAttribute(SessionKeys::WspSpeedResult, QVariant());
+            session.setCalculatedAttribute(SessionKeys::WspSepResult,   QVariant());
             return session.getAttribute(outputKey);
         }
 
@@ -130,6 +131,7 @@ void Calculations::registerWspCalculations()
         double exitLat     = 0.0;
         double exitLon     = 0.0;
         bool foundExit     = false;
+        int exitIdx        = -1;
 
         for (int i = startIdx; i < n; ++i) {
             if (i < 1) continue;
@@ -139,6 +141,7 @@ void Calculations::registerWspCalculations()
                 exitLat     = lat[i - 1]  + a * (lat[i]  - lat[i - 1]);
                 exitLon     = lon[i - 1]  + a * (lon[i]  - lon[i - 1]);
                 foundExit   = true;
+                exitIdx     = i;
                 break;
             }
         }
@@ -151,6 +154,7 @@ void Calculations::registerWspCalculations()
             session.setCalculatedAttribute(SessionKeys::WspTimeResult,  QVariant());
             session.setCalculatedAttribute(SessionKeys::WspDistResult,  QVariant());
             session.setCalculatedAttribute(SessionKeys::WspSpeedResult, QVariant());
+            session.setCalculatedAttribute(SessionKeys::WspSepResult,   QVariant());
             return session.getAttribute(outputKey);
         }
 
@@ -173,6 +177,44 @@ void Calculations::registerWspCalculations()
             session.setCalculatedAttribute(SessionKeys::WspSpeedResult, QVariant());
         }
 
+        // Compute max SEP within the validation window.
+        // The validation window extends 20 m outside the competition window.
+        // Search outward from the gate crossings to find its boundaries.
+        QVector<double> hAcc = session.getMeasurement("GNSS", "hAcc");
+        QVector<double> vAcc = session.getMeasurement("GNSS", "vAcc");
+
+        if (hAcc.size() == n && vAcc.size() == n) {
+            // Search backward from entry crossing until altitude >= topAlt + 20
+            int valStart = startIdx;  // startIdx is the entry crossing index
+            for (int i = startIdx - 1; i >= 0; --i) {
+                if (z[i] >= topAlt + 20.0)
+                    break;
+                valStart = i;
+            }
+
+            // Search forward from exit crossing until altitude <= bottomAlt - 20
+            int valEnd = exitIdx;
+            for (int i = exitIdx + 1; i < n; ++i) {
+                if (z[i] <= bottomAlt - 20.0)
+                    break;
+                valEnd = i;
+            }
+
+            double maxSep = -1.0;
+            for (int i = valStart; i <= valEnd; ++i) {
+                double sep = 0.5127 * (2.0 * hAcc[i] + vAcc[i]);
+                if (sep > maxSep)
+                    maxSep = sep;
+            }
+
+            if (maxSep >= 0.0)
+                session.setCalculatedAttribute(SessionKeys::WspSepResult, maxSep);
+            else
+                session.setCalculatedAttribute(SessionKeys::WspSepResult, QVariant());
+        } else {
+            session.setCalculatedAttribute(SessionKeys::WspSepResult, QVariant());
+        }
+
         return session.getAttribute(outputKey);
     };
 
@@ -185,7 +227,9 @@ void Calculations::registerWspCalculations()
         DependencyKey::measurement("GNSS", "z"),
         DependencyKey::measurement("GNSS", "lat"),
         DependencyKey::measurement("GNSS", "lon"),
-        DependencyKey::measurement("GNSS", SessionKeys::Time)
+        DependencyKey::measurement("GNSS", SessionKeys::Time),
+        DependencyKey::measurement("GNSS", "hAcc"),
+        DependencyKey::measurement("GNSS", "vAcc")
     };
 
     SessionData::registerCalculatedAttribute(
@@ -251,6 +295,13 @@ void Calculations::registerWspCalculations()
             return computeWspResults(session, SessionKeys::WspSpeedResult);
         });
 
+    SessionData::registerCalculatedAttribute(
+        SessionKeys::WspSepResult,
+        wspResultDeps,
+        [computeWspResults](SessionData& session) -> std::optional<QVariant> {
+            return computeWspResults(session, SessionKeys::WspSepResult);
+        });
+
     // ── Group C: Marker registration (2 markers) ──────────────────────
 
     QVector<MarkerDefinition> defs;
@@ -310,5 +361,14 @@ void Calculations::registerWspCalculations()
         AttributeFormatType::Double,
         false,
         MeasurementTypes::WspSpeed
+    });
+
+    reg.registerAttribute({
+        QStringLiteral("Wingsuit Performance"),
+        QStringLiteral("SEP"),
+        SessionKeys::WspSepResult,
+        AttributeFormatType::Double,
+        false,
+        MeasurementTypes::WspSep
     });
 }

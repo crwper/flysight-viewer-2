@@ -93,6 +93,15 @@ void WingsuitPerformanceWidget::buildLayout()
 
     mainLayout->addLayout(resultsGrid);
 
+    // --- SEP accuracy ---
+    auto* sepSeparator = new QFrame;
+    sepSeparator->setFrameShape(QFrame::HLine);
+    sepSeparator->setFrameShadow(QFrame::Sunken);
+    mainLayout->addWidget(sepSeparator);
+
+    m_sepResult = new QLabel(QStringLiteral("Maximum SEP: --"));
+    mainLayout->addWidget(m_sepResult);
+
     // --- Stretch ---
     mainLayout->addStretch();
 
@@ -167,6 +176,8 @@ void WingsuitPerformanceWidget::refreshAll()
         m_timeResult->setText(QStringLiteral("--"));
         m_distanceResult->setText(QStringLiteral("--"));
         m_speedResult->setText(QStringLiteral("--"));
+        m_sepResult->setText(QStringLiteral("Maximum SEP: --"));
+        m_sepResult->setStyleSheet(QString());
         m_restoreButton->setEnabled(false);
         blockEditorSignals(false);
         return;
@@ -188,6 +199,8 @@ void WingsuitPerformanceWidget::refreshAll()
         m_timeResult->setText(QStringLiteral("--"));
         m_distanceResult->setText(QStringLiteral("--"));
         m_speedResult->setText(QStringLiteral("--"));
+        m_sepResult->setText(QStringLiteral("Maximum SEP: --"));
+        m_sepResult->setStyleSheet(QString());
         m_restoreButton->setEnabled(false);
         blockEditorSignals(false);
         return;
@@ -275,6 +288,20 @@ void WingsuitPerformanceWidget::refreshResults()
         m_speedResult->setText(QString::number(speedVal.toDouble() * 3.6, 'f', 1) + QStringLiteral(" km/h"));
     else
         m_speedResult->setText(QStringLiteral("--"));
+
+    // SEP result
+    QVariant sepVal = session.getAttribute(QLatin1String(SessionKeys::WspSepResult));
+    if (sepVal.isValid() && !sepVal.isNull()) {
+        double sep = sepVal.toDouble();
+        m_sepResult->setText(QStringLiteral("Maximum SEP: ") + QString::number(sep, 'f', 1) + QStringLiteral(" m"));
+        if (sep >= 10.0)
+            m_sepResult->setStyleSheet(QStringLiteral("color: red;"));
+        else
+            m_sepResult->setStyleSheet(QString());
+    } else {
+        m_sepResult->setText(QStringLiteral("Maximum SEP: --"));
+        m_sepResult->setStyleSheet(QString());
+    }
 }
 
 void WingsuitPerformanceWidget::refreshRestoreButton()

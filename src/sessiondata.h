@@ -57,6 +57,7 @@ namespace SessionKeys {
     constexpr char WspTimeResult[]   = "_WSP_TIME_RESULT";
     constexpr char WspDistResult[]   = "_WSP_DIST_RESULT";
     constexpr char WspSpeedResult[]  = "_WSP_SPEED_RESULT";
+    constexpr char WspSepResult[]    = "_WSP_SEP_RESULT";
 }
 
 class SessionData {

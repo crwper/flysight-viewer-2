@@ -65,6 +65,7 @@ private:
     QLabel* m_timeResult     = nullptr;
     QLabel* m_distanceResult = nullptr;
     QLabel* m_speedResult    = nullptr;
+    QLabel* m_sepResult      = nullptr;
 
     // Restore FAI Defaults button
     QPushButton* m_restoreButton = nullptr;

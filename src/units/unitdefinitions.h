@@ -50,6 +50,7 @@ namespace MeasurementTypes {
     inline const QString WspTime = QStringLiteral("wsp_time");
     inline const QString WspDistance = QStringLiteral("wsp_distance");
     inline const QString WspSpeed = QStringLiteral("wsp_speed");
+    inline const QString WspSep = QStringLiteral("wsp_sep");
 }
 
 /**
@@ -222,6 +223,15 @@ inline const QMap<QString, MeasurementTypeInfo>& getMeasurementTypeRegistry() {
             {
                 {UnitSystems::Metric, {QStringLiteral("km/h"), 3.6, 0.0, 1}},
                 {UnitSystems::Imperial, {QStringLiteral("km/h"), 3.6, 0.0, 1}}
+            }
+        }},
+
+        // WS-P SEP: metres, 1 decimal, fixed (FAI official units)
+        {MeasurementTypes::WspSep, {
+            QStringLiteral("m"),
+            {
+                {UnitSystems::Metric, {QStringLiteral("m"), 1.0, 0.0, 1}},
+                {UnitSystems::Imperial, {QStringLiteral("m"), 1.0, 0.0, 1}}
             }
         }}
     };

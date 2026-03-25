@@ -94,6 +94,17 @@
             "measurementType": "",
             "sensorID": "",
             "type": 0
+        },
+        {
+            "attributeKey": "_WSP_SEP_RESULT",
+            "customLabel": "",
+            "enabled": true,
+            "marker2AttributeKey": "",
+            "markerAttributeKey": "",
+            "measurementID": "",
+            "measurementType": "",
+            "sensorID": "",
+            "type": 0
         }
     ],
     "name": "Wingsuit Performance",
