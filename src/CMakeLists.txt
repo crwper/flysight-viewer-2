@@ -303,6 +303,10 @@ set(PROJECT_SOURCES
   ui/docks/legend/LegendWidget.h    ui/docks/legend/LegendWidget.cpp
   ui/docks/legend/LegendPresenter.h    ui/docks/legend/LegendPresenter.cpp
   ui/docks/legend/LegendTableModel.h    ui/docks/legend/LegendTableModel.cpp
+  ui/docks/analysis/AnalysisMethodWidget.h
+  ui/docks/analysis/AnalysisDockWidget.h    ui/docks/analysis/AnalysisDockWidget.cpp
+  ui/docks/analysis/AnalysisDockFeature.h    ui/docks/analysis/AnalysisDockFeature.cpp
+  ui/docks/analysis/WingsuitPerformanceWidget.h    ui/docks/analysis/WingsuitPerformanceWidget.cpp
   ui/docks/video/VideoDockFeature.h    ui/docks/video/VideoDockFeature.cpp
   ui/docks/video/VideoWidget.h    ui/docks/video/VideoWidget.cpp
   ui/docks/map/MapDockFeature.h    ui/docks/map/MapDockFeature.cpp
@@ -325,6 +329,7 @@ set(PROJECT_SOURCES
   calculations/vbatcalculations.cpp           calculations/vbatcalculations.h
   calculations/timecalculations.cpp           calculations/timecalculations.h
   calculations/simplificationcalculations.cpp calculations/simplificationcalculations.h
+  calculations/wspcalculations.cpp            calculations/wspcalculations.h
   resources.qrc
 )
 

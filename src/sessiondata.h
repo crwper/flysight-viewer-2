@@ -40,6 +40,23 @@ namespace SessionKeys {
     // Analysis range keys
     constexpr char AnalysisStartTime[] = "_ANALYSIS_START_TIME";
     constexpr char AnalysisEndTime[]   = "_ANALYSIS_END_TIME";
+
+    // Wingsuit Performance (WS-P) parameter keys
+    constexpr char WspVersion[]      = "_WSP_VERSION";
+    constexpr char WspTopAlt[]       = "_WSP_TOP_ALT";
+    constexpr char WspBottomAlt[]    = "_WSP_BOTTOM_ALT";
+    constexpr char WspTask[]         = "_WSP_TASK";
+
+    // Wingsuit Performance (WS-P) result keys
+    constexpr char WspEntryTime[]    = "_WSP_ENTRY_TIME";
+    constexpr char WspExitTime[]     = "_WSP_EXIT_TIME";
+    constexpr char WspEntryLat[]     = "_WSP_ENTRY_LAT";
+    constexpr char WspEntryLon[]     = "_WSP_ENTRY_LON";
+    constexpr char WspExitLat[]      = "_WSP_EXIT_LAT";
+    constexpr char WspExitLon[]      = "_WSP_EXIT_LON";
+    constexpr char WspTimeResult[]   = "_WSP_TIME_RESULT";
+    constexpr char WspDistResult[]   = "_WSP_DIST_RESULT";
+    constexpr char WspSpeedResult[]  = "_WSP_SPEED_RESULT";
 }
 
 class SessionData {

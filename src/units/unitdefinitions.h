@@ -45,6 +45,11 @@ namespace MeasurementTypes {
     inline const QString Percentage = QStringLiteral("percentage");
     inline const QString Time = QStringLiteral("time");
     inline const QString Count = QStringLiteral("count");
+
+    // FAI Wingsuit Performance fixed-unit types (not affected by unit system)
+    inline const QString WspTime = QStringLiteral("wsp_time");
+    inline const QString WspDistance = QStringLiteral("wsp_distance");
+    inline const QString WspSpeed = QStringLiteral("wsp_speed");
 }
 
 /**
@@ -190,6 +195,33 @@ inline const QMap<QString, MeasurementTypeInfo>& getMeasurementTypeRegistry() {
             {
                 {UnitSystems::Metric, {QString(), 1.0, 0.0, 0}},
                 {UnitSystems::Imperial, {QString(), 1.0, 0.0, 0}}
+            }
+        }},
+
+        // WS-P Time: seconds, 1 decimal, fixed (FAI official units)
+        {MeasurementTypes::WspTime, {
+            QStringLiteral("s"),
+            {
+                {UnitSystems::Metric, {QStringLiteral("s"), 1.0, 0.0, 1}},
+                {UnitSystems::Imperial, {QStringLiteral("s"), 1.0, 0.0, 1}}
+            }
+        }},
+
+        // WS-P Distance: metres, 0 decimals, fixed (FAI official units)
+        {MeasurementTypes::WspDistance, {
+            QStringLiteral("m"),
+            {
+                {UnitSystems::Metric, {QStringLiteral("m"), 1.0, 0.0, 0}},
+                {UnitSystems::Imperial, {QStringLiteral("m"), 1.0, 0.0, 0}}
+            }
+        }},
+
+        // WS-P Speed: m/s -> km/h, 1 decimal, fixed (FAI official units)
+        {MeasurementTypes::WspSpeed, {
+            QStringLiteral("m/s"),
+            {
+                {UnitSystems::Metric, {QStringLiteral("km/h"), 3.6, 0.0, 1}},
+                {UnitSystems::Imperial, {QStringLiteral("km/h"), 3.6, 0.0, 1}}
             }
         }}
     };

@@ -64,6 +64,10 @@ public:
     QString hoveredSessionId() const;
     void setHoveredSessionId(const QString& sessionId);
 
+    // Focused session management
+    QString focusedSessionId() const;
+    void setFocusedSessionId(const QString& sessionId);
+
     int getSessionRow(const QString& sessionId) const;
 
     bool updateAttribute(const QString &sessionId,
@@ -83,6 +87,7 @@ signals:
     void modelChanged();
     void sessionLoaded(const QString &sessionId);
     void hoveredSessionChanged(const QString& sessionId);
+    void focusedSessionChanged(const QString& sessionId);
     void dependencyChanged(const QString &sessionId, const DependencyKey &key);
     void visibilityChanged(QSet<QString> shown, QSet<QString> hidden);
     void saveProgressChanged(int remaining, int total);
@@ -98,6 +103,7 @@ private:
     QVector<SessionRow> m_rows;
     QVector<LogbookColumn> m_columns;
     QString m_hoveredSessionId;
+    QString m_focusedSessionId;
 
     // LRU cache for non-visible loaded sessions
     QList<QString> m_lruList;  // front = most recently used, back = eviction candidate

@@ -10,6 +10,7 @@
 #include "markerselection/MarkerSelectionDockFeature.h"
 #include "map/MapDockFeature.h"
 #include "video/VideoDockFeature.h"
+#include "analysis/AnalysisDockFeature.h"
 
 namespace FlySight {
 
@@ -25,6 +26,7 @@ QList<DockFeature*> DockRegistry::createAll(const AppContext& ctx, QObject* pare
     features.append(new PlotSelectionDockFeature(ctx, parent));
     features.append(new MarkerSelectionDockFeature(ctx, parent));
     features.append(new VideoDockFeature(ctx, parent));
+    features.append(new AnalysisDockFeature(ctx, parent));
 
     return features;
 }

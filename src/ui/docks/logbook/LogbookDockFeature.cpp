@@ -27,6 +27,10 @@ LogbookDockFeature::LogbookDockFeature(const AppContext& ctx, QObject* parent)
     connect(m_logbookView, &LogbookView::focusSessionRequested,
             this, &LogbookDockFeature::focusSessionRequested);
 
+    // Forward focused session changes to the model
+    connect(m_logbookView, &LogbookView::currentSessionChanged,
+            ctx.sessionModel, &SessionModel::setFocusedSessionId);
+
     // Connect progress signals to progress bar updates
     connect(ctx.sessionModel, &SessionModel::saveProgressChanged,
             m_logbookView, &LogbookView::onSaveProgressChanged);

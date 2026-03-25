@@ -8,6 +8,7 @@
 #include "vbatcalculations.h"
 #include "timecalculations.h"
 #include "simplificationcalculations.h"
+#include "wspcalculations.h"
 
 using namespace FlySight;
 
@@ -27,4 +28,5 @@ void CalculatedValueRegistry::registerBuiltInCalculations() {
     Calculations::registerVbatCalculations();
     Calculations::registerTimeCalculations();
     Calculations::registerSimplificationCalculations();
+    Calculations::registerWspCalculations();
 }

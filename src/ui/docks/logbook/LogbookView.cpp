@@ -62,6 +62,16 @@ LogbookView::LogbookView(SessionModel *model, QWidget *parent)
 
     treeView->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(treeView, &QTreeView::customContextMenuRequested, this, &LogbookView::onContextMenuRequested);
+    connect(treeView->selectionModel(), &QItemSelectionModel::currentChanged,
+            this, [this](const QModelIndex &current, const QModelIndex &/*previous*/) {
+        if (current.isValid()) {
+            QString sessionId = this->model->rowAt(current.row()).sessionId;
+            emit currentSessionChanged(sessionId);
+        } else {
+            emit currentSessionChanged(QString());
+        }
+    });
+
     connect(treeView, &QTreeView::doubleClicked, this, [this](const QModelIndex &index) {
         if (index.isValid())
             emit focusSessionRequested(index.row());

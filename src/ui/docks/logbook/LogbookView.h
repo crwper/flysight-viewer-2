@@ -24,6 +24,7 @@ signals:
     void deleteRequested();
     void focusSessionRequested(int row);
     void cancelColumnWorkerRequested();
+    void currentSessionChanged(const QString& sessionId);
     void cancelLoaderRequested();
 
 public slots:

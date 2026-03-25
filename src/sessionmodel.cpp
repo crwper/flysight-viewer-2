@@ -781,14 +781,14 @@ SessionData &SessionModel::sessionRef(int row)
         // Emit sessionLoaded for consistency
         emit sessionLoaded(sr.sessionId);
 
-        // LRU tracking: only track non-visible sessions
-        if (!sr.visible) {
+        // LRU tracking: only track non-visible, non-focused sessions
+        if (!sr.visible && sr.sessionId != m_focusedSessionId) {
             lruTouch(sr.sessionId);
             evictIfNeeded();
         }
     } else {
-        // Already loaded: bump recency for non-visible sessions
-        if (!sr.visible) {
+        // Already loaded: bump recency for non-visible, non-focused sessions
+        if (!sr.visible && sr.sessionId != m_focusedSessionId) {
             lruTouch(sr.sessionId);
         }
     }
@@ -841,6 +841,45 @@ void SessionModel::setHoveredSessionId(const QString& sessionId)
             emit dataChanged(topLeft, bottomRight, {Qt::BackgroundRole, CustomRoles::IsHoveredRole});
         }
     }
+}
+
+QString SessionModel::focusedSessionId() const
+{
+    return m_focusedSessionId;
+}
+
+void SessionModel::setFocusedSessionId(const QString& sessionId)
+{
+    if (m_focusedSessionId == sessionId)
+        return; // No change
+
+    QString oldSessionId = m_focusedSessionId;
+    m_focusedSessionId = sessionId;
+
+    // Return old focused session to LRU pool if it's loaded and non-visible
+    if (!oldSessionId.isEmpty()) {
+        int oldRow = getSessionRow(oldSessionId);
+        if (oldRow >= 0) {
+            SessionRow &oldSr = m_rows[oldRow];
+            if (oldSr.isLoaded() && !oldSr.visible)
+                lruTouch(oldSessionId);
+        }
+    }
+
+    // Load and pin the new focused session
+    if (!sessionId.isEmpty()) {
+        int row = getSessionRow(sessionId);
+        if (row >= 0) {
+            sessionRef(row);        // Load if stub
+            lruRemove(sessionId);   // Remove from LRU so it won't be evicted
+        }
+    }
+
+    evictIfNeeded();
+
+    qDebug() << "SessionModel: focusedSessionId changed from" << oldSessionId << "to" << m_focusedSessionId;
+
+    emit focusedSessionChanged(sessionId);
 }
 
 bool SessionModel::updateAttribute(const QString &sessionId,
