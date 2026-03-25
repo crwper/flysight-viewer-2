@@ -8,6 +8,7 @@
 #include <QFrame>
 #include <QGridLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QVBoxLayout>
@@ -17,6 +18,31 @@ namespace FlySight {
 // FAI default altitudes (metres AGL)
 static constexpr double kFaiTopAlt    = 2500.0;
 static constexpr double kFaiBottomAlt = 1500.0;
+
+// ---------------------------------------------------------------------------
+// SpinBox that commits on arrow-button clicks (not just Enter / focus-out)
+// ---------------------------------------------------------------------------
+
+class StepCommitSpinBox : public QDoubleSpinBox
+{
+public:
+    using QDoubleSpinBox::QDoubleSpinBox;
+
+    int  lastStepCount() const { return m_lastSteps; }
+    void clearStep()           { m_lastSteps = 0; }
+    void deselectText()        { lineEdit()->deselect(); }
+
+    void stepBy(int steps) override
+    {
+        m_lastSteps = steps;
+        QDoubleSpinBox::stepBy(steps);
+        deselectText();
+        emit editingFinished();
+    }
+
+private:
+    int m_lastSteps = 0;
+};
 
 // ---------------------------------------------------------------------------
 // Construction
@@ -38,18 +64,16 @@ void WingsuitPerformanceWidget::buildLayout()
 
     // --- Parameter section ---
     auto* paramForm = new QFormLayout;
-    m_topAltSpin = new QDoubleSpinBox;
+    m_topAltSpin = new StepCommitSpinBox;
     m_topAltSpin->setRange(0.0, 99999.0);
-    m_topAltSpin->setSuffix(QStringLiteral(" m"));
     m_topAltSpin->setDecimals(0);
-    m_topAltSpin->setSingleStep(100.0);
+    m_topAltSpin->setSingleStep(10.0);
     paramForm->addRow(tr("Top of window (m):"), m_topAltSpin);
 
-    m_bottomAltSpin = new QDoubleSpinBox;
+    m_bottomAltSpin = new StepCommitSpinBox;
     m_bottomAltSpin->setRange(0.0, 99999.0);
-    m_bottomAltSpin->setSuffix(QStringLiteral(" m"));
     m_bottomAltSpin->setDecimals(0);
-    m_bottomAltSpin->setSingleStep(100.0);
+    m_bottomAltSpin->setSingleStep(10.0);
     paramForm->addRow(tr("Bottom of window (m):"), m_bottomAltSpin);
 
     mainLayout->addLayout(paramForm);
@@ -228,6 +252,7 @@ void WingsuitPerformanceWidget::refreshParameters()
     // Top altitude
     QVariant topAlt = session.getAttribute(QLatin1String(SessionKeys::WspTopAlt));
     m_topAltSpin->setValue(topAlt.isValid() ? topAlt.toDouble() : kFaiTopAlt);
+    static_cast<StepCommitSpinBox*>(m_topAltSpin)->deselectText();
 
     // Bold if user-set
     QFont topFont = m_topAltSpin->font();
@@ -237,6 +262,7 @@ void WingsuitPerformanceWidget::refreshParameters()
     // Bottom altitude
     QVariant bottomAlt = session.getAttribute(QLatin1String(SessionKeys::WspBottomAlt));
     m_bottomAltSpin->setValue(bottomAlt.isValid() ? bottomAlt.toDouble() : kFaiBottomAlt);
+    static_cast<StepCommitSpinBox*>(m_bottomAltSpin)->deselectText();
 
     QFont bottomFont = m_bottomAltSpin->font();
     bottomFont.setBold(session.hasAttribute(QLatin1String(SessionKeys::WspBottomAlt)));
@@ -357,12 +383,38 @@ void WingsuitPerformanceWidget::writeAttribute(const QString& key, const QVarian
 
 void WingsuitPerformanceWidget::onTopAltChanged()
 {
-    writeAttribute(QLatin1String(SessionKeys::WspTopAlt), m_topAltSpin->value());
+    auto* top = static_cast<StepCommitSpinBox*>(m_topAltSpin);
+
+    writeAttribute(QLatin1String(SessionKeys::WspTopAlt), top->value());
+
+    // Arrow click: shift bottom by the same amount to move the window as a whole
+    int steps = top->lastStepCount();
+    if (steps != 0) {
+        top->clearStep();
+        double delta = steps * top->singleStep();
+        blockEditorSignals(true);
+        m_bottomAltSpin->setValue(m_bottomAltSpin->value() + delta);
+        blockEditorSignals(false);
+        writeAttribute(QLatin1String(SessionKeys::WspBottomAlt), m_bottomAltSpin->value());
+    }
 }
 
 void WingsuitPerformanceWidget::onBottomAltChanged()
 {
-    writeAttribute(QLatin1String(SessionKeys::WspBottomAlt), m_bottomAltSpin->value());
+    auto* bot = static_cast<StepCommitSpinBox*>(m_bottomAltSpin);
+
+    writeAttribute(QLatin1String(SessionKeys::WspBottomAlt), bot->value());
+
+    // Arrow click: shift top by the same amount to move the window as a whole
+    int steps = bot->lastStepCount();
+    if (steps != 0) {
+        bot->clearStep();
+        double delta = steps * bot->singleStep();
+        blockEditorSignals(true);
+        m_topAltSpin->setValue(m_topAltSpin->value() + delta);
+        blockEditorSignals(false);
+        writeAttribute(QLatin1String(SessionKeys::WspTopAlt), m_topAltSpin->value());
+    }
 }
 
 void WingsuitPerformanceWidget::onTaskChanged()
