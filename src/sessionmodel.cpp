@@ -328,6 +328,7 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
 
     bool somethingChanged = false;
     bool attributeChanged = false;
+    QSet<DependencyKey> visitedKeys;
 
     if (role == Qt::CheckStateRole && index.column() == 0) {
         // Update visibility based on the checkbox
@@ -372,7 +373,7 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
             QString newVal = value.toString();
             QString oldVal = item.getAttribute(col.attributeKey).toString();
             if (oldVal != newVal) {
-                item.setAttribute(col.attributeKey, newVal);
+                visitedKeys = item.setAttribute(col.attributeKey, newVal);
                 somethingChanged = true;
                 attributeChanged = true;
             }
@@ -385,7 +386,7 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
                 newVal = UnitConverter::instance().reverseConvert(displayVal, def->measurementType);
             double oldVal = item.getAttribute(col.attributeKey).toDouble();
             if (oldVal != newVal) {
-                item.setAttribute(col.attributeKey, newVal);
+                visitedKeys = item.setAttribute(col.attributeKey, newVal);
                 somethingChanged = true;
                 attributeChanged = true;
             }
@@ -411,6 +412,8 @@ bool SessionModel::setData(const QModelIndex &index, const QVariant &value, int 
             emit modelChanged();
         }
         if (attributeChanged) {
+            for (const DependencyKey &key : visitedKeys)
+                emit dependencyChanged(sr.sessionId, key);
             if (!sr.sessionId.isEmpty())
                 scheduleSave(sr.sessionId);
         }
