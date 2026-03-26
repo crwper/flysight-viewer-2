@@ -41,6 +41,46 @@ void Calculations::registerWspCalculations()
             return QVariant(QStringLiteral("Time"));
         });
 
+    // ── Group A2: Lane Reference 1 (Ref1) ─────────────────────────────
+    // Ref1 = 9 seconds after the competitor's vertical speed first
+    // reaches 10 m/s (starting from exit).  Used as the validation
+    // window start and, later, as a lane reference endpoint.
+
+    SessionData::registerCalculatedAttribute(
+        SessionKeys::WspRef1Time,
+        {
+            DependencyKey::attribute(SessionKeys::ExitTime),
+            DependencyKey::measurement("GNSS", "velD"),
+            DependencyKey::measurement("GNSS", SessionKeys::Time)
+        },
+        [](SessionData& session) -> std::optional<QVariant> {
+            QVariant exitVar = session.getAttribute(SessionKeys::ExitTime);
+            if (!exitVar.canConvert<double>())
+                return std::nullopt;
+            double exitTime = exitVar.toDouble();
+
+            QVector<double> velD = session.getMeasurement("GNSS", "velD");
+            QVector<double> time = session.getMeasurement("GNSS", SessionKeys::Time);
+
+            if (velD.isEmpty() || time.isEmpty() || velD.size() != time.size())
+                return std::nullopt;
+
+            const int n = velD.size();
+            const double vThreshold = 10.0;
+
+            for (int i = 1; i < n; ++i) {
+                if (time[i] < exitTime)
+                    continue;
+                if (velD[i - 1] < vThreshold && velD[i] >= vThreshold) {
+                    double a = (vThreshold - velD[i - 1]) / (velD[i] - velD[i - 1]);
+                    double crossingTime = time[i - 1] + a * (time[i] - time[i - 1]);
+                    return QVariant(crossingTime + 9.0);
+                }
+            }
+
+            return std::nullopt;
+        });
+
     // ── Group B: Window gate crossing and result calculations ──────────
 
     auto computeWspResults = [](SessionData& session, const QString& outputKey) -> std::optional<QVariant> {
@@ -178,18 +218,22 @@ void Calculations::registerWspCalculations()
         }
 
         // Compute max SEP within the validation window.
-        // The validation window extends 20 m outside the competition window.
-        // Search outward from the gate crossings to find its boundaries.
+        // Start: Lane Reference 1 (9 s after vertical speed first reaches 10 m/s).
+        // End:   20 m below the bottom of the competition window.
+        QVariant ref1Var = session.getAttribute(SessionKeys::WspRef1Time);
         QVector<double> hAcc = session.getMeasurement("GNSS", "hAcc");
         QVector<double> vAcc = session.getMeasurement("GNSS", "vAcc");
 
-        if (hAcc.size() == n && vAcc.size() == n) {
-            // Search backward from entry crossing until altitude >= topAlt + 20
-            int valStart = startIdx;  // startIdx is the entry crossing index
-            for (int i = startIdx - 1; i >= 0; --i) {
-                if (z[i] >= topAlt + 20.0)
+        if (ref1Var.canConvert<double>() && hAcc.size() == n && vAcc.size() == n) {
+            double ref1Time = ref1Var.toDouble();
+
+            // Find first sample at or after Ref1 time
+            int valStart = -1;
+            for (int i = 0; i < n; ++i) {
+                if (time[i] >= ref1Time) {
+                    valStart = i;
                     break;
-                valStart = i;
+                }
             }
 
             // Search forward from exit crossing until altitude <= bottomAlt - 20
@@ -201,10 +245,12 @@ void Calculations::registerWspCalculations()
             }
 
             double maxSep = -1.0;
-            for (int i = valStart; i <= valEnd; ++i) {
-                double sep = 0.5127 * (2.0 * hAcc[i] + vAcc[i]);
-                if (sep > maxSep)
-                    maxSep = sep;
+            if (valStart >= 0 && valStart <= valEnd) {
+                for (int i = valStart; i <= valEnd; ++i) {
+                    double sep = 0.5127 * (2.0 * hAcc[i] + vAcc[i]);
+                    if (sep > maxSep)
+                        maxSep = sep;
+                }
             }
 
             if (maxSep >= 0.0)
@@ -229,7 +275,8 @@ void Calculations::registerWspCalculations()
         DependencyKey::measurement("GNSS", "lon"),
         DependencyKey::measurement("GNSS", SessionKeys::Time),
         DependencyKey::measurement("GNSS", "hAcc"),
-        DependencyKey::measurement("GNSS", "vAcc")
+        DependencyKey::measurement("GNSS", "vAcc"),
+        DependencyKey::attribute(SessionKeys::WspRef1Time)
     };
 
     SessionData::registerCalculatedAttribute(
@@ -302,9 +349,21 @@ void Calculations::registerWspCalculations()
             return computeWspResults(session, SessionKeys::WspSepResult);
         });
 
-    // ── Group C: Marker registration (2 markers) ──────────────────────
+    // ── Group C: Marker registration (3 markers) ──────────────────────
 
     QVector<MarkerDefinition> defs;
+
+    MarkerDefinition ref1Def;
+    ref1Def.category       = QStringLiteral("Wingsuit Performance");
+    ref1Def.displayName    = QStringLiteral("Lane Reference 1");
+    ref1Def.shortLabel     = QStringLiteral("Ref1");
+    ref1Def.color          = QColor(0, 128, 0);
+    ref1Def.attributeKey   = SessionKeys::WspRef1Time;
+    ref1Def.measurements   = {};
+    ref1Def.editable       = false;
+    ref1Def.groupId        = QStringLiteral("wsp");
+    ref1Def.defaultEnabled = true;
+    defs.append(ref1Def);
 
     MarkerDefinition topDef;
     topDef.category       = QStringLiteral("Wingsuit Performance");

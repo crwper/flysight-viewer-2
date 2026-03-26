@@ -58,6 +58,9 @@ namespace SessionKeys {
     constexpr char WspDistResult[]   = "_WSP_DIST_RESULT";
     constexpr char WspSpeedResult[]  = "_WSP_SPEED_RESULT";
     constexpr char WspSepResult[]    = "_WSP_SEP_RESULT";
+
+    // Wingsuit Performance (WS-P) lane reference keys
+    constexpr char WspRef1Time[]     = "_WSP_REF1_TIME";
 }
 
 class SessionData {
