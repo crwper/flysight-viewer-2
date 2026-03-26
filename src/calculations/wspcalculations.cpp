@@ -338,6 +338,15 @@ void Calculations::registerWspCalculations()
 
     reg.registerAttribute({
         QStringLiteral("Wingsuit Performance"),
+        QStringLiteral("Task"),
+        SessionKeys::WspTask,
+        AttributeFormatType::Text,
+        false,
+        {}
+    });
+
+    reg.registerAttribute({
+        QStringLiteral("Wingsuit Performance"),
         QStringLiteral("Time"),
         SessionKeys::WspTimeResult,
         AttributeFormatType::Double,
