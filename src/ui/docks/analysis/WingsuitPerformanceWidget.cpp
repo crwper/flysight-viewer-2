@@ -1,15 +1,14 @@
 #include "WingsuitPerformanceWidget.h"
+#include "StepCommitSpinBox.h"
 #include "sessionmodel.h"
 #include "sessiondata.h"
 
 #include <QButtonGroup>
 #include <QDoubleSpinBox>
-#include <QKeyEvent>
 #include <QFormLayout>
 #include <QFrame>
 #include <QGridLayout>
 #include <QLabel>
-#include <QLineEdit>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QVBoxLayout>
@@ -19,55 +18,6 @@ namespace FlySight {
 // FAI default altitudes (metres AGL)
 static constexpr double kFaiTopAlt    = 2500.0;
 static constexpr double kFaiBottomAlt = 1500.0;
-
-// ---------------------------------------------------------------------------
-// SpinBox that commits on arrow-button clicks (not just Enter / focus-out)
-// ---------------------------------------------------------------------------
-
-class StepCommitSpinBox : public QDoubleSpinBox
-{
-public:
-    using QDoubleSpinBox::QDoubleSpinBox;
-
-    int  lastStepCount() const { return m_lastSteps; }
-    void clearStep()           { m_lastSteps = 0; }
-    void deselectText()        { lineEdit()->deselect(); }
-
-    void stepBy(int steps) override
-    {
-        m_lastSteps = steps;
-        QDoubleSpinBox::stepBy(steps);
-        emit editingFinished();
-        clearFocus();
-    }
-
-protected:
-    void keyPressEvent(QKeyEvent* event) override
-    {
-        if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
-            interpretText();
-            emit editingFinished();
-            clearFocus();
-            return;
-        }
-        if (event->key() == Qt::Key_Escape) {
-            setValue(m_valueOnFocusIn);
-            clearFocus();
-            return;
-        }
-        QDoubleSpinBox::keyPressEvent(event);
-    }
-
-    void focusInEvent(QFocusEvent* event) override
-    {
-        m_valueOnFocusIn = value();
-        QDoubleSpinBox::focusInEvent(event);
-    }
-
-private:
-    int    m_lastSteps = 0;
-    double m_valueOnFocusIn = 0.0;
-};
 
 // ---------------------------------------------------------------------------
 // Construction

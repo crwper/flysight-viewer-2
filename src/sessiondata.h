@@ -61,6 +61,20 @@ namespace SessionKeys {
 
     // Wingsuit Performance (WS-P) lane reference keys
     constexpr char WspRef1Time[]     = "_WSP_REF1_TIME";
+
+    // Speed Skydiving (SP) parameter keys
+    constexpr char SpPerfWindowHeight[] = "_SP_PERF_WINDOW_HEIGHT";
+    constexpr char SpValWindowHeight[]  = "_SP_VAL_WINDOW_HEIGHT";
+    constexpr char SpBreakoffAlt[]      = "_SP_BREAKOFF_ALT";
+
+    // Speed Skydiving (SP) result keys
+    constexpr char SpWindowStartTime[] = "_SP_WINDOW_START_TIME";
+    constexpr char SpWindowStartAlt[]  = "_SP_WINDOW_START_ALT";
+    constexpr char SpWindowEndTime[]   = "_SP_WINDOW_END_TIME";
+    constexpr char SpBestStartTime[]   = "_SP_BEST_START_TIME";
+    constexpr char SpBestEndTime[]     = "_SP_BEST_END_TIME";
+    constexpr char SpSpeedResult[]     = "_SP_SPEED_RESULT";
+    constexpr char SpMaxSpeedAcc[]     = "_SP_MAX_SPEED_ACC";
 }
 
 class SessionData {

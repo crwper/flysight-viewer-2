@@ -2,6 +2,7 @@
 #include "AnalysisDockWidget.h"
 #include "AnalysisMethodWidget.h"
 #include "WingsuitPerformanceWidget.h"
+#include "SpeedSkydivingWidget.h"
 #include "ui/docks/AppContext.h"
 #include "sessionmodel.h"
 
@@ -27,6 +28,9 @@ AnalysisDockFeature::AnalysisDockFeature(const AppContext& ctx, QObject* parent)
     // Register method pages
     auto* wspWidget = new WingsuitPerformanceWidget();
     m_widget->addMethodPage(tr("Wingsuit Performance"), wspWidget);
+
+    auto* spWidget = new SpeedSkydivingWidget();
+    m_widget->addMethodPage(tr("Speed Skydiving"), spWidget);
 
     // Connect focused session tracking
     connect(m_sessionModel, &SessionModel::focusedSessionChanged,

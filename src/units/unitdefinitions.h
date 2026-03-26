@@ -51,6 +51,10 @@ namespace MeasurementTypes {
     inline const QString WspDistance = QStringLiteral("wsp_distance");
     inline const QString WspSpeed = QStringLiteral("wsp_speed");
     inline const QString WspSep = QStringLiteral("wsp_sep");
+
+    // FAI Speed Skydiving fixed-unit types
+    inline const QString SpSpeed = QStringLiteral("sp_speed");
+    inline const QString SpSpeedAcc = QStringLiteral("sp_speed_acc");
 }
 
 /**
@@ -232,6 +236,24 @@ inline const QMap<QString, MeasurementTypeInfo>& getMeasurementTypeRegistry() {
             {
                 {UnitSystems::Metric, {QStringLiteral("m"), 1.0, 0.0, 1}},
                 {UnitSystems::Imperial, {QStringLiteral("m"), 1.0, 0.0, 1}}
+            }
+        }},
+
+        // SP Speed: m/s -> km/h, 2 decimals, fixed (FAI official units)
+        {MeasurementTypes::SpSpeed, {
+            QStringLiteral("m/s"),
+            {
+                {UnitSystems::Metric, {QStringLiteral("km/h"), 3.6, 0.0, 2}},
+                {UnitSystems::Imperial, {QStringLiteral("km/h"), 3.6, 0.0, 2}}
+            }
+        }},
+
+        // SP Speed Accuracy: m/s, 2 decimals, fixed (FAI official units)
+        {MeasurementTypes::SpSpeedAcc, {
+            QStringLiteral("m/s"),
+            {
+                {UnitSystems::Metric, {QStringLiteral("m/s"), 1.0, 0.0, 2}},
+                {UnitSystems::Imperial, {QStringLiteral("m/s"), 1.0, 0.0, 2}}
             }
         }}
     };

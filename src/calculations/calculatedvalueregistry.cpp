@@ -9,6 +9,7 @@
 #include "timecalculations.h"
 #include "simplificationcalculations.h"
 #include "wspcalculations.h"
+#include "spcalculations.h"
 
 using namespace FlySight;
 
@@ -29,4 +30,5 @@ void CalculatedValueRegistry::registerBuiltInCalculations() {
     Calculations::registerTimeCalculations();
     Calculations::registerSimplificationCalculations();
     Calculations::registerWspCalculations();
+    Calculations::registerSpCalculations();
 }
