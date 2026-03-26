@@ -52,6 +52,7 @@ public:
 private:
     mutable QMap<Key, Value> m_cache;
     mutable QSet<Key> m_activeCalculations;
+    mutable QList<Key> m_sideEffectKeys;
     static QMap<Key, QVector<Method>> s_methods;
 };
 

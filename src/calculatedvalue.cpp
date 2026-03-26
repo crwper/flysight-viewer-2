@@ -45,6 +45,10 @@ std::optional<Value> CalculatedValue<Key, Value>::getValue(SessionData &session,
     // Perform the calculation
     m_activeCalculations.insert(key);
 
+    // Side-effect list should be empty before any recipe runs
+    Q_ASSERT(m_sideEffectKeys.isEmpty());
+    m_sideEffectKeys.clear();
+
     const auto& recipes = s_methods[key];
     auto depsSatisfied  = [&](const QList<DependencyKey>& deps) -> bool {
         for (const auto& d : deps) {
@@ -72,11 +76,18 @@ std::optional<Value> CalculatedValue<Key, Value>::getValue(SessionData &session,
             // Build concrete reverse‑deps graph
             DependencyKey thisKey = toDependencyKey(key);
             session.addDependencies(thisKey, r.deps);
+
+            // Register deps for any keys cached as side effects
+            for (const Key& sideKey : m_sideEffectKeys) {
+                session.addDependencies(toDependencyKey(sideKey), r.deps);
+            }
+
             break;
         }
     }
 
     m_activeCalculations.remove(key);
+    m_sideEffectKeys.clear();
 
     if (result.has_value()) {
         m_cache.insert(key, *result);
@@ -89,6 +100,7 @@ template<typename Key, typename Value>
 void CalculatedValue<Key, Value>::setValue(const Key &key, const Value& data)
 {
     m_cache.insert(key, data);
+    m_sideEffectKeys.append(key);
 }
 
 template<typename Key, typename Value>
