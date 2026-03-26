@@ -1080,6 +1080,11 @@ void MainWindow::initializePreferences()
     prefs.registerPreference(PreferenceKeys::ZoomExtentStartMarker, QString::fromLatin1(SessionKeys::AnalysisStartTime));
     prefs.registerPreference(PreferenceKeys::ZoomExtentEndMarker,   QString::fromLatin1(SessionKeys::AnalysisEndTime));
     prefs.registerPreference(PreferenceKeys::ZoomExtentMarginPct, 10.0);
+
+    // ========================================================================
+    // Analysis Preferences
+    // ========================================================================
+    prefs.registerPreference(PreferenceKeys::AnalysisMethod, QStringLiteral("Wingsuit Performance"));
 }
 
 

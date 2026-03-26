@@ -131,6 +131,11 @@ inline QString altitudeMarkerValueKey(int index) {
 inline const QString LogbookColumnsVersion = QStringLiteral("logbook/columnsVersion");
 inline const QString LogbookCacheSize = QStringLiteral("logbook/cacheSize");
 
+// ============================================================================
+// Analysis Preferences
+// ============================================================================
+inline const QString AnalysisMethod = QStringLiteral("analysis/method");
+
 } // namespace PreferenceKeys
 } // namespace FlySight
 

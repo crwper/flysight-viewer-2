@@ -48,6 +48,24 @@ int AnalysisDockWidget::currentMethodIndex() const
     return m_methodSelector->currentIndex();
 }
 
+void AnalysisDockWidget::setCurrentMethodIndex(int index)
+{
+    if (index >= 0 && index < m_methodSelector->count())
+        m_methodSelector->setCurrentIndex(index);
+}
+
+QString AnalysisDockWidget::methodName(int index) const
+{
+    if (index >= 0 && index < m_methodSelector->count())
+        return m_methodSelector->itemText(index);
+    return QString();
+}
+
+int AnalysisDockWidget::methodCount() const
+{
+    return m_methodSelector->count();
+}
+
 QWidget* AnalysisDockWidget::methodPage(int index) const
 {
     return m_methodStack->widget(index);

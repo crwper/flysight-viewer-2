@@ -5,6 +5,8 @@
 #include "SpeedSkydivingWidget.h"
 #include "ui/docks/AppContext.h"
 #include "sessionmodel.h"
+#include "preferences/preferencesmanager.h"
+#include "preferences/preferencekeys.h"
 
 namespace FlySight {
 
@@ -39,6 +41,13 @@ AnalysisDockFeature::AnalysisDockFeature(const AppContext& ctx, QObject* parent)
     // Connect method selector changes
     connect(m_widget, &AnalysisDockWidget::methodChanged,
             this, &AnalysisDockFeature::onMethodChanged);
+
+    // Restore persisted analysis method
+    {
+        auto& prefs = PreferencesManager::instance();
+        QString savedMethod = prefs.getValue(PreferenceKeys::AnalysisMethod).toString();
+        setCurrentMethodByName(savedMethod);
+    }
 
     // Initialize state from the current focused session (if any)
     onFocusedSessionChanged(m_sessionModel->focusedSessionId());
@@ -94,6 +103,32 @@ void AnalysisDockFeature::onMethodChanged(int index)
     // Notify the newly selected method page about the current session
     if (auto* method = methodWidgetAt(index))
         method->setFocusedSession(m_sessionModel, m_focusedSessionId);
+
+    // Persist the method selection
+    if (m_widget) {
+        QString name = m_widget->methodName(index);
+        if (!name.isEmpty())
+            PreferencesManager::instance().setValue(PreferenceKeys::AnalysisMethod, name);
+    }
+}
+
+QString AnalysisDockFeature::currentMethodName() const
+{
+    if (!m_widget)
+        return QString();
+    return m_widget->methodName(m_widget->currentMethodIndex());
+}
+
+void AnalysisDockFeature::setCurrentMethodByName(const QString& name)
+{
+    if (!m_widget)
+        return;
+    for (int i = 0; i < m_widget->methodCount(); ++i) {
+        if (m_widget->methodName(i) == name) {
+            m_widget->setCurrentMethodIndex(i);
+            return;
+        }
+    }
 }
 
 } // namespace FlySight

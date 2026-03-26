@@ -27,6 +27,15 @@ public:
     /// Returns the currently selected method index.
     int currentMethodIndex() const;
 
+    /// Sets the current method by index. Does nothing if index is out of range.
+    void setCurrentMethodIndex(int index);
+
+    /// Returns the display text of the method at the given index, or empty string.
+    QString methodName(int index) const;
+
+    /// Returns the number of registered method pages.
+    int methodCount() const;
+
     /// Returns the method page widget at the given index, or nullptr.
     QWidget* methodPage(int index) const;
 

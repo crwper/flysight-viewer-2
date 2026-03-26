@@ -3,6 +3,7 @@
     "order": [
         "Basic_Flight",
         "Canopy_Piloting",
+        "Speed_Skydiving",
         "Wingsuit_Performance"
     ]
 }

@@ -26,6 +26,12 @@ public:
     KDDockWidgets::QtWidgets::DockWidget* dock() const override;
     KDDockWidgets::Location defaultLocation() const override;
 
+    /// Returns the display name of the currently selected analysis method.
+    QString currentMethodName() const;
+
+    /// Sets the analysis method by display name. Does nothing if name is not found.
+    void setCurrentMethodByName(const QString& name);
+
 private:
     KDDockWidgets::QtWidgets::DockWidget* m_dock = nullptr;
     AnalysisDockWidget* m_widget = nullptr;

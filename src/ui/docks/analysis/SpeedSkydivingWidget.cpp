@@ -74,12 +74,6 @@ void SpeedSkydivingWidget::buildLayout()
     m_speedResult = new QLabel(QStringLiteral("Speed: --"));
     mainLayout->addWidget(m_speedResult);
 
-    // --- Separator ---
-    auto* sepSeparator = new QFrame;
-    sepSeparator->setFrameShape(QFrame::HLine);
-    sepSeparator->setFrameShadow(QFrame::Sunken);
-    mainLayout->addWidget(sepSeparator);
-
     // --- Speed accuracy ---
     m_speedAccResult = new QLabel(QStringLiteral("Speed Accuracy: --"));
     mainLayout->addWidget(m_speedAccResult);

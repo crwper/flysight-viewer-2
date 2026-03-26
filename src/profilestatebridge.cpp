@@ -14,6 +14,7 @@
 #include "preferences/preferencesmanager.h"
 #include "preferences/preferencekeys.h"
 #include "logbookcolumn.h"
+#include "ui/docks/analysis/AnalysisDockFeature.h"
 #include "ui/docks/plotselection/PlotSelectionDockFeature.h"
 #include "ui/docks/markerselection/MarkerSelectionDockFeature.h"
 
@@ -138,6 +139,13 @@ Profile captureCurrentState(MainWindow *mainWindow)
             .getValue(PreferenceKeys::AltitudeMarkersUnits).toString();
         altObj[QStringLiteral("altitudes")] = altitudes;
         profile.altitudeMarkers = altObj;
+    }
+
+    // 10. Analysis method
+    {
+        auto *analysisFeature = mainWindow->findFeature<AnalysisDockFeature>();
+        if (analysisFeature)
+            profile.analysisMethod = analysisFeature->currentMethodName();
     }
 
     return profile;
@@ -273,6 +281,13 @@ void applyProfile(const Profile &profile, MainWindow *mainWindow)
                 categories.insert(v.toString());
             markerFeature->setExpandedCategories(categories);
         }
+    }
+
+    // 10. Analysis method (after dock layout so the analysis dock widget exists)
+    if (profile.analysisMethod.has_value()) {
+        auto *analysisFeature = mainWindow->findFeature<AnalysisDockFeature>();
+        if (analysisFeature)
+            analysisFeature->setCurrentMethodByName(*profile.analysisMethod);
     }
 }
 
