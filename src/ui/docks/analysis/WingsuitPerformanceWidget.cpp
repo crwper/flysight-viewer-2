@@ -4,6 +4,7 @@
 
 #include <QButtonGroup>
 #include <QDoubleSpinBox>
+#include <QKeyEvent>
 #include <QFormLayout>
 #include <QFrame>
 #include <QGridLayout>
@@ -36,12 +37,36 @@ public:
     {
         m_lastSteps = steps;
         QDoubleSpinBox::stepBy(steps);
-        deselectText();
         emit editingFinished();
+        clearFocus();
+    }
+
+protected:
+    void keyPressEvent(QKeyEvent* event) override
+    {
+        if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+            interpretText();
+            emit editingFinished();
+            clearFocus();
+            return;
+        }
+        if (event->key() == Qt::Key_Escape) {
+            setValue(m_valueOnFocusIn);
+            clearFocus();
+            return;
+        }
+        QDoubleSpinBox::keyPressEvent(event);
+    }
+
+    void focusInEvent(QFocusEvent* event) override
+    {
+        m_valueOnFocusIn = value();
+        QDoubleSpinBox::focusInEvent(event);
     }
 
 private:
-    int m_lastSteps = 0;
+    int    m_lastSteps = 0;
+    double m_valueOnFocusIn = 0.0;
 };
 
 // ---------------------------------------------------------------------------
