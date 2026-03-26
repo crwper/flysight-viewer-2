@@ -347,7 +347,7 @@ void Calculations::registerSpCalculations()
     MarkerDefinition bestStartDef;
     bestStartDef.category       = QStringLiteral("Speed Skydiving");
     bestStartDef.displayName    = QStringLiteral("Best 3s Start");
-    bestStartDef.shortLabel     = QStringLiteral("3s\u2191");
+    bestStartDef.shortLabel     = QStringLiteral("3sS");
     bestStartDef.color          = QColor(0, 0, 192);
     bestStartDef.attributeKey   = SessionKeys::SpBestStartTime;
     bestStartDef.measurements   = {};
@@ -359,7 +359,7 @@ void Calculations::registerSpCalculations()
     MarkerDefinition bestEndDef;
     bestEndDef.category       = QStringLiteral("Speed Skydiving");
     bestEndDef.displayName    = QStringLiteral("Best 3s End");
-    bestEndDef.shortLabel     = QStringLiteral("3s\u2193");
+    bestEndDef.shortLabel     = QStringLiteral("3sE");
     bestEndDef.color          = QColor(0, 0, 192);
     bestEndDef.attributeKey   = SessionKeys::SpBestEndTime;
     bestEndDef.measurements   = {};
