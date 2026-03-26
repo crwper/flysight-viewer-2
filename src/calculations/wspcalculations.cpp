@@ -341,7 +341,7 @@ void Calculations::registerWspCalculations()
         QStringLiteral("Task"),
         SessionKeys::WspTask,
         AttributeFormatType::Text,
-        false,
+        true,
         {}
     });
 

@@ -7,8 +7,11 @@
 #include <QFontMetrics>
 #include <QItemSelectionModel>
 #include <QHeaderView>
+#include <QInputDialog>
 #include <QMenu>
 #include <QStyle>
+
+#include "attributeregistry.h"
 
 namespace FlySight {
 
@@ -147,11 +150,31 @@ void LogbookView::onContextMenuRequested(const QPoint &pos)
     QAction *showSelectedAction = menu.addAction(tr("Show Selected Tracks"));
     QAction *hideSelectedAction = menu.addAction(tr("Hide Selected Tracks"));
     QAction *hideOthersAction = menu.addAction(tr("Hide Others"));
+
+    // --- Editable column actions ---
+    QList<QAction*> editActions;
+    const auto &reg = AttributeRegistry::instance();
+    for (int i = 0; i < model->columnCount(); ++i) {
+        const LogbookColumn &col = model->column(i);
+        if (col.type != ColumnType::SessionAttribute)
+            continue;
+        const auto *def = reg.findByKey(col.attributeKey);
+        if (!def || !def->editable)
+            continue;
+        if (editActions.isEmpty())
+            menu.addSeparator();
+        QAction *action = menu.addAction(tr("Set %1...").arg(logbookColumnLabel(col)));
+        action->setData(i);
+        editActions.append(action);
+    }
+
     menu.addSeparator();
-    QAction *deleteAction= menu.addAction(tr("Delete Selected Tracks"));
+    QAction *deleteAction = menu.addAction(tr("Delete Selected Tracks"));
 
     QAction *chosenAction = menu.exec(treeView->viewport()->mapToGlobal(pos));
-    if (chosenAction == showSelectedAction) {
+    if (!chosenAction) {
+        return;
+    } else if (chosenAction == showSelectedAction) {
         emit showSelectedRequested();
     } else if (chosenAction == hideSelectedAction) {
         emit hideSelectedRequested();
@@ -159,6 +182,27 @@ void LogbookView::onContextMenuRequested(const QPoint &pos)
         emit hideOthersRequested();
     } else if (chosenAction == deleteAction) {
         emit deleteRequested();
+    } else if (editActions.contains(chosenAction)) {
+        const int colIndex = chosenAction->data().toInt();
+        const LogbookColumn &col = model->column(colIndex);
+        const QList<QModelIndex> rows = treeView->selectionModel()->selectedRows();
+        if (rows.isEmpty())
+            return;
+
+        bool ok = false;
+        const QString value = QInputDialog::getText(
+            this,
+            tr("Set %1").arg(logbookColumnLabel(col)),
+            tr("New value for %n session(s):", "", rows.size()),
+            QLineEdit::Normal,
+            QString(),
+            &ok);
+
+        if (!ok)
+            return;
+
+        for (const QModelIndex &row : rows)
+            model->setData(model->index(row.row(), colIndex), value, Qt::EditRole);
     }
 }
 

@@ -52,6 +52,7 @@ public:
     const SessionRow& rowAt(int row) const;
     SessionRow& rowAt(int row);
     SessionData &sessionRef(int row);
+    const LogbookColumn& column(int col) const { return m_columns[col]; }
 
     // Populate model from cached index data (stubs only, no CSV parsing)
     void populateFromIndex(const QMap<QString, QMap<int, QVariant>> &cachedValues,
