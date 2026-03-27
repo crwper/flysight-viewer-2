@@ -164,7 +164,7 @@ PlotWidget::PlotWidget(SessionModel *model,
     }
 
     // connect signals to slots for updates and interactions
-    connect(model, &SessionModel::modelChanged, this, &PlotWidget::updatePlot);
+    connect(model, &SessionModel::modelChanged, this, &PlotWidget::schedulePlotRebuild);
     connect(model, &SessionModel::visibilityChanged, this,
             [this](const QSet<QString> &, const QSet<QString> &) { schedulePlotRebuild(); });
     connect(model, &SessionModel::dependencyChanged,
