@@ -22,58 +22,25 @@ LogbookView::LogbookView(SessionModel *model, QWidget *parent)
 {
     QIcon closeIcon = style()->standardIcon(QStyle::SP_TitleBarCloseButton);
 
-    m_saveProgressBar = new QProgressBar(this);
-    m_saveProgressBar->setVisible(false);
-    m_saveProgressBar->setTextVisible(true);
+    m_progressBar = new QProgressBar(this);
+    m_progressBar->setVisible(false);
+    m_progressBar->setTextVisible(true);
 
-    m_loadProgressBar = new QProgressBar(this);
-    m_loadProgressBar->setVisible(false);
-    m_loadProgressBar->setTextVisible(true);
+    m_cancelButton = new QToolButton(this);
+    m_cancelButton->setIcon(closeIcon);
+    m_cancelButton->setAutoRaise(true);
+    m_cancelButton->setVisible(false);
+    connect(m_cancelButton, &QToolButton::clicked, this, [this]() {
+        emit cancelRequested(m_activeTaskId);
+    });
 
-    m_loadCancelButton = new QToolButton(this);
-    m_loadCancelButton->setIcon(closeIcon);
-    m_loadCancelButton->setAutoRaise(true);
-    m_loadCancelButton->setVisible(false);
-    connect(m_loadCancelButton, &QToolButton::clicked, this, &LogbookView::cancelLoaderRequested);
-
-    m_columnWorkerProgressBar = new QProgressBar(this);
-    m_columnWorkerProgressBar->setVisible(false);
-    m_columnWorkerProgressBar->setTextVisible(true);
-
-    m_columnWorkerCancelButton = new QToolButton(this);
-    m_columnWorkerCancelButton->setIcon(closeIcon);
-    m_columnWorkerCancelButton->setAutoRaise(true);
-    m_columnWorkerCancelButton->setVisible(false);
-    connect(m_columnWorkerCancelButton, &QToolButton::clicked, this, &LogbookView::cancelColumnWorkerRequested);
-
-    m_bulkEditProgressBar = new QProgressBar(this);
-    m_bulkEditProgressBar->setVisible(false);
-    m_bulkEditProgressBar->setTextVisible(true);
-
-    m_bulkEditCancelButton = new QToolButton(this);
-    m_bulkEditCancelButton->setIcon(closeIcon);
-    m_bulkEditCancelButton->setAutoRaise(true);
-    m_bulkEditCancelButton->setVisible(false);
-    connect(m_bulkEditCancelButton, &QToolButton::clicked, this, &LogbookView::cancelBulkEditRequested);
-
-    QHBoxLayout *loadLayout = new QHBoxLayout();
-    loadLayout->addWidget(m_loadProgressBar, 1);
-    loadLayout->addWidget(m_loadCancelButton);
-
-    QHBoxLayout *columnWorkerLayout = new QHBoxLayout();
-    columnWorkerLayout->addWidget(m_columnWorkerProgressBar, 1);
-    columnWorkerLayout->addWidget(m_columnWorkerCancelButton);
-
-    QHBoxLayout *bulkEditLayout = new QHBoxLayout();
-    bulkEditLayout->addWidget(m_bulkEditProgressBar, 1);
-    bulkEditLayout->addWidget(m_bulkEditCancelButton);
+    QHBoxLayout *progressLayout = new QHBoxLayout();
+    progressLayout->addWidget(m_progressBar, 1);
+    progressLayout->addWidget(m_cancelButton);
 
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(treeView);
-    layout->addWidget(m_saveProgressBar);
-    layout->addLayout(bulkEditLayout);
-    layout->addLayout(loadLayout);
-    layout->addLayout(columnWorkerLayout);
+    layout->addLayout(progressLayout);
     setLayout(layout);
 
     setupView();
@@ -270,58 +237,47 @@ QSize LogbookView::minimumSizeHint() const
     return QSize(0, 0);
 }
 
-void LogbookView::onSaveProgressChanged(int remaining, int total)
+void LogbookView::onActiveTaskChanged(int id, bool cancellable)
 {
-    if (total <= 0) {
-        m_saveProgressBar->setVisible(false);
-        return;
-    }
-    m_saveProgressBar->setRange(0, total);
-    m_saveProgressBar->setValue(total - remaining);
-    m_saveProgressBar->setFormat(tr("Saving sessions: %v / %m"));
-    m_saveProgressBar->setVisible(true);
+    m_activeTaskId = id;
+    m_cancelButton->setVisible(cancellable);
+    m_progressBar->setVisible(true);
 }
 
-void LogbookView::onLoadProgressChanged(int remaining, int total)
+void LogbookView::onProgressChanged(int id, int remaining, int total)
 {
-    if (total <= 0) {
-        m_loadProgressBar->setVisible(false);
-        m_loadCancelButton->setVisible(false);
+    if (id != m_activeTaskId)
         return;
+
+    m_progressBar->setRange(0, total);
+    m_progressBar->setValue(total - remaining);
+
+    QString label;
+    switch (id) {
+    case SessionModel::SaveTask:
+        label = tr("Saving sessions: %v / %m");
+        break;
+    case SessionModel::LoadTask:
+        label = tr("Loading sessions: %v / %m");
+        break;
+    case SessionModel::BulkEditTask:
+        label = tr("Updating sessions: %v / %m");
+        break;
+    case SessionModel::ColumnTask:
+        label = tr("Computing columns: %v / %m");
+        break;
+    default:
+        label = tr("Working: %v / %m");
+        break;
     }
-    m_loadProgressBar->setRange(0, total);
-    m_loadProgressBar->setValue(total - remaining);
-    m_loadProgressBar->setFormat(tr("Loading sessions: %v / %m"));
-    m_loadProgressBar->setVisible(true);
-    m_loadCancelButton->setVisible(true);
+    m_progressBar->setFormat(label);
 }
 
-void LogbookView::onColumnWorkerProgressChanged(int remaining, int total)
+void LogbookView::onSchedulerIdle()
 {
-    if (total <= 0) {
-        m_columnWorkerProgressBar->setVisible(false);
-        m_columnWorkerCancelButton->setVisible(false);
-        return;
-    }
-    m_columnWorkerProgressBar->setRange(0, total);
-    m_columnWorkerProgressBar->setValue(total - remaining);
-    m_columnWorkerProgressBar->setFormat(tr("Computing columns: %v / %m"));
-    m_columnWorkerProgressBar->setVisible(true);
-    m_columnWorkerCancelButton->setVisible(true);
-}
-
-void LogbookView::onBulkEditProgressChanged(int remaining, int total)
-{
-    if (total <= 0) {
-        m_bulkEditProgressBar->setVisible(false);
-        m_bulkEditCancelButton->setVisible(false);
-        return;
-    }
-    m_bulkEditProgressBar->setRange(0, total);
-    m_bulkEditProgressBar->setValue(total - remaining);
-    m_bulkEditProgressBar->setFormat(tr("Updating sessions: %v / %m"));
-    m_bulkEditProgressBar->setVisible(true);
-    m_bulkEditCancelButton->setVisible(true);
+    m_activeTaskId = -1;
+    m_progressBar->setVisible(false);
+    m_cancelButton->setVisible(false);
 }
 
 } // namespace FlySight

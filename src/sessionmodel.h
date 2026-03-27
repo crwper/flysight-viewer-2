@@ -6,8 +6,8 @@
 #include <QAbstractTableModel>
 #include <QMap>
 #include <QSet>
-#include <QTimer>
 #include <QVector>
+#include "idlescheduler.h"
 #include "logbookcolumn.h"
 #include "sessiondata.h"
 
@@ -31,7 +31,16 @@ public:
         IsHoveredRole = Qt::UserRole + 100
     };
 
+    enum WorkerTask {
+        SaveTask     = 0,   // priority 1 (highest)
+        LoadTask     = 1,   // priority 2
+        BulkEditTask = 2,   // priority 3
+        ColumnTask   = 3    // priority 4 (lowest)
+    };
+
     SessionModel(QObject *parent = nullptr);
+
+    IdleScheduler& scheduler() { return m_scheduler; }
 
     // Data management
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
@@ -91,10 +100,6 @@ signals:
     void focusedSessionChanged(const QString& sessionId);
     void dependencyChanged(const QString &sessionId, const DependencyKey &key);
     void visibilityChanged(QSet<QString> shown, QSet<QString> hidden);
-    void saveProgressChanged(int remaining, int total);
-    void loadProgressChanged(int remaining, int total);
-    void columnWorkerProgressChanged(int remaining, int total);
-    void bulkEditProgressChanged(int remaining, int total);
 
 public:
     void startColumnWorker();
@@ -118,24 +123,27 @@ private:
     void evictIfNeeded();
     void evictSession(const QString &sessionId);
 
+    // Idle scheduler (replaces per-worker QTimers)
+    IdleScheduler m_scheduler;
+
     // Deferred logbook persistence (saver worker)
-    QTimer m_saveTimer;
     int m_saveHighWater = 0;   // total dirty sessions in current save wave
     int m_saveRemaining = 0;   // dirty sessions remaining in current wave
     void scheduleSave(const QString &sessionId);
+    void saveNextSession();
 
     // Background visibility loader (loads stub sessions made visible)
-    QTimer m_loadTimer;
     int m_loadHighWater = 0;
     int m_loadRemaining = 0;
     QList<QString> m_loadQueue;       // session IDs of stubs to load
     QSet<QString> m_loadedDuringBatch; // sessions loaded so far (emitted on completion/cancel)
     static constexpr int kSyncLoadThreshold = 3;
+    void loadNextVisibleSession();
 
     // Dirty column worker (computes missing cached column values in background)
-    QTimer m_columnWorkerTimer;
     int m_columnWorkerHighWater = 0;
     int m_columnWorkerRemaining = 0;
+    void processNextDirtyColumn();
 
     // Bulk edit worker (edits + saves one session per tick)
     struct BulkEditItem {
@@ -143,13 +151,13 @@ private:
         int columnIndex;
         QVariant value;
     };
-    QTimer m_bulkEditTimer;
     int m_bulkEditHighWater = 0;
     int m_bulkEditRemaining = 0;
     QList<BulkEditItem> m_bulkEditQueue;
     int m_bulkEditMinRow = INT_MAX;
     int m_bulkEditMaxRow = 0;
     void finishBulkEdit();
+    void processNextBulkEdit();
 
     // Formatting helpers for data()
     QVariant formatAttributeValue(const SessionData &session, const LogbookColumn &col) const;
@@ -163,10 +171,6 @@ private:
 
 private slots:
     void rebuildColumns();
-    void saveNextSession();
-    void loadNextVisibleSession();
-    void processNextDirtyColumn();
-    void processNextBulkEdit();
 };
 
 } // namespace FlySight

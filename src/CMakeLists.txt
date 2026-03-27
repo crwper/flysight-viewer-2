@@ -245,6 +245,7 @@ set(PROJECT_SOURCES
   main.cpp
   mainwindow.cpp             mainwindow.h          mainwindow.ui
   sessionmodel.h             sessionmodel.cpp
+  idlescheduler.h            idlescheduler.cpp
   plotviewsettingsmodel.cpp  plotviewsettingsmodel.h
   dataimporter.cpp           dataimporter.h
   dataexporter.cpp           dataexporter.h

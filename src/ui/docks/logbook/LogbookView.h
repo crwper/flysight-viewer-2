@@ -23,17 +23,14 @@ signals:
     void hideOthersRequested();
     void deleteRequested();
     void focusSessionRequested(int row);
-    void cancelColumnWorkerRequested();
-    void cancelBulkEditRequested();
     void currentSessionChanged(const QString& sessionId);
-    void cancelLoaderRequested();
+    void cancelRequested(int taskId);
 
 public slots:
     void selectSessions(const QList<QString> &sessionIds);
-    void onSaveProgressChanged(int remaining, int total);
-    void onLoadProgressChanged(int remaining, int total);
-    void onColumnWorkerProgressChanged(int remaining, int total);
-    void onBulkEditProgressChanged(int remaining, int total);
+    void onActiveTaskChanged(int id, bool cancellable);
+    void onProgressChanged(int id, int remaining, int total);
+    void onSchedulerIdle();
 
 private slots:
     void onContextMenuRequested(const QPoint &pos);
@@ -45,13 +42,9 @@ protected:
 private:
     QTreeView *treeView;
     SessionModel *model;
-    QProgressBar *m_saveProgressBar;
-    QProgressBar *m_loadProgressBar;
-    QToolButton *m_loadCancelButton;
-    QProgressBar *m_columnWorkerProgressBar;
-    QToolButton *m_columnWorkerCancelButton;
-    QProgressBar *m_bulkEditProgressBar;
-    QToolButton *m_bulkEditCancelButton;
+    QProgressBar *m_progressBar;
+    QToolButton *m_cancelButton;
+    int m_activeTaskId = -1;
 
     void setupView();
 };
