@@ -1393,10 +1393,6 @@ void SessionModel::processNextDirtyColumn()
 
 void SessionModel::startBulkEdit(const QList<int> &rows, int columnIndex, const QVariant &value)
 {
-    // Cancel any in-progress bulk edit
-    if (m_bulkEditRemaining > 0)
-        cancelBulkEdit();
-
     // Validate column
     if (columnIndex < 0 || columnIndex >= m_columns.size())
         return;
@@ -1410,23 +1406,21 @@ void SessionModel::startBulkEdit(const QList<int> &rows, int columnIndex, const 
     if (rows.isEmpty())
         return;
 
-    // Store work parameters
-    m_bulkEditQueue = rows;
-    m_bulkEditColumnIndex = columnIndex;
-    m_bulkEditValue = value;
-    m_bulkEditHighWater = rows.size();
-    m_bulkEditRemaining = rows.size();
-    m_bulkEditMinRow = INT_MAX;
-    m_bulkEditMaxRow = 0;
+    // Append work items to the queue (supports multiple successive edits)
+    for (int row : rows)
+        m_bulkEditQueue.append({row, columnIndex, value});
+
+    m_bulkEditHighWater += rows.size();
+    m_bulkEditRemaining += rows.size();
 
     // Pause column worker (bulk edit has priority)
     m_columnWorkerTimer.stop();
 
-    // Emit initial progress
+    // Emit updated progress
     emit bulkEditProgressChanged(m_bulkEditRemaining, m_bulkEditHighWater);
 
     // Start if saver and loader are idle; otherwise they'll resume us
-    if (!m_saveTimer.isActive() && m_loadQueue.isEmpty())
+    if (!m_saveTimer.isActive() && m_loadQueue.isEmpty() && !m_bulkEditTimer.isActive())
         m_bulkEditTimer.start();
 }
 
@@ -1447,30 +1441,43 @@ void SessionModel::processNextBulkEdit()
     if (!m_loadQueue.isEmpty())
         return;
 
-    // Take next row index
+    // Take next work item
     while (!m_bulkEditQueue.isEmpty()) {
-        int rowIdx = m_bulkEditQueue.takeFirst();
+        BulkEditItem item = m_bulkEditQueue.takeFirst();
 
         // Validate row index
-        if (rowIdx < 0 || rowIdx >= m_rows.size()) {
+        if (item.row < 0 || item.row >= m_rows.size()) {
             m_bulkEditRemaining--;
             emit bulkEditProgressChanged(m_bulkEditRemaining, m_bulkEditHighWater);
             continue;
         }
 
-        SessionRow &sr = m_rows[rowIdx];
-        const LogbookColumn &col = m_columns[m_bulkEditColumnIndex];
+        // Validate column
+        if (item.columnIndex < 0 || item.columnIndex >= m_columns.size()) {
+            m_bulkEditRemaining--;
+            emit bulkEditProgressChanged(m_bulkEditRemaining, m_bulkEditHighWater);
+            continue;
+        }
+
+        SessionRow &sr = m_rows[item.row];
+        const LogbookColumn &col = m_columns[item.columnIndex];
         const auto *def = AttributeRegistry::instance().findByKey(col.attributeKey);
         LogbookManager &logbook = LogbookManager::instance();
+
+        if (!def) {
+            m_bulkEditRemaining--;
+            emit bulkEditProgressChanged(m_bulkEditRemaining, m_bulkEditHighWater);
+            continue;
+        }
 
         // Compute the final value (with unit reverse-conversion for Double)
         QVariant newVal;
         switch (def->formatType) {
         case AttributeFormatType::Text:
-            newVal = m_bulkEditValue.toString();
+            newVal = item.value.toString();
             break;
         case AttributeFormatType::Double: {
-            double displayVal = m_bulkEditValue.toDouble();
+            double displayVal = item.value.toDouble();
             if (!def->measurementType.isEmpty())
                 newVal = UnitConverter::instance().reverseConvert(displayVal, def->measurementType);
             else
@@ -1486,14 +1493,14 @@ void SessionModel::processNextBulkEdit()
 
         if (sr.isLoaded()) {
             // --- LOADED PATH ---
-            SessionData &item = sr.session.value();
-            item.setAttribute(col.attributeKey, newVal);
+            SessionData &session = sr.session.value();
+            session.setAttribute(col.attributeKey, newVal);
 
             // Save inline
-            logbook.saveSession(item);
+            logbook.saveSession(session);
 
             // Update cached column values
-            QMap<LogbookColumn, QVariant> colValues = computeColumnValues(item);
+            QMap<LogbookColumn, QVariant> colValues = computeColumnValues(session);
             logbook.setCachedValues(sr.sessionId, colValues);
             QMap<int, QVariant> indexed;
             for (int i = 0; i < m_columns.size(); ++i)
@@ -1536,8 +1543,8 @@ void SessionModel::processNextBulkEdit()
         }
 
         // Track affected row range
-        m_bulkEditMinRow = std::min(m_bulkEditMinRow, rowIdx);
-        m_bulkEditMaxRow = std::max(m_bulkEditMaxRow, rowIdx);
+        m_bulkEditMinRow = std::min(m_bulkEditMinRow, item.row);
+        m_bulkEditMaxRow = std::max(m_bulkEditMaxRow, item.row);
 
         // Update progress
         m_bulkEditRemaining--;
@@ -1568,8 +1575,6 @@ void SessionModel::finishBulkEdit()
     m_bulkEditHighWater = 0;
     m_bulkEditRemaining = 0;
     m_bulkEditQueue.clear();
-    m_bulkEditColumnIndex = -1;
-    m_bulkEditValue = QVariant();
     m_bulkEditMinRow = INT_MAX;
     m_bulkEditMaxRow = 0;
 

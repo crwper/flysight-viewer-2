@@ -138,12 +138,15 @@ private:
     int m_columnWorkerRemaining = 0;
 
     // Bulk edit worker (edits + saves one session per tick)
+    struct BulkEditItem {
+        int row;
+        int columnIndex;
+        QVariant value;
+    };
     QTimer m_bulkEditTimer;
     int m_bulkEditHighWater = 0;
     int m_bulkEditRemaining = 0;
-    QList<int> m_bulkEditQueue;        // row indices to process
-    int m_bulkEditColumnIndex = -1;
-    QVariant m_bulkEditValue;
+    QList<BulkEditItem> m_bulkEditQueue;
     int m_bulkEditMinRow = INT_MAX;
     int m_bulkEditMaxRow = 0;
     void finishBulkEdit();
