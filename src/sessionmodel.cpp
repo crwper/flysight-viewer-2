@@ -676,6 +676,8 @@ bool SessionModel::removeSessions(const QList<QString> &sessionIds)
 
     bool anyRemoved = false;
 
+    beginResetModel();
+
     for (const QString &sessionId : sessionIds) {
         auto it = std::find_if(
             m_rows.begin(),
@@ -685,8 +687,6 @@ bool SessionModel::removeSessions(const QList<QString> &sessionIds)
             });
 
         if (it != m_rows.end()) {
-            int row = it - m_rows.begin();
-
             // Remove from LRU list before erasing
             lruRemove(sessionId);
 
@@ -708,9 +708,7 @@ bool SessionModel::removeSessions(const QList<QString> &sessionIds)
                 m_columnWorkerRemaining--;
             }
 
-            beginRemoveRows(QModelIndex(), row, row);
             m_rows.erase(it);
-            endRemoveRows();
 
             anyRemoved = true;
 
@@ -719,6 +717,8 @@ bool SessionModel::removeSessions(const QList<QString> &sessionIds)
             qWarning() << "SessionModel::removeSessions: SESSION_ID not found:" << sessionId;
         }
     }
+
+    endResetModel();
 
     if (anyRemoved) {
         // Clamp counters to zero (should never go negative)
