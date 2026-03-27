@@ -46,6 +46,16 @@ LogbookView::LogbookView(SessionModel *model, QWidget *parent)
     m_columnWorkerCancelButton->setVisible(false);
     connect(m_columnWorkerCancelButton, &QToolButton::clicked, this, &LogbookView::cancelColumnWorkerRequested);
 
+    m_bulkEditProgressBar = new QProgressBar(this);
+    m_bulkEditProgressBar->setVisible(false);
+    m_bulkEditProgressBar->setTextVisible(true);
+
+    m_bulkEditCancelButton = new QToolButton(this);
+    m_bulkEditCancelButton->setIcon(closeIcon);
+    m_bulkEditCancelButton->setAutoRaise(true);
+    m_bulkEditCancelButton->setVisible(false);
+    connect(m_bulkEditCancelButton, &QToolButton::clicked, this, &LogbookView::cancelBulkEditRequested);
+
     QHBoxLayout *loadLayout = new QHBoxLayout();
     loadLayout->addWidget(m_loadProgressBar, 1);
     loadLayout->addWidget(m_loadCancelButton);
@@ -54,9 +64,14 @@ LogbookView::LogbookView(SessionModel *model, QWidget *parent)
     columnWorkerLayout->addWidget(m_columnWorkerProgressBar, 1);
     columnWorkerLayout->addWidget(m_columnWorkerCancelButton);
 
+    QHBoxLayout *bulkEditLayout = new QHBoxLayout();
+    bulkEditLayout->addWidget(m_bulkEditProgressBar, 1);
+    bulkEditLayout->addWidget(m_bulkEditCancelButton);
+
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->addWidget(treeView);
     layout->addWidget(m_saveProgressBar);
+    layout->addLayout(bulkEditLayout);
     layout->addLayout(loadLayout);
     layout->addLayout(columnWorkerLayout);
     setLayout(layout);
@@ -201,8 +216,11 @@ void LogbookView::onContextMenuRequested(const QPoint &pos)
         if (!ok)
             return;
 
-        for (const QModelIndex &row : rows)
-            model->setData(model->index(row.row(), colIndex), value, Qt::EditRole);
+        QList<int> rowIndices;
+        rowIndices.reserve(rows.size());
+        for (const QModelIndex &idx : rows)
+            rowIndices.append(idx.row());
+        model->startBulkEdit(rowIndices, colIndex, value);
     }
 }
 
@@ -290,6 +308,20 @@ void LogbookView::onColumnWorkerProgressChanged(int remaining, int total)
     m_columnWorkerProgressBar->setFormat(tr("Computing columns: %v / %m"));
     m_columnWorkerProgressBar->setVisible(true);
     m_columnWorkerCancelButton->setVisible(true);
+}
+
+void LogbookView::onBulkEditProgressChanged(int remaining, int total)
+{
+    if (total <= 0) {
+        m_bulkEditProgressBar->setVisible(false);
+        m_bulkEditCancelButton->setVisible(false);
+        return;
+    }
+    m_bulkEditProgressBar->setRange(0, total);
+    m_bulkEditProgressBar->setValue(total - remaining);
+    m_bulkEditProgressBar->setFormat(tr("Updating sessions: %v / %m"));
+    m_bulkEditProgressBar->setVisible(true);
+    m_bulkEditCancelButton->setVisible(true);
 }
 
 } // namespace FlySight

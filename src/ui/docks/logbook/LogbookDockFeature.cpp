@@ -46,6 +46,12 @@ LogbookDockFeature::LogbookDockFeature(const AppContext& ctx, QObject* parent)
             m_logbookView, &LogbookView::onColumnWorkerProgressChanged);
     connect(m_logbookView, &LogbookView::cancelColumnWorkerRequested,
             ctx.sessionModel, &SessionModel::cancelColumnWorker);
+
+    // Connect bulk edit progress and cancel signals
+    connect(ctx.sessionModel, &SessionModel::bulkEditProgressChanged,
+            m_logbookView, &LogbookView::onBulkEditProgressChanged);
+    connect(m_logbookView, &LogbookView::cancelBulkEditRequested,
+            ctx.sessionModel, &SessionModel::cancelBulkEdit);
 }
 
 QString LogbookDockFeature::id() const

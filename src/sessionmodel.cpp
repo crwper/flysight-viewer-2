@@ -39,6 +39,10 @@ SessionModel::SessionModel(QObject *parent)
     m_columnWorkerTimer.setInterval(0);
     connect(&m_columnWorkerTimer, &QTimer::timeout, this, &SessionModel::processNextDirtyColumn);
 
+    m_bulkEditTimer.setSingleShot(true);
+    m_bulkEditTimer.setInterval(0);
+    connect(&m_bulkEditTimer, &QTimer::timeout, this, &SessionModel::processNextBulkEdit);
+
     // LRU cache capacity preference
     PreferencesManager &prefs = PreferencesManager::instance();
     prefs.registerPreference(PreferenceKeys::LogbookCacheSize, 50);
@@ -1001,6 +1005,10 @@ void SessionModel::flushDirtySessions()
     m_columnWorkerTimer.stop();
     m_columnWorkerHighWater = 0;
     m_columnWorkerRemaining = 0;
+    m_bulkEditTimer.stop();
+    m_bulkEditQueue.clear();
+    m_bulkEditHighWater = 0;
+    m_bulkEditRemaining = 0;
 
     LogbookManager &logbook = LogbookManager::instance();
     bool anySaved = false;
@@ -1041,9 +1049,11 @@ void SessionModel::saveNextSession()
         m_saveHighWater = 0;
         m_saveRemaining = 0;
         emit saveProgressChanged(0, 0);
-        // Resume loader first, then column worker
+        // Resume lower-priority workers
         if (!m_loadQueue.isEmpty()) {
             m_loadTimer.start();
+        } else if (m_bulkEditRemaining > 0) {
+            m_bulkEditTimer.start();
         } else if (m_columnWorkerRemaining > 0) {
             m_columnWorkerTimer.start();
         }
@@ -1073,9 +1083,11 @@ void SessionModel::saveNextSession()
         m_saveHighWater = 0;
         m_saveRemaining = 0;
         emit saveProgressChanged(0, 0);
-        // Resume loader first, then column worker
+        // Resume lower-priority workers
         if (!m_loadQueue.isEmpty()) {
             m_loadTimer.start();
+        } else if (m_bulkEditRemaining > 0) {
+            m_bulkEditTimer.start();
         } else if (m_columnWorkerRemaining > 0) {
             m_columnWorkerTimer.start();
         }
@@ -1122,8 +1134,10 @@ void SessionModel::loadNextVisibleSession()
                 m_loadedDuringBatch.clear();
                 emit visibilityChanged(shown, {});
             }
-            // Restart column worker if it has remaining work
-            if (m_columnWorkerRemaining > 0) {
+            // Resume lower-priority workers
+            if (m_bulkEditRemaining > 0) {
+                m_bulkEditTimer.start();
+            } else if (m_columnWorkerRemaining > 0) {
                 m_columnWorkerTimer.start();
             }
         }
@@ -1139,7 +1153,9 @@ void SessionModel::loadNextVisibleSession()
         m_loadedDuringBatch.clear();
         emit visibilityChanged(shown, {});
     }
-    if (m_columnWorkerRemaining > 0) {
+    if (m_bulkEditRemaining > 0) {
+        m_bulkEditTimer.start();
+    } else if (m_columnWorkerRemaining > 0) {
         m_columnWorkerTimer.start();
     }
 }
@@ -1178,8 +1194,10 @@ void SessionModel::cancelLoader()
     if (minRow <= maxRow)
         emit dataChanged(index(minRow, 0), index(maxRow, columnCount() - 1), {Qt::CheckStateRole});
 
-    // Restart column worker if it has remaining work
-    if (m_columnWorkerRemaining > 0) {
+    // Resume lower-priority workers
+    if (m_bulkEditRemaining > 0) {
+        m_bulkEditTimer.start();
+    } else if (m_columnWorkerRemaining > 0) {
         m_columnWorkerTimer.start();
     }
 }
@@ -1300,6 +1318,10 @@ void SessionModel::processNextDirtyColumn()
     if (!m_loadQueue.isEmpty())
         return;  // Do not re-arm; loader will restart us when it finishes
 
+    // Yield to the bulk edit worker
+    if (m_bulkEditRemaining > 0)
+        return;  // Do not re-arm; bulk edit will restart us when it finishes
+
     // Find next session with missing column values
     int dirtyIdx = -1;
     for (int i = 0; i < m_rows.size(); ++i) {
@@ -1365,6 +1387,207 @@ void SessionModel::processNextDirtyColumn()
 
     // Re-arm the timer for the next session
     m_columnWorkerTimer.start();
+}
+
+// ---- Bulk edit worker --------------------------------------------------
+
+void SessionModel::startBulkEdit(const QList<int> &rows, int columnIndex, const QVariant &value)
+{
+    // Cancel any in-progress bulk edit
+    if (m_bulkEditRemaining > 0)
+        cancelBulkEdit();
+
+    // Validate column
+    if (columnIndex < 0 || columnIndex >= m_columns.size())
+        return;
+    const LogbookColumn &col = m_columns[columnIndex];
+    if (col.type != ColumnType::SessionAttribute)
+        return;
+    const auto *def = AttributeRegistry::instance().findByKey(col.attributeKey);
+    if (!def || !def->editable)
+        return;
+
+    if (rows.isEmpty())
+        return;
+
+    // Store work parameters
+    m_bulkEditQueue = rows;
+    m_bulkEditColumnIndex = columnIndex;
+    m_bulkEditValue = value;
+    m_bulkEditHighWater = rows.size();
+    m_bulkEditRemaining = rows.size();
+    m_bulkEditMinRow = INT_MAX;
+    m_bulkEditMaxRow = 0;
+
+    // Pause column worker (bulk edit has priority)
+    m_columnWorkerTimer.stop();
+
+    // Emit initial progress
+    emit bulkEditProgressChanged(m_bulkEditRemaining, m_bulkEditHighWater);
+
+    // Start if saver and loader are idle; otherwise they'll resume us
+    if (!m_saveTimer.isActive() && m_loadQueue.isEmpty())
+        m_bulkEditTimer.start();
+}
+
+void SessionModel::cancelBulkEdit()
+{
+    m_bulkEditTimer.stop();
+    m_bulkEditQueue.clear();
+    finishBulkEdit();
+}
+
+void SessionModel::processNextBulkEdit()
+{
+    // Yield to saver (highest priority)
+    if (m_saveTimer.isActive())
+        return;
+
+    // Yield to loader
+    if (!m_loadQueue.isEmpty())
+        return;
+
+    // Take next row index
+    while (!m_bulkEditQueue.isEmpty()) {
+        int rowIdx = m_bulkEditQueue.takeFirst();
+
+        // Validate row index
+        if (rowIdx < 0 || rowIdx >= m_rows.size()) {
+            m_bulkEditRemaining--;
+            emit bulkEditProgressChanged(m_bulkEditRemaining, m_bulkEditHighWater);
+            continue;
+        }
+
+        SessionRow &sr = m_rows[rowIdx];
+        const LogbookColumn &col = m_columns[m_bulkEditColumnIndex];
+        const auto *def = AttributeRegistry::instance().findByKey(col.attributeKey);
+        LogbookManager &logbook = LogbookManager::instance();
+
+        // Compute the final value (with unit reverse-conversion for Double)
+        QVariant newVal;
+        switch (def->formatType) {
+        case AttributeFormatType::Text:
+            newVal = m_bulkEditValue.toString();
+            break;
+        case AttributeFormatType::Double: {
+            double displayVal = m_bulkEditValue.toDouble();
+            if (!def->measurementType.isEmpty())
+                newVal = UnitConverter::instance().reverseConvert(displayVal, def->measurementType);
+            else
+                newVal = displayVal;
+            break;
+        }
+        default:
+            // DateTime/Duration are not editable
+            m_bulkEditRemaining--;
+            emit bulkEditProgressChanged(m_bulkEditRemaining, m_bulkEditHighWater);
+            continue;
+        }
+
+        if (sr.isLoaded()) {
+            // --- LOADED PATH ---
+            SessionData &item = sr.session.value();
+            item.setAttribute(col.attributeKey, newVal);
+
+            // Save inline
+            logbook.saveSession(item);
+
+            // Update cached column values
+            QMap<LogbookColumn, QVariant> colValues = computeColumnValues(item);
+            logbook.setCachedValues(sr.sessionId, colValues);
+            QMap<int, QVariant> indexed;
+            for (int i = 0; i < m_columns.size(); ++i)
+                indexed[i] = colValues.value(m_columns[i]);
+            sr.cachedValues = indexed;
+
+            // Clear dirty flag if set — we just saved
+            if (sr.dirty) {
+                sr.dirty = false;
+                m_saveRemaining--;
+            }
+        } else {
+            // --- STUB PATH (avoids LRU/eviction) ---
+            auto loaded = logbook.loadSession(sr.sessionId);
+            if (loaded.has_value()) {
+                // UUID remap (same pattern as column worker)
+                const QString realId = loaded->getAttribute(SessionKeys::SessionId).toString();
+                if (!realId.isEmpty() && realId != sr.sessionId) {
+                    if (logbook.remapSessionId(sr.sessionId, realId))
+                        sr.sessionId = realId;
+                }
+
+                // Apply the edit
+                loaded->setAttribute(col.attributeKey, newVal);
+
+                // Save
+                logbook.saveSession(loaded.value());
+
+                // Compute and cache column values
+                QMap<LogbookColumn, QVariant> colValues = computeColumnValues(loaded.value());
+                logbook.setCachedValues(sr.sessionId, colValues);
+                QMap<int, QVariant> indexed;
+                for (int i = 0; i < m_columns.size(); ++i)
+                    indexed[i] = colValues.value(m_columns[i]);
+                sr.cachedValues = indexed;
+
+                // loaded goes out of scope — session stays a stub
+            }
+            // If load failed, silently skip
+        }
+
+        // Track affected row range
+        m_bulkEditMinRow = std::min(m_bulkEditMinRow, rowIdx);
+        m_bulkEditMaxRow = std::max(m_bulkEditMaxRow, rowIdx);
+
+        // Update progress
+        m_bulkEditRemaining--;
+        emit bulkEditProgressChanged(m_bulkEditRemaining, m_bulkEditHighWater);
+
+        // Re-arm or finish
+        if (!m_bulkEditQueue.isEmpty())
+            m_bulkEditTimer.start();
+        else
+            finishBulkEdit();
+        return;
+    }
+
+    // Queue exhausted (all entries were skipped)
+    finishBulkEdit();
+}
+
+void SessionModel::finishBulkEdit()
+{
+    LogbookManager::instance().flushIndex();
+
+    // Capture state before reset
+    int minRow = m_bulkEditMinRow;
+    int maxRow = m_bulkEditMaxRow;
+    bool hadSaveChanges = (m_bulkEditHighWater > 0 && m_saveRemaining >= 0);
+
+    // Reset state
+    m_bulkEditHighWater = 0;
+    m_bulkEditRemaining = 0;
+    m_bulkEditQueue.clear();
+    m_bulkEditColumnIndex = -1;
+    m_bulkEditValue = QVariant();
+    m_bulkEditMinRow = INT_MAX;
+    m_bulkEditMaxRow = 0;
+
+    emit bulkEditProgressChanged(0, 0);
+
+    // Notify views of changes
+    if (minRow <= maxRow) {
+        emit dataChanged(index(minRow, 0), index(maxRow, columnCount() - 1), {Qt::DisplayRole});
+    }
+    emit modelChanged();
+
+    // Update save progress if we cleared any dirty flags
+    if (hadSaveChanges)
+        emit saveProgressChanged(m_saveRemaining, m_saveHighWater);
+
+    // Resume column worker if it has remaining work
+    if (m_columnWorkerRemaining > 0)
+        m_columnWorkerTimer.start();
 }
 
 // ---- Column value extraction ------------------------------------------

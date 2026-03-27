@@ -94,11 +94,14 @@ signals:
     void saveProgressChanged(int remaining, int total);
     void loadProgressChanged(int remaining, int total);
     void columnWorkerProgressChanged(int remaining, int total);
+    void bulkEditProgressChanged(int remaining, int total);
 
 public:
     void startColumnWorker();
     void cancelColumnWorker();
     void cancelLoader();
+    void startBulkEdit(const QList<int> &rows, int columnIndex, const QVariant &value);
+    void cancelBulkEdit();
 
 private:
     QVector<SessionRow> m_rows;
@@ -134,6 +137,17 @@ private:
     int m_columnWorkerHighWater = 0;
     int m_columnWorkerRemaining = 0;
 
+    // Bulk edit worker (edits + saves one session per tick)
+    QTimer m_bulkEditTimer;
+    int m_bulkEditHighWater = 0;
+    int m_bulkEditRemaining = 0;
+    QList<int> m_bulkEditQueue;        // row indices to process
+    int m_bulkEditColumnIndex = -1;
+    QVariant m_bulkEditValue;
+    int m_bulkEditMinRow = INT_MAX;
+    int m_bulkEditMaxRow = 0;
+    void finishBulkEdit();
+
     // Formatting helpers for data()
     QVariant formatAttributeValue(const SessionData &session, const LogbookColumn &col) const;
     QVariant formatMeasurementValue(const SessionData &session, const LogbookColumn &col) const;
@@ -149,6 +163,7 @@ private slots:
     void saveNextSession();
     void loadNextVisibleSession();
     void processNextDirtyColumn();
+    void processNextBulkEdit();
 };
 
 } // namespace FlySight

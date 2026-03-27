@@ -24,6 +24,7 @@ signals:
     void deleteRequested();
     void focusSessionRequested(int row);
     void cancelColumnWorkerRequested();
+    void cancelBulkEditRequested();
     void currentSessionChanged(const QString& sessionId);
     void cancelLoaderRequested();
 
@@ -32,6 +33,7 @@ public slots:
     void onSaveProgressChanged(int remaining, int total);
     void onLoadProgressChanged(int remaining, int total);
     void onColumnWorkerProgressChanged(int remaining, int total);
+    void onBulkEditProgressChanged(int remaining, int total);
 
 private slots:
     void onContextMenuRequested(const QPoint &pos);
@@ -48,6 +50,8 @@ private:
     QToolButton *m_loadCancelButton;
     QProgressBar *m_columnWorkerProgressBar;
     QToolButton *m_columnWorkerCancelButton;
+    QProgressBar *m_bulkEditProgressBar;
+    QToolButton *m_bulkEditCancelButton;
 
     void setupView();
 };
