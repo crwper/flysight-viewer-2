@@ -154,8 +154,6 @@ private:
     int m_bulkEditHighWater = 0;
     int m_bulkEditRemaining = 0;
     QList<BulkEditItem> m_bulkEditQueue;
-    int m_bulkEditMinRow = INT_MAX;
-    int m_bulkEditMaxRow = 0;
     void finishBulkEdit();
     void processNextBulkEdit();
 

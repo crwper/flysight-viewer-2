@@ -1424,9 +1424,8 @@ void SessionModel::processNextBulkEdit()
         // If load failed, silently skip
     }
 
-    // Track affected row range
-    m_bulkEditMinRow = std::min(m_bulkEditMinRow, item.row);
-    m_bulkEditMaxRow = std::max(m_bulkEditMaxRow, item.row);
+    // Notify the view that this row has been updated
+    emit dataChanged(index(item.row, 0), index(item.row, columnCount() - 1), {Qt::DisplayRole});
 
     // Update progress
     m_bulkEditRemaining--;
@@ -1436,21 +1435,11 @@ void SessionModel::finishBulkEdit()
 {
     LogbookManager::instance().flushIndex();
 
-    // Capture state before reset
-    int minRow = m_bulkEditMinRow;
-    int maxRow = m_bulkEditMaxRow;
-
     // Reset state
     m_bulkEditHighWater = 0;
     m_bulkEditRemaining = 0;
     m_bulkEditQueue.clear();
-    m_bulkEditMinRow = INT_MAX;
-    m_bulkEditMaxRow = 0;
 
-    // Notify views of changes
-    if (minRow <= maxRow) {
-        emit dataChanged(index(minRow, 0), index(maxRow, columnCount() - 1), {Qt::DisplayRole});
-    }
     emit modelChanged();
 }
 
