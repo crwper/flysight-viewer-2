@@ -822,6 +822,7 @@ void MainWindow::on_action_Delete_triggered()
         for (const QString &sessionId : sessionIdsToRemove) {
             LogbookManager::instance().removeSession(sessionId);
         }
+        LogbookManager::instance().flushIndex();
 
         QMessageBox::information(
             this,
