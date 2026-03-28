@@ -38,11 +38,18 @@ AnalysisDockFeature::AnalysisDockFeature(const AppContext& ctx, QObject* parent)
     connect(m_sessionModel, &SessionModel::focusedSessionChanged,
             this, &AnalysisDockFeature::onFocusedSessionChanged);
 
-    // Refresh when model changes (e.g. bulk edit completion)
-    connect(m_sessionModel, &SessionModel::modelChanged,
-            this, [this]() {
-        if (auto* method = currentMethodWidget())
-            method->setFocusedSession(m_sessionModel, m_focusedSessionId);
+    // Refresh when the focused session's data changes (e.g. bulk edit)
+    connect(m_sessionModel, &SessionModel::dataChanged,
+            this, [this](const QModelIndex &topLeft, const QModelIndex &bottomRight) {
+        if (m_focusedSessionId.isEmpty())
+            return;
+        int focusedRow = m_sessionModel->getSessionRow(m_focusedSessionId);
+        if (focusedRow < 0)
+            return;
+        if (focusedRow >= topLeft.row() && focusedRow <= bottomRight.row()) {
+            if (auto* method = currentMethodWidget())
+                method->setFocusedSession(m_sessionModel, m_focusedSessionId);
+        }
     });
 
     // Connect method selector changes
