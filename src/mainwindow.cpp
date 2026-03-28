@@ -823,12 +823,6 @@ void MainWindow::on_action_Delete_triggered()
             LogbookManager::instance().removeSession(sessionId);
         }
         LogbookManager::instance().flushIndex();
-
-        QMessageBox::information(
-            this,
-            tr("Delete Tracks"),
-            tr("Selected track(s) have been successfully deleted.")
-            );
     } else {
         QMessageBox::warning(
             this,
