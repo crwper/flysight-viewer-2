@@ -134,7 +134,7 @@ inline const QMap<QString, MeasurementTypeInfo>& getMeasurementTypeRegistry() {
         {MeasurementTypes::Pressure, {
             QStringLiteral("Pa"),
             {
-                {UnitSystems::Metric, {QStringLiteral("kPa"), 0.001, 0.0, 0}},
+                {UnitSystems::Metric, {QStringLiteral("kPa"), 0.001, 0.0, 3}},
                 {UnitSystems::Imperial, {QStringLiteral("inHg"), 0.000295300, 0.0, 2}}
             }
         }},
