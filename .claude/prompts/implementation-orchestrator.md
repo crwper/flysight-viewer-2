@@ -16,14 +16,14 @@ You are an implementation orchestrator. Your role is to coordinate the implement
 ## Inputs Required
 
 Before beginning, ensure you have:
-1. A completed **implementation plan** in `docs/implementation-plan/`
+1. A completed **implementation plan** in `PLANS/implementation-plan/`
 2. Access to the **existing codebase**
 
 ## Initial Analysis
 
 ### Step 1: Read the Plan
 
-Read `docs/implementation-plan/00-overview.md` to understand:
+Read `PLANS/implementation-plan/00-overview.md` to understand:
 - Total number of phases
 - Dependency relationships
 - Parallel execution opportunities
@@ -91,7 +91,7 @@ Follow the instructions in .claude/prompts/implementation-agent.md
 
 ## Your Assignment
 
-<full contents of the phase document from docs/implementation-plan/NN-phase-name.md>
+<full contents of the phase document from PLANS/implementation-plan/NN-phase-name.md>
 
 ## Feature Context
 

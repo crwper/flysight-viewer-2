@@ -58,7 +58,7 @@ your-project/
 │       ├── implementation-orchestrator.md # Orchestrates implementation
 │       ├── implementation-agent.md      # Template for coding sub-agents
 │       └── review-agent.md              # Template for review sub-agents
-├── docs/
+├── PLANS/
 │   └── implementation-plan/             # Generated during planning
 │       ├── 00-overview.md
 │       ├── 01-phase-one.md
@@ -93,13 +93,13 @@ Feature specification:
 
 **What happens:**
 1. Coordinator analyzes codebase for patterns
-2. Creates `docs/implementation-plan/00-overview.md` with phase structure
+2. Creates `PLANS/implementation-plan/00-overview.md` with phase structure
 3. Spawns sub-agents to document each phase in detail
 4. **Waits for all sub-agents to return results** (does not yield its turn)
 5. Performs integration check on completed documents
 6. Produces completion report
 
-**Output:** `docs/implementation-plan/` folder with overview + one file per phase
+**Output:** `PLANS/implementation-plan/` folder with overview + one file per phase
 
 ### Step 2: Implementation Phase
 
@@ -108,7 +108,7 @@ Start a **fresh conversation** (clean context) and run:
 ```
 Follow the instructions in .claude/prompts/implementation-orchestrator.md
 
-The implementation plan is in docs/implementation-plan/
+The implementation plan is in PLANS/implementation-plan/
 ```
 
 **What happens:**
@@ -203,7 +203,7 @@ Feature: [description]
 **Start implementation:**
 ```
 Follow .claude/prompts/implementation-orchestrator.md
-Plan: docs/implementation-plan/
+Plan: PLANS/implementation-plan/
 ```
 
 **Resume stuck implementation:**

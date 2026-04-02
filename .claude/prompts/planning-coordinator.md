@@ -24,7 +24,7 @@ Keep your analysis concise. Note file paths and pattern names, not full implemen
 
 ### Step 1.2: Create Overview Document
 
-Create `docs/implementation-plan/00-overview.md` with the following structure:
+Create `PLANS/implementation-plan/00-overview.md` with the following structure:
 
 ```markdown
 # Implementation Plan: [Feature Name]
@@ -87,7 +87,7 @@ Load the instructions from `.claude/prompts/phase-documenter.md` and provide the
    - Dependencies (which phases must complete before this one)
    - What this phase blocks (which phases depend on this one)
 3. **Reference files:** All files from "Key Patterns & References" relevant to this specific phase. Do not artificially limit—if 10 files are relevant, include all 10. The sub-agent has a fresh context window.
-4. **Output path:** `docs/implementation-plan/NN-phase-name.md`
+4. **Output path:** `PLANS/implementation-plan/NN-phase-name.md`
 
 ### Parallelization Rules
 
@@ -130,7 +130,7 @@ section that apply to this phase. Include as many as needed.]
 
 ## Output
 
-Create: docs/implementation-plan/[NN]-[phase-name].md
+Create: PLANS/implementation-plan/[NN]-[phase-name].md
 ```
 
 ### Execution Continuity — CRITICAL
