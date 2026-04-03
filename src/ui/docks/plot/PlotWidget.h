@@ -27,6 +27,7 @@ class SelectTool;
 class SetExitTool;
 class SetSyncTool;
 class SetGroundTool;
+class SetCourseTool;
 class MeasureTool;
 class PlotViewSettingsModel;
 class PlotModel;
@@ -47,7 +48,8 @@ public:
         Select,
         SetExit,
         SetSync,
-        SetGround
+        SetGround,
+        SetCourse
     };
 
     struct PlotContext {
@@ -194,6 +196,7 @@ private:
     std::unique_ptr<SetExitTool> m_setExitTool;
     std::unique_ptr<SetSyncTool> m_setSyncTool;
     std::unique_ptr<SetGroundTool> m_setGroundTool;
+    std::unique_ptr<SetCourseTool> m_setCourseTool;
     std::unique_ptr<MeasureTool> m_measureTool;
 
     // Plot Management

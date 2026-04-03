@@ -1,6 +1,8 @@
 // import.cpp
 
 #include "dataimporter.h"
+#include "preferences/preferencesmanager.h"
+#include "preferences/preferencekeys.h"
 #include "units/unitconversion.h"
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -116,6 +118,22 @@ void DataImporter::initializeFromDevice(const QString& fileName, const QByteArra
     // Record the import time
     double now = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch() / 1000.0;
     sessionData.setAttribute(SessionKeys::ImportTime, now);
+
+    // Set wind defaults (placeholder; will be calculated per-track in future)
+    sessionData.setAttribute(SessionKeys::WindN, 0.0);
+    sessionData.setAttribute(SessionKeys::WindE, 0.0);
+
+    // Set aerodynamic defaults from preferences
+    PreferencesManager &prefs = PreferencesManager::instance();
+    sessionData.setAttribute(SessionKeys::JumperMass, prefs.getValue(PreferenceKeys::AeroMass));
+    sessionData.setAttribute(SessionKeys::PlanformArea, prefs.getValue(PreferenceKeys::AeroArea));
+
+    // For fixed ground elevation mode, bake the value at import time
+    QString groundMode = prefs.getValue(PreferenceKeys::ImportGroundReferenceMode).toString();
+    if (groundMode == "Fixed") {
+        double fixedElev = prefs.getValue(PreferenceKeys::ImportFixedElevation).toDouble();
+        sessionData.setAttribute(SessionKeys::GroundElev, fixedElev);
+    }
 }
 
 void DataImporter::importSimple(QTextStream& in, SessionData& sessionData, const QString &sensorName) {

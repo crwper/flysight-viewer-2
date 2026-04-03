@@ -55,6 +55,14 @@ namespace MeasurementTypes {
     // FAI Speed Skydiving fixed-unit types
     inline const QString SpSpeed = QStringLiteral("sp_speed");
     inline const QString SpSpeedAcc = QStringLiteral("sp_speed_acc");
+
+    // Aerodynamics and energy types
+    inline const QString Ratio = QStringLiteral("ratio");
+    inline const QString SpecificEnergy = QStringLiteral("specific_energy");
+    inline const QString SpecificPower = QStringLiteral("specific_power");
+    inline const QString Coefficient = QStringLiteral("coefficient");
+    inline const QString Mass = QStringLiteral("mass");
+    inline const QString Area = QStringLiteral("area");
 }
 
 /**
@@ -254,6 +262,60 @@ inline const QMap<QString, MeasurementTypeInfo>& getMeasurementTypeRegistry() {
             {
                 {UnitSystems::Metric, {QStringLiteral("m/s"), 1.0, 0.0, 2}},
                 {UnitSystems::Imperial, {QStringLiteral("m/s"), 1.0, 0.0, 2}}
+            }
+        }},
+
+        // Ratio: dimensionless (both systems)
+        {MeasurementTypes::Ratio, {
+            QString(),
+            {
+                {UnitSystems::Metric, {QString(), 1.0, 0.0, 1}},
+                {UnitSystems::Imperial, {QString(), 1.0, 0.0, 1}}
+            }
+        }},
+
+        // Specific Energy: J/kg -> kJ/kg (both systems)
+        {MeasurementTypes::SpecificEnergy, {
+            QStringLiteral("J/kg"),
+            {
+                {UnitSystems::Metric, {QStringLiteral("kJ/kg"), 0.001, 0.0, 1}},
+                {UnitSystems::Imperial, {QStringLiteral("kJ/kg"), 0.001, 0.0, 1}}
+            }
+        }},
+
+        // Specific Power: W/kg -> W/kg (both systems)
+        {MeasurementTypes::SpecificPower, {
+            QStringLiteral("W/kg"),
+            {
+                {UnitSystems::Metric, {QStringLiteral("W/kg"), 1.0, 0.0, 1}},
+                {UnitSystems::Imperial, {QStringLiteral("W/kg"), 1.0, 0.0, 1}}
+            }
+        }},
+
+        // Coefficient: dimensionless (both systems)
+        {MeasurementTypes::Coefficient, {
+            QString(),
+            {
+                {UnitSystems::Metric, {QString(), 1.0, 0.0, 3}},
+                {UnitSystems::Imperial, {QString(), 1.0, 0.0, 3}}
+            }
+        }},
+
+        // Mass: kg -> lb
+        {MeasurementTypes::Mass, {
+            QStringLiteral("kg"),
+            {
+                {UnitSystems::Metric, {QStringLiteral("kg"), 1.0, 0.0, 1}},
+                {UnitSystems::Imperial, {QStringLiteral("lb"), 2.20462, 0.0, 1}}
+            }
+        }},
+
+        // Area: m² -> ft²
+        {MeasurementTypes::Area, {
+            QStringLiteral("m\u00B2"),
+            {
+                {UnitSystems::Metric, {QStringLiteral("m\u00B2"), 1.0, 0.0, 2}},
+                {UnitSystems::Imperial, {QStringLiteral("ft\u00B2"), 10.7639, 0.0, 1}}
             }
         }}
     };

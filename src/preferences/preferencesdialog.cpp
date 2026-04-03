@@ -8,6 +8,7 @@
 #include "altitudemarkerssettingspage.h"
 #include "logbooksettingspage.h"
 #include "zoomsettingspage.h"
+#include "aerodynamicssettingspage.h"
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 
@@ -32,6 +33,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent)
     categoryList->addItem(tr("Map"));
     categoryList->addItem(tr("Altitude Markers"));
     categoryList->addItem(tr("Logbook"));
+    categoryList->addItem(tr("Aerodynamics"));
     categoryList->setFixedWidth(120);
 
     // Stacked widget for pages - ORDER MUST MATCH categoryList
@@ -47,6 +49,8 @@ PreferencesDialog::PreferencesDialog(QWidget *parent)
     stackedWidget->addWidget(altitudeMarkersPage);              // Index 7: Altitude Markers
     LogbookSettingsPage *logbookPage = new LogbookSettingsPage(this);
     stackedWidget->addWidget(logbookPage);                      // Index 8: Logbook
+    AerodynamicsSettingsPage *aeroPage = new AerodynamicsSettingsPage(this);
+    stackedWidget->addWidget(aeroPage);                         // Index 9: Aerodynamics
 
     mainLayout->addWidget(categoryList);
     mainLayout->addWidget(stackedWidget);
@@ -57,6 +61,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent)
     connect(buttonBox, &QDialogButtonBox::rejected, this, &PreferencesDialog::reject);
     connect(buttonBox, &QDialogButtonBox::accepted, altitudeMarkersPage, &AltitudeMarkersSettingsPage::saveSettings);
     connect(buttonBox, &QDialogButtonBox::accepted, logbookPage, &LogbookSettingsPage::saveSettings);
+    connect(buttonBox, &QDialogButtonBox::accepted, aeroPage, &AerodynamicsSettingsPage::saveSettings);
 
     // Add layouts to the dialog
     dialogLayout->addLayout(mainLayout);

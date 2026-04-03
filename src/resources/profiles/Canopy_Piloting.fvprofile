@@ -104,7 +104,7 @@
             "Analysis"
         ],
         "plotExpansion": [
-            "GNSS"
+            "GNSS (Basic)"
         ]
     },
     "xAxisVariable": "_time",

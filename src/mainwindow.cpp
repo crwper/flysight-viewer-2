@@ -742,6 +742,14 @@ void MainWindow::on_action_SetGround_triggered()
     }
 }
 
+void MainWindow::on_action_SetCourse_triggered()
+{
+    auto* plotFeature = findFeature<PlotDockFeature>();
+    if (plotFeature && plotFeature->plotWidget()) {
+        plotFeature->plotWidget()->setCurrentTool(PlotWidget::Tool::SetCourse);
+    }
+}
+
 void MainWindow::on_action_ShowSelected_triggered()
 {
     setSelectedTrackCheckState(Qt::Checked);
@@ -878,6 +886,9 @@ void MainWindow::onPlotWidgetToolChanged(PlotWidget::Tool t)
     case PlotWidget::Tool::SetGround:
         ui->action_SetGround->setChecked(true);
         break;
+    case PlotWidget::Tool::SetCourse:
+        ui->action_SetCourse->setChecked(true);
+        break;
     }
 }
 
@@ -891,6 +902,7 @@ void MainWindow::registerBuiltInMarkers()
         {"Reference", "Landing",                 "Land",   QColor(153, 102, 51),  SessionKeys::LandingTime,        {}, true,  {}, true},
         {"Reference", "Analysis start",          "AS",     QColor(179, 41, 179),  SessionKeys::AnalysisStartTime,  {}, true,  {}, true},
         {"Reference", "Analysis end",            "AE",     QColor(179, 41, 179),  SessionKeys::AnalysisEndTime,    {}, true,  {}, true},
+        {"Reference", "Course",                  "Crs",    QColor(0, 255, 255),   SessionKeys::CourseRef,          {}, true,  {}, true},
 
         {"Reference", "Flare start",            "FlrS",   QColor(76, 153, 76),   SessionKeys::FlareStartTime,     {}, false, {}, true},
         {"Reference", "Flare end",              "FlrE",   QColor(76, 153, 76),   SessionKeys::FlareEndTime,       {}, false, {}, true},
@@ -928,16 +940,31 @@ void MainWindow::registerBuiltInPlots()
     const int L_gl = 145;      // Lighter gray  (was 128)
 
     QVector<PlotValue> defaults = {
-        // Category: GNSS  (hues preserved from original Qt named colours)
-        {"GNSS", "Elevation",             "m",     QColor::fromHsl(  0, 0,    135),  "GNSS", "z",     "altitude"},
-        {"GNSS", "Horizontal speed",      "m/s",   QColor::fromHsl(  0, S,    L_w),  "GNSS", "velH",  "speed"},
-        {"GNSS", "Vertical speed",        "m/s",   QColor::fromHsl(120, S,    L_c),  "GNSS", "velD",  "vertical_speed"},
-        {"GNSS", "Total speed",           "m/s",   QColor::fromHsl(240, S,    L_b),  "GNSS", "vel",   "speed"},
-        {"GNSS", "Vertical acceleration", "m/s^2", QColor::fromHsl(120, S,    L_c),  "GNSS", "accD",  "acceleration"},
-        {"GNSS", "Horizontal accuracy",   "m",     QColor::fromHsl(  0, S_dk, L_dw), "GNSS", "hAcc",  "distance"},
-        {"GNSS", "Vertical accuracy",     "m",     QColor::fromHsl(120, S_dk, L_dc), "GNSS", "vAcc",  "distance"},
-        {"GNSS", "Speed accuracy",        "m/s",   QColor::fromHsl(240, S_dk, L_db), "GNSS", "sAcc",  "speed"},
-        {"GNSS", "Number of satellites",  "",      QColor::fromHsl(300, S_dk, L_db), "GNSS", "numSV", "count"},
+        // Category: GNSS (Basic)  (hues preserved from original Qt named colours)
+        {"GNSS (Basic)", "Elevation",             "m",     QColor::fromHsl(  0, 0,    135),  "GNSS", "z",             "altitude"},
+        {"GNSS (Basic)", "Horizontal speed",      "m/s",   QColor::fromHsl(  0, S,    L_w),  "GNSS", "velH",          "speed"},
+        {"GNSS (Basic)", "Vertical speed",        "m/s",   QColor::fromHsl(120, S,    L_c),  "GNSS", "velD",          "vertical_speed"},
+        {"GNSS (Basic)", "Total speed",           "m/s",   QColor::fromHsl(240, S,    L_b),  "GNSS", "vel",           "speed"},
+        {"GNSS (Basic)", "Course",                "deg",   Qt::cyan,                          "GNSS", "course",        "angle"},
+        {"GNSS (Basic)", "Course rate",           "deg/s", Qt::darkCyan,                      "GNSS", "courseRate",     "rotation"},
+        {"GNSS (Basic)", "Glide ratio",           "",      Qt::darkCyan,                      "GNSS", "glideRatio",    "ratio"},
+        {"GNSS (Basic)", "Dive angle",            "deg",   Qt::magenta,                       "GNSS", "diveAngle",     "angle"},
+        {"GNSS (Basic)", "Dive angle rate",       "deg/s", Qt::darkYellow,                    "GNSS", "diveAngleRate", "rotation"},
+        {"GNSS (Basic)", "Horizontal accuracy",   "m",     QColor::fromHsl(  0, S_dk, L_dw), "GNSS", "hAcc",          "distance"},
+        {"GNSS (Basic)", "Vertical accuracy",     "m",     QColor::fromHsl(120, S_dk, L_dc), "GNSS", "vAcc",          "distance"},
+        {"GNSS (Basic)", "Speed accuracy",        "m/s",   QColor::fromHsl(240, S_dk, L_db), "GNSS", "sAcc",          "speed"},
+        {"GNSS (Basic)", "Number of satellites",  "",      QColor::fromHsl(300, S_dk, L_db), "GNSS", "numSV",         "count"},
+
+        // Category: GNSS (Advanced)
+        {"GNSS (Advanced)", "Horizontal acceleration",         "m/s^2", QColor::fromHsl( 30, S,    L_w),  "GNSS", "accH",              "acceleration"},
+        {"GNSS (Advanced)", "Vertical acceleration",           "m/s^2", QColor::fromHsl(120, S,    L_c),  "GNSS", "accD",              "acceleration"},
+        {"GNSS (Advanced)", "Wind-corrected horizontal speed", "m/s",   QColor::fromHsl(200, S,    L_b),  "GNSS", "wcVelH",            "speed"},
+        {"GNSS (Advanced)", "Along-track acceleration",        "m/s^2", QColor::fromHsl( 60, S,    L_c),  "GNSS", "accAlongTrack",     "acceleration"},
+        {"GNSS (Advanced)", "Cross-track acceleration",        "m/s^2", QColor::fromHsl(270, S,    L_b),  "GNSS", "accCrossTrack",     "acceleration"},
+        {"GNSS (Advanced)", "Lift coefficient",                "",      Qt::darkGreen,                     "GNSS", "lift",              "coefficient"},
+        {"GNSS (Advanced)", "Drag coefficient",                "",      Qt::darkBlue,                      "GNSS", "drag",              "coefficient"},
+        {"GNSS (Advanced)", "Specific energy",                 "kJ/kg", Qt::darkGreen,                     "GNSS", "specificEnergy",    "specific_energy"},
+        {"GNSS (Advanced)", "Specific energy rate",            "W/kg",  Qt::darkBlue,                      "GNSS", "specificEnergyRate","specific_power"},
 
         // Category: IMU · Acceleration (red group, H ≈ 0°)
         {"IMU", "Acceleration X",     "g", QColor::fromHsl(360 - group_a, S, L_w), "IMU", "ax",     "acceleration"},
@@ -1080,6 +1107,12 @@ void MainWindow::initializePreferences()
     // Analysis Preferences
     // ========================================================================
     prefs.registerPreference(PreferenceKeys::AnalysisMethod, QStringLiteral("Wingsuit Performance"));
+
+    // ========================================================================
+    // Aerodynamics Preferences
+    // ========================================================================
+    prefs.registerPreference(PreferenceKeys::AeroMass, 1.0);
+    prefs.registerPreference(PreferenceKeys::AeroArea, 1.0);
 }
 
 
@@ -1123,29 +1156,39 @@ void MainWindow::initializePlotsMenu()
 
     // Define the list of plots to include in the 'Plots' menu, including separators
     QVector<PlotMenuItem> plotsMenuItems = {
-        // First Group: GNSS-related plots
         PlotMenuItem("Elevation", QKeySequence(Qt::Key_E), "GNSS", "z"),
 
-        // Separator
         PlotMenuItem(PlotMenuItemType::Separator),
 
         PlotMenuItem("Horizontal Speed", QKeySequence(Qt::Key_H), "GNSS", "velH"),
         PlotMenuItem("Vertical Speed", QKeySequence(Qt::Key_V), "GNSS", "velD"),
         PlotMenuItem("Total Speed", QKeySequence(Qt::Key_S), "GNSS", "vel"),
 
-        // Separator
+        PlotMenuItem(PlotMenuItemType::Separator),
+
+        PlotMenuItem("Course", QKeySequence(Qt::Key_C), "GNSS", "course"),
+        PlotMenuItem("Course Rate", QKeySequence(Qt::SHIFT | Qt::Key_C), "GNSS", "courseRate"),
+
+        PlotMenuItem(PlotMenuItemType::Separator),
+
+        PlotMenuItem("Glide Ratio", QKeySequence(Qt::Key_G), "GNSS", "glideRatio"),
+        PlotMenuItem("Dive Angle", QKeySequence(Qt::Key_A), "GNSS", "diveAngle"),
+        PlotMenuItem("Dive Angle Rate", QKeySequence(Qt::SHIFT | Qt::Key_A), "GNSS", "diveAngleRate"),
+
         PlotMenuItem(PlotMenuItemType::Separator),
 
         PlotMenuItem("Horizontal Accuracy", QKeySequence(Qt::SHIFT | Qt::Key_H), "GNSS", "hAcc"),
         PlotMenuItem("Vertical Accuracy", QKeySequence(Qt::SHIFT | Qt::Key_V), "GNSS", "vAcc"),
         PlotMenuItem("Speed Accuracy", QKeySequence(Qt::SHIFT | Qt::Key_S), "GNSS", "sAcc"),
 
-        // Separator
         PlotMenuItem(PlotMenuItemType::Separator),
 
         PlotMenuItem("Number of Satellites", QKeySequence(Qt::SHIFT | Qt::Key_N), "GNSS", "numSV"),
 
-        // Add more groups and plots as needed
+        PlotMenuItem(PlotMenuItemType::Separator),
+
+        PlotMenuItem("Lift Coefficient", QKeySequence(Qt::Key_L), "GNSS", "lift"),
+        PlotMenuItem("Drag Coefficient", QKeySequence(Qt::Key_D), "GNSS", "drag"),
     };
 
     // Iterate over the list and create corresponding actions
@@ -1369,6 +1412,7 @@ void MainWindow::setupPlotTools()
     toolActionGroup->addAction(ui->action_SetExit);
     toolActionGroup->addAction(ui->action_SetSync);
     toolActionGroup->addAction(ui->action_SetGround);
+    toolActionGroup->addAction(ui->action_SetCourse);
 
     // Set Pan as the default checked tool
     ui->action_Pan->setChecked(true);

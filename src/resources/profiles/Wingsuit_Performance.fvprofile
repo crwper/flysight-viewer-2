@@ -125,7 +125,7 @@
             "Wingsuit Performance"
         ],
         "plotExpansion": [
-            "GNSS"
+            "GNSS (Basic)"
         ]
     },
     "xAxisVariable": "_time",

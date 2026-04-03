@@ -367,6 +367,24 @@ std::optional<SessionData> LogbookManager::loadSession(const QString &sessionId)
         return std::nullopt;
     }
 
+    // Backfill mass/area for sessions saved before per-session attributes existed
+    if (!sessionData.hasAttribute(SessionKeys::JumperMass)) {
+        sessionData.setAttribute(SessionKeys::JumperMass,
+            PreferencesManager::instance().getValue(PreferenceKeys::AeroMass));
+    }
+    if (!sessionData.hasAttribute(SessionKeys::PlanformArea)) {
+        sessionData.setAttribute(SessionKeys::PlanformArea,
+            PreferencesManager::instance().getValue(PreferenceKeys::AeroArea));
+    }
+
+    // Backfill wind defaults for sessions saved before wind attributes existed
+    if (!sessionData.hasAttribute(SessionKeys::WindN)) {
+        sessionData.setAttribute(SessionKeys::WindN, 0.0);
+    }
+    if (!sessionData.hasAttribute(SessionKeys::WindE)) {
+        sessionData.setAttribute(SessionKeys::WindE, 0.0);
+    }
+
     return sessionData;
 }
 

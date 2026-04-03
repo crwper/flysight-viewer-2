@@ -75,6 +75,13 @@ namespace SessionKeys {
     constexpr char SpBestEndTime[]     = "_SP_BEST_END_TIME";
     constexpr char SpSpeedResult[]     = "_SP_SPEED_RESULT";
     constexpr char SpMaxSpeedAcc[]     = "_SP_MAX_SPEED_ACC";
+
+    // Wind and course reference keys
+    constexpr char WindN[] = "_WIND_N";
+    constexpr char WindE[] = "_WIND_E";
+    constexpr char CourseRef[] = "_COURSE_REF";
+    constexpr char JumperMass[] = "_JUMPER_MASS";
+    constexpr char PlanformArea[] = "_PLANFORM_AREA";
 }
 
 class SessionData {

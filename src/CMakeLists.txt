@@ -256,6 +256,7 @@ set(PROJECT_SOURCES
   plottool/setexittool.h     plottool/setexittool.cpp
   plottool/setsynctool.h     plottool/setsynctool.cpp
   plottool/setgroundtool.h   plottool/setgroundtool.cpp
+  plottool/setcoursetool.h   plottool/setcoursetool.cpp
   plottool/measuretool.h     plottool/measuretool.cpp
   measuremodel.h
   preferences/preferencesmanager.h
@@ -271,6 +272,7 @@ set(PROJECT_SOURCES
   preferences/logbooksettingspage.cpp     preferences/logbooksettingspage.h
   preferences/plotssettingspage.h  preferences/plotssettingspage.cpp
   preferences/zoomsettingspage.h   preferences/zoomsettingspage.cpp
+  preferences/aerodynamicssettingspage.h preferences/aerodynamicssettingspage.cpp
   units/unitdefinitions.h
   units/unitconverter.h            units/unitconverter.cpp
   dependencykey.h
@@ -334,6 +336,8 @@ set(PROJECT_SOURCES
   calculations/simplificationcalculations.cpp calculations/simplificationcalculations.h
   calculations/wspcalculations.cpp            calculations/wspcalculations.h
   calculations/spcalculations.cpp             calculations/spcalculations.h
+  calculations/derivativehelper.cpp            calculations/derivativehelper.h
+  calculations/isadensity.cpp                  calculations/isadensity.h
   resources.qrc
 )
 

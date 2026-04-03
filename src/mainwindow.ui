@@ -62,6 +62,7 @@
     <addaction name="action_SetExit"/>
     <addaction name="action_SetSync"/>
     <addaction name="action_SetGround"/>
+    <addaction name="action_SetCourse"/>
    </widget>
    <widget class="QMenu" name="menuWindow">
     <property name="title">
@@ -214,6 +215,17 @@
    </property>
    <property name="shortcut">
     <string>N</string>
+   </property>
+  </action>
+  <action name="action_SetCourse">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Set C&amp;ourse</string>
+   </property>
+   <property name="shortcut">
+    <string>O</string>
    </property>
   </action>
   <action name="action_Measure">

@@ -64,4 +64,30 @@ void FlySight::registerBuiltInAttributes() {
         true,
         MeasurementTypes::Altitude
     });
+
+    reg.registerAttribute({
+        QStringLiteral("Location"),
+        QStringLiteral("Course Reference"),
+        SessionKeys::CourseRef,
+        AttributeFormatType::DateTime,
+        true
+    });
+
+    reg.registerAttribute({
+        QStringLiteral("Aerodynamics"),
+        QStringLiteral("Jumper Mass"),
+        SessionKeys::JumperMass,
+        AttributeFormatType::Double,
+        true,
+        MeasurementTypes::Mass
+    });
+
+    reg.registerAttribute({
+        QStringLiteral("Aerodynamics"),
+        QStringLiteral("Planform Area"),
+        SessionKeys::PlanformArea,
+        AttributeFormatType::Double,
+        true,
+        MeasurementTypes::Area
+    });
 }

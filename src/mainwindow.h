@@ -82,6 +82,7 @@ private slots:
     void on_action_SetExit_triggered();
     void on_action_SetSync_triggered();
     void on_action_SetGround_triggered();
+    void on_action_SetCourse_triggered();
     void on_action_ShowSelected_triggered();
     void on_action_HideSelected_triggered();
     void on_action_HideOthers_triggered();

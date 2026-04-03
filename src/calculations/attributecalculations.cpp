@@ -184,6 +184,17 @@ void Calculations::registerAttributeCalculations()
             return exitVar;
         });
 
+    // Course reference: defaults to exit time when not explicitly set by user
+    SessionData::registerCalculatedAttribute(
+        SessionKeys::CourseRef,
+        { DependencyKey::attribute(SessionKeys::ExitTime) },
+        [](SessionData& session) -> std::optional<QVariant> {
+            QVariant exitVar = session.getAttribute(SessionKeys::ExitTime);
+            if (!exitVar.canConvert<double>())
+                return std::nullopt;
+            return exitVar;
+        });
+
     // Manoeuvre start time: walk backward from the last 10 m/s crossing
     // to the local minimum in vertical speed
     SessionData::registerCalculatedAttribute(
@@ -554,7 +565,10 @@ void Calculations::registerAttributeCalculations()
         return QVariant(time[maxIdx]);
     });
 
-    // Ground elevation calculation based on preferences and GNSS data
+    // Ground elevation: automatic calculation by interpolating hMSL at analysis end time.
+    // This serves as the data-derived default. If the user sets a value (via the
+    // SetGround tool, logbook editing, or "Fixed" mode at import), that value in
+    // m_attributes takes precedence over this calculated fallback.
     SessionData::registerCalculatedAttribute(
         SessionKeys::GroundElev,
         {
@@ -563,46 +577,32 @@ void Calculations::registerAttributeCalculations()
             DependencyKey::measurement("GNSS", SessionKeys::Time)
         },
         [](SessionData &session) -> std::optional<QVariant> {
-        PreferencesManager &prefs = PreferencesManager::instance();
-        QString mode = prefs.getValue(PreferenceKeys::ImportGroundReferenceMode).toString();
-        double fixedElevation = prefs.getValue(PreferenceKeys::ImportFixedElevation).toDouble();
+        QVariant aeVar = session.getAttribute(SessionKeys::AnalysisEndTime);
+        if (!aeVar.canConvert<double>())
+            return std::nullopt;
+        double analysisEndSec = aeVar.toDouble();
 
-        if (mode == "Fixed") {
-            // Always return the fixed elevation from preferences
-            return fixedElevation;
-        } else if (mode == "Automatic") {
-            // Interpolate hMSL at the analysis end time
-            QVariant aeVar = session.getAttribute(SessionKeys::AnalysisEndTime);
-            if (!aeVar.canConvert<double>())
-                return std::nullopt;
-            double analysisEndSec = aeVar.toDouble();
+        QVector<double> hMSL = session.getMeasurement("GNSS", "hMSL");
+        QVector<double> time = session.getMeasurement("GNSS", SessionKeys::Time);
 
-            QVector<double> hMSL = session.getMeasurement("GNSS", "hMSL");
-            QVector<double> time = session.getMeasurement("GNSS", SessionKeys::Time);
+        if (hMSL.isEmpty() || time.isEmpty() || hMSL.size() != time.size())
+            return std::nullopt;
 
-            if (hMSL.isEmpty() || time.isEmpty() || hMSL.size() != time.size())
-                return std::nullopt;
+        int n = time.size();
+        if (analysisEndSec <= time[0])
+            return hMSL[0];
+        if (analysisEndSec >= time[n - 1])
+            return hMSL[n - 1];
 
-            // Find the bracketing interval and interpolate
-            int n = time.size();
-            if (analysisEndSec <= time[0])
-                return hMSL[0];
-            if (analysisEndSec >= time[n - 1])
-                return hMSL[n - 1];
-
-            for (int i = 1; i < n; ++i) {
-                if (time[i] >= analysisEndSec) {
-                    double t0 = time[i - 1];
-                    double t1 = time[i];
-                    double a = (analysisEndSec - t0) / (t1 - t0);
-                    double groundElev = hMSL[i - 1] + a * (hMSL[i] - hMSL[i - 1]);
-                    return groundElev;
-                }
+        for (int i = 1; i < n; ++i) {
+            if (time[i] >= analysisEndSec) {
+                double t0 = time[i - 1];
+                double t1 = time[i];
+                double a = (analysisEndSec - t0) / (t1 - t0);
+                double groundElev = hMSL[i - 1] + a * (hMSL[i] - hMSL[i - 1]);
+                return groundElev;
             }
-            return std::nullopt;
-        } else {
-            // Possibly a fallback or "no ground reference" if mode is unknown
-            return std::nullopt;
         }
+        return std::nullopt;
     });
 }

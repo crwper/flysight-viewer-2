@@ -27,6 +27,7 @@
 #include "plottool/setexittool.h"
 #include "plottool/setsynctool.h"
 #include "plottool/setgroundtool.h"
+#include "plottool/setcoursetool.h"
 #include "plottool/measuretool.h"
 #include "plotutils.h"
 #include "calculations/timecalculations.h"
@@ -132,6 +133,7 @@ PlotWidget::PlotWidget(SessionModel *model,
     m_setExitTool = std::make_unique<SetExitTool>(ctx);
     m_setSyncTool = std::make_unique<SetSyncTool>(ctx);
     m_setGroundTool = std::make_unique<SetGroundTool>(ctx);
+    m_setCourseTool = std::make_unique<SetCourseTool>(ctx);
 
     m_currentTool = m_panTool.get();
     m_primaryTool = Tool::Pan;
@@ -263,6 +265,9 @@ void PlotWidget::setCurrentTool(Tool tool)
         break;
     case Tool::SetGround:
         m_currentTool = m_setGroundTool.get();
+        break;
+    case Tool::SetCourse:
+        m_currentTool = m_setCourseTool.get();
         break;
     }
 

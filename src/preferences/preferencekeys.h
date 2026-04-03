@@ -136,6 +136,12 @@ inline const QString LogbookCacheSize = QStringLiteral("logbook/cacheSize");
 // ============================================================================
 inline const QString AnalysisMethod = QStringLiteral("analysis/method");
 
+// ============================================================================
+// Aerodynamics Preferences
+// ============================================================================
+inline const QString AeroMass = QStringLiteral("aero/mass");
+inline const QString AeroArea = QStringLiteral("aero/area");
+
 } // namespace PreferenceKeys
 } // namespace FlySight
 
