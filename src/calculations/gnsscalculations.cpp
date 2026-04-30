@@ -350,21 +350,31 @@ void Calculations::registerGnssCalculations()
     });
 
     // GNSS horizontal acceleration (accH)
+    // Magnitude of the horizontal component of the total acceleration vector,
+    // so that sqrt(accH^2 + accD^2) equals the total acceleration magnitude.
     SessionData::registerCalculatedMeasurement(
         "GNSS", "accH",
         {
-            DependencyKey::measurement("GNSS", "velH"),
-            DependencyKey::measurement("GNSS", "time")
+            DependencyKey::measurement("GNSS", "accN"),
+            DependencyKey::measurement("GNSS", "accE")
         },
         [](SessionData& session) -> std::optional<QVector<double>> {
-        QVector<double> velH = session.getMeasurement("GNSS", "velH");
-        QVector<double> time = session.getMeasurement("GNSS", "time");
+        QVector<double> accN = session.getMeasurement("GNSS", "accN");
+        QVector<double> accE = session.getMeasurement("GNSS", "accE");
 
-        if (velH.isEmpty()) {
+        if (accN.isEmpty() || accE.isEmpty()) {
+            return std::nullopt;
+        }
+        if (accN.size() != accE.size()) {
             return std::nullopt;
         }
 
-        return Calculations::computeDerivative(velH, time);
+        QVector<double> accH;
+        accH.reserve(accN.size());
+        for (int i = 0; i < accN.size(); ++i) {
+            accH.append(std::sqrt(accN[i] * accN[i] + accE[i] * accE[i]));
+        }
+        return accH;
     });
 
     // GNSS wind-corrected horizontal speed (wcVelH)
